@@ -69,34 +69,39 @@ export function TodayPlanStarter({
   ].join(" · ");
 
   if (!startedAt) {
-    return <section className="flex flex-col gap-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-6">
+    // Phones: a compact half-width card beside the daily target; sm+: a full-width row.
+    return <section className="flex h-full flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-3.5 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-6">
       <div className="min-w-0">
-        <h2 className="text-lg font-semibold tracking-tight">Today&apos;s plan</h2>
-        <p className="mt-1 text-sm text-zinc-500">{summary}</p>
-        {firstTask ? <p className="mt-2 truncate text-sm text-zinc-700">Start with: <span className="font-medium">{firstTask.title}</span>{firstTask.subjectName ? ` · ${firstTask.subjectName}` : ""}</p> : null}
+        <h2 className="text-sm font-semibold tracking-tight sm:text-lg">Today&apos;s plan</h2>
+        <p className="mt-1 text-xs leading-snug text-zinc-500 sm:text-sm">{summary}</p>
+        {firstTask ? <p className="mt-2 hidden truncate text-sm text-zinc-700 sm:block">Start with: <span className="font-medium">{firstTask.title}</span>{firstTask.subjectName ? ` · ${firstTask.subjectName}` : ""}</p> : null}
       </div>
-      <Button size="lg" onClick={startPlan} disabled={starting} className="shrink-0 gap-2 rounded-xl">
-        <Play className="size-4" /> {starting ? "Starting…" : "Start Today's Plan"}
+      <Button onClick={startPlan} disabled={starting} className="mt-auto h-10 w-full shrink-0 gap-1.5 rounded-xl px-3 text-sm sm:mt-0 sm:h-11 sm:w-auto sm:px-5">
+        <Play className="size-4" /> {starting ? "Starting…" : <><span className="sm:hidden">Start plan</span><span className="hidden sm:inline">Start Today&apos;s Plan</span></>}
       </Button>
     </section>;
   }
 
   const startedLabel = dayjs(startedAt).tz(APP_TIMEZONE).format("h:mm A");
 
-  return <section className="flex flex-col gap-4 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+  return <section className="flex h-full flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-6">
     <div className="min-w-0">
-      <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-emerald-900"><CheckCircle2 className="size-5 text-emerald-600" /> Today&apos;s plan started at {startedLabel}</h2>
-      <p className="mt-1 text-sm text-emerald-800/80">{summary}</p>
+      <h2 className="flex items-center gap-1.5 text-sm font-semibold tracking-tight text-emerald-900 sm:gap-2 sm:text-lg">
+        <CheckCircle2 className="size-4 shrink-0 text-emerald-600 sm:size-5" />
+        <span className="sm:hidden">Started {startedLabel}</span>
+        <span className="hidden sm:inline">Today&apos;s plan started at {startedLabel}</span>
+      </h2>
+      <p className="mt-1 text-xs leading-snug text-emerald-800/80 sm:text-sm">{summary}</p>
     </div>
     {!hydrated ? null : running ? (
-      <Link href="/tasks" className="flex shrink-0 items-center gap-3 rounded-xl bg-white px-4 py-2.5 shadow-sm ring-1 ring-emerald-200 transition hover:ring-emerald-300">
+      <Link href="/tasks" className="mt-auto flex shrink-0 items-center justify-center gap-2 rounded-xl bg-white px-3 py-2 shadow-sm ring-1 ring-emerald-200 transition hover:ring-emerald-300 sm:mt-0 sm:gap-3 sm:px-4 sm:py-2.5">
         {paused ? <Pause className="size-4 text-amber-600" /> : <span className="size-2.5 animate-pulse rounded-full bg-emerald-500" />}
-        <span className="font-mono text-lg tabular-nums">{formatClock(elapsed)}</span>
-        <span className="text-sm text-zinc-500">{paused ? "Paused" : "Studying"} · Open tasks</span>
+        <span className="font-mono text-base tabular-nums sm:text-lg">{formatClock(elapsed)}</span>
+        <span className="hidden text-sm text-zinc-500 sm:inline">{paused ? "Paused" : "Studying"} · Open tasks</span>
       </Link>
     ) : (
-      <Button variant="outline" onClick={() => pickSubject()} className="shrink-0 gap-2 rounded-xl bg-white">
-        <Play className="size-4" /> Continue studying
+      <Button variant="outline" onClick={() => pickSubject()} className="mt-auto h-10 w-full shrink-0 gap-1.5 rounded-xl bg-white px-3 text-sm sm:mt-0 sm:h-10 sm:w-auto">
+        <Play className="size-4" /> <span className="sm:hidden">Continue</span><span className="hidden sm:inline">Continue studying</span>
       </Button>
     )}
   </section>;

@@ -79,14 +79,17 @@ export function DashboardView({
       {/* Phones: today's work first, then the numbers. Desktop: two columns. */}
       <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr] lg:items-start lg:gap-6">
         <div className="space-y-5">
-          <TodayPlanStarter
-            startedAt={planStartedAt}
-            firstTask={firstTask}
-            taskCount={todayTasks.filter((task) => task.status !== "FINISHED").length}
-            revisionCount={revisionCount}
-            dailyTargetMinutes={dailyTargetMinutes}
-          />
-          <DailyTargetCard dailyTargetMinutes={dailyTargetMinutes} savedSeconds={studiedSeconds} />
+          {/* Side by side on phones (one row), stacked full width from sm up. */}
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-1 sm:gap-5">
+            <TodayPlanStarter
+              startedAt={planStartedAt}
+              firstTask={firstTask}
+              taskCount={todayTasks.filter((task) => task.status !== "FINISHED").length}
+              revisionCount={revisionCount}
+              dailyTargetMinutes={dailyTargetMinutes}
+            />
+            <DailyTargetCard dailyTargetMinutes={dailyTargetMinutes} savedSeconds={studiedSeconds} />
+          </div>
 
           <section className="space-y-2.5">
             <div className="flex items-center justify-between">
