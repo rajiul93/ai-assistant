@@ -120,11 +120,12 @@ export function DashboardView({
         </div>
 
         <div className="space-y-5">
-          <section className="grid grid-cols-3 gap-2.5" aria-label="Task counts">
+          <section className="grid grid-cols-3 gap-2 sm:gap-2.5" aria-label="Task counts">
             {stats.map((stat) => (
-              <Link key={stat.label} href={stat.href} className="rounded-xl border border-zinc-200 bg-white px-3 py-3 text-center transition active:scale-[0.98]">
-                <p className={`text-2xl font-semibold tabular-nums ${stat.tone}`}>{stat.value}</p>
-                <p className="text-xs text-zinc-500">{stat.label}</p>
+              <Link key={stat.label} href={stat.href} className="min-w-0 rounded-xl border border-zinc-200 bg-white px-1.5 py-2.5 text-center transition active:scale-[0.98] sm:px-3 sm:py-3">
+                {/* Scales with the screen so all three stay on one line on small phones. */}
+                <p className={`text-xl font-semibold leading-tight tabular-nums sm:text-2xl ${stat.tone}`}>{stat.value}</p>
+                <p className="truncate text-[11px] text-zinc-500 sm:text-xs">{stat.label}</p>
               </Link>
             ))}
           </section>
