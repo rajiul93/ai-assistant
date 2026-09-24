@@ -1,5 +1,8 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { getApps, initializeApp } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
 import { prisma } from "@/lib/prisma";
 import { adminAuth, isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import { SESSION_COOKIE, SESSION_MAX_AGE_MS } from "@/lib/session";
@@ -53,6 +56,57 @@ async function lookupFirebaseUser(idToken: string): Promise<TokenUser> {
   };
 }
 
+/**
+ * Verifies a Firebase ID token locally: its signature is checked against Google's public keys,
+ * which firebase-admin downloads once and caches for hours. Unlike the accounts:lookup API this
+ * needs no network round trip per request (that call cost ~450ms on every page) and only the
+ * project ID — no service-account credentials.
+ */
+function tokenVerifier() {
+  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID;
+  if (!projectId) return null;
+  const name = "id-token-verifier";
+  const app = getApps().find((existing) => existing.name === name) ?? initializeApp({ projectId }, name);
+  return getAuth(app);
+}
+
+async function verifyFirebaseIdToken(idToken: string): Promise<TokenUser> {
+  const verifier = tokenVerifier();
+  if (!verifier) return lookupFirebaseUser(idToken);
+  try {
+    const decoded = await verifier.verifyIdToken(idToken);
+    return { uid: decoded.uid, email: decoded.email, name: decoded.name as string | undefined, picture: decoded.picture };
+  } catch (error) {
+    // An invalid or expired token is final; anything else (e.g. couldn't fetch the keys) falls back to Google's API.
+    const code = (error as { code?: string }).code ?? "";
+    if (code.startsWith("auth/")) throw error;
+    return lookupFirebaseUser(idToken);
+  }
+}
+
+/**
+ * Recently verified sessions, so most requests skip verification and the user upsert entirely.
+ * Kept at most 5 minutes and never past the token's own expiry.
+ */
+const SESSION_CACHE_MS = 5 * 60 * 1000;
+const verifiedSessions = new Map<string, { user: Awaited<ReturnType<typeof upsertUserFromToken>>; until: number }>();
+
+function tokenExpiryMs(token: string) {
+  try {
+    const payload = JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8")) as { exp?: number };
+    return payload.exp ? payload.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
+function rememberSession(token: string, user: Awaited<ReturnType<typeof upsertUserFromToken>>) {
+  const expiry = tokenExpiryMs(token);
+  const until = Math.min(Date.now() + SESSION_CACHE_MS, expiry ?? Date.now() + SESSION_CACHE_MS);
+  if (verifiedSessions.size > 500) verifiedSessions.clear();
+  verifiedSessions.set(token, { user, until });
+}
+
 export async function createSessionCookie(idToken: string) {
   if (isFirebaseAdminConfigured()) {
     const sessionCookie = await adminAuth().createSessionCookie(idToken, {
@@ -94,23 +148,27 @@ export async function upsertUserFromToken(
   });
 }
 
-export async function getCurrentUser() {
+/** The signed-in user, verified at most once per request (React cache) and once per 5 minutes. */
+export const getCurrentUser = cache(async () => {
   const cookieStore = await cookies();
   const session = cookieStore.get(SESSION_COOKIE)?.value;
   if (!session) return null;
 
-  try {
-    if (isFirebaseAdminConfigured()) {
-      const decoded = await adminAuth().verifySessionCookie(session, true);
-      return upsertUserFromToken(decoded.uid, decoded.email, decoded.name, decoded.picture);
-    }
+  const remembered = verifiedSessions.get(session);
+  if (remembered && remembered.until > Date.now()) return remembered.user;
+  verifiedSessions.delete(session);
 
-    const decoded = await lookupFirebaseUser(session);
-    return upsertUserFromToken(decoded.uid, decoded.email, decoded.name, decoded.picture);
+  try {
+    const decoded = isFirebaseAdminConfigured()
+      ? await adminAuth().verifySessionCookie(session, true)
+      : await verifyFirebaseIdToken(session);
+    const user = await upsertUserFromToken(decoded.uid, decoded.email, decoded.name, decoded.picture);
+    rememberSession(session, user);
+    return user;
   } catch {
     return null;
   }
-}
+});
 
 export async function requireUser() {
   const user = await getCurrentUser();
