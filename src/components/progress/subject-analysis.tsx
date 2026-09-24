@@ -12,7 +12,8 @@ export const analysisPeriods = [
 ] as const;
 export type AnalysisPeriod = (typeof analysisPeriods)[number]["key"];
 
-type Insight = { icon: React.ReactNode; label: string; value: string; detail: string; warn?: boolean };
+/** `share` (0–100) draws a bar: that subject's part of all study time in the period. */
+type Insight = { icon: React.ReactNode; label: string; value: string; detail: string; warn?: boolean; share?: number };
 
 function duration(seconds: number) {
   return seconds > 0 && seconds < 60 ? `${seconds}s` : formatDurationFromSeconds(seconds);
@@ -25,6 +26,8 @@ function buildInsights(stats: SubjectStat[], now: number): Insight[] {
   if (studied.length === 0) return [];
 
   const most = studied[0];
+  const totalSeconds = subjects.reduce((sum, stat) => sum + stat.seconds, 0) || 1;
+  const shareOf = (seconds: number) => Math.round((seconds / totalSeconds) * 100);
   const minSeconds = Math.min(...subjects.map((stat) => stat.seconds));
   const least = subjects.filter((stat) => stat.seconds === minSeconds);
 
@@ -41,10 +44,11 @@ function buildInsights(stats: SubjectStat[], now: number): Insight[] {
     .slice(0, 3);
 
   return [
-    { icon: <Trophy className="size-4" />, label: "Most time", value: most.name, detail: `${duration(most.seconds)} · ${most.sessions} session${most.sessions === 1 ? "" : "s"}` },
+    { icon: <Trophy className="size-4" />, label: "Most time", value: most.name, share: shareOf(most.seconds), detail: `${duration(most.seconds)} · ${most.sessions} session${most.sessions === 1 ? "" : "s"}` },
     {
       icon: <Clock className="size-4" />,
       label: "Least time",
+      share: shareOf(minSeconds),
       value: least.length > 2 ? `${least.length} subjects` : least.map((stat) => stat.name).join(", "),
       detail: minSeconds === 0 ? (least.length > 2 ? `Not studied: ${least.map((stat) => stat.name).join(", ")}` : "Not studied in this period") : duration(minSeconds),
     },
@@ -85,6 +89,14 @@ export function SubjectAnalysis({ stats, period, comparable, now }: { stats: Sub
         <p className={cn("flex items-center gap-1.5 text-[11px] font-medium sm:text-xs", insight.warn ? "text-amber-800" : "text-zinc-500")}>{insight.icon}<span className="truncate">{insight.label}</span></p>
         <p className="mt-1.5 truncate text-sm font-semibold text-zinc-950 sm:text-base" title={insight.value}>{insight.value}</p>
         <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-zinc-500 sm:text-xs">{insight.detail}</p>
+        {insight.share !== undefined ? <div className="mt-2.5">
+          <div className="flex items-center gap-2">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100" role="progressbar" aria-valuenow={insight.share} aria-valuemin={0} aria-valuemax={100} aria-label={`${insight.value}: ${insight.share}% of study time`}>
+              <div className="h-full rounded-full bg-zinc-900" style={{ width: `${insight.share}%` }} />
+            </div>
+            <span className="shrink-0 text-[11px] font-medium tabular-nums text-zinc-600">{insight.share}%</span>
+          </div>
+        </div> : null}
       </div>)}
     </div> : null}
 
