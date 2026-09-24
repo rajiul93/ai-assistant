@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { DeadlineCountdown } from "@/components/dashboard/deadline-countdown";
+import { TodayPlanStarter } from "@/components/dashboard/today-plan-starter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -21,6 +22,8 @@ export function DashboardView({
   revisionCount,
   revisions,
   progressPercent,
+  planStartedAt,
+  firstTask,
 }: {
   longTermDeadline: Date | null;
   dateOfBirth: Date | null;
@@ -34,6 +37,8 @@ export function DashboardView({
   revisionCount: number;
   revisions: Array<Revision & { topic: Topic; subject: Subject | null }>;
   progressPercent: number;
+  planStartedAt: string | null;
+  firstTask: { title: string; subjectId: string; topicId: string; subjectName: string } | null;
 }) {
   const prep = preparationDeadline ? formatRemaining(preparationDeadline) : null;
   const studiedMinutes = Math.floor(studiedSeconds / 60);
@@ -62,6 +67,14 @@ export function DashboardView({
         deadline={longTermDeadline ? longTermDeadline.toISOString() : null}
         dateOfBirth={dateOfBirth ? dateOfBirth.toISOString() : null}
         ageLimitYears={ageLimitYears}
+      />
+
+      <TodayPlanStarter
+        startedAt={planStartedAt}
+        firstTask={firstTask}
+        taskCount={todayTasks.filter((task) => task.status !== "FINISHED").length}
+        revisionCount={revisions.filter((revision) => revision.status !== "COMPLETED").length}
+        dailyTargetMinutes={dailyTargetMinutes}
       />
 
       <section className="grid gap-4 sm:grid-cols-3">

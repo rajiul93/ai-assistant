@@ -28,10 +28,14 @@ function chime() {
 }
 
 /**
- * Watches the study timer on every page and announces once when the session goal is reached,
- * so a timer started by voice still finishes with a clear signal after navigating away.
+ * Restores a running study timer after a refresh, watches it on every page, and announces once
+ * when the session goal is reached, so a timer started by voice still finishes with a clear signal.
  */
 export function TimerAlarm() {
+  useEffect(() => {
+    void useTimerStore.persist.rehydrate();
+  }, []);
+
   useEffect(() => {
     const id = window.setInterval(() => {
       const timer = useTimerStore.getState();

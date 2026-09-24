@@ -22,6 +22,7 @@ model User {
   tasks         Task[]
   studySessions StudySession[]
   revisions     Revision[]
+  planStarts    DailyPlanStart[]
 }
 
 model StudyPlan {
@@ -153,4 +154,16 @@ model Revision {
   @@index([userId])
   @@index([userId, revisionDate])
   @@index([userId, status])
+}
+
+/// One row per day the user pressed "Start Today's Plan". Opening or refreshing the app never creates one.
+model DailyPlanStart {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Start of the day in the app timezone.
+  date      DateTime
+  startedAt DateTime @default(now())
+
+  @@unique([userId, date])
 }

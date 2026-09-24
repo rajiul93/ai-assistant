@@ -55,6 +55,14 @@ export async function getOpenTasks(userId: string) {
   });
 }
 
+/** When today's plan was started, or null if the user hasn't pressed "Start Today's Plan" yet. */
+export async function getTodayPlanStart(userId: string) {
+  const start = await prisma.dailyPlanStart.findUnique({
+    where: { userId_date: { userId, date: startOfDay().toDate() } },
+  });
+  return start?.startedAt ?? null;
+}
+
 export async function getTodayTasks(userId: string) {
   const start = startOfDay().toDate();
   const end = endOfDay().toDate();

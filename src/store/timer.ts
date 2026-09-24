@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
 
 type TimerStore = {
   running: boolean;
@@ -21,7 +22,9 @@ type TimerStore = {
   elapsedSeconds: () => number;
 };
 
-export const useTimerStore = create<TimerStore>((set, get) => ({
+// Kept in localStorage so a running session survives a page refresh. Restoring only continues a
+// timer the user already started — it never starts one. Rehydrated on the client by <TimerAlarm />.
+export const useTimerStore = create<TimerStore>()(persist((set, get) => ({
   running: false,
   paused: false,
   startedAt: null,
@@ -68,4 +71,10 @@ export const useTimerStore = create<TimerStore>((set, get) => ({
     const live = running && !paused && startedAt ? Date.now() - startedAt : 0;
     return Math.floor((accumulatedMs + live) / 1000);
   },
+}), {
+  name: "study-timer",
+  storage: createJSONStorage(() => localStorage),
+  skipHydration: true,
+  partialize: ({ running, paused, startedAt, accumulatedMs, subjectId, topicId, targetMinutes, targetReached }) =>
+    ({ running, paused, startedAt, accumulatedMs, subjectId, topicId, targetMinutes, targetReached }),
 }));
