@@ -1,11 +1,12 @@
 import Link from "next/link";
+import { DailyTargetCard } from "@/components/dashboard/daily-target-card";
 import { DeadlineCountdown } from "@/components/dashboard/deadline-countdown";
 import { TodayPlanStarter } from "@/components/dashboard/today-plan-starter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { PriorityBadge, StatusBadge } from "@/components/status-badge";
-import { formatDateTime, formatHoursMinutes, formatRemaining } from "@/lib/dayjs";
+import { formatDateTime, formatRemaining } from "@/lib/dayjs";
 import type { TaskWithRelations } from "@/server/queries";
 import type { Revision, Subject, Topic } from "@prisma/client";
 
@@ -41,10 +42,6 @@ export function DashboardView({
   firstTask: { title: string; subjectId: string; topicId: string; subjectName: string } | null;
 }) {
   const prep = preparationDeadline ? formatRemaining(preparationDeadline) : null;
-  const studiedMinutes = Math.floor(studiedSeconds / 60);
-  const studyPercent = dailyTargetMinutes
-    ? Math.min(100, Math.round((studiedMinutes / dailyTargetMinutes) * 100))
-    : 0;
 
   return (
     <div className="space-y-8">
@@ -78,6 +75,7 @@ export function DashboardView({
       />
 
       <section className="grid gap-4 sm:grid-cols-3">
+        <DailyTargetCard dailyTargetMinutes={dailyTargetMinutes} savedSeconds={studiedSeconds} />
         <Card>
           <CardHeader>
             <CardTitle>Job preparation countdown</CardTitle>
@@ -87,27 +85,6 @@ export function DashboardView({
             <p className={`mt-2 text-2xl font-semibold ${prep?.overdue ? "text-red-600" : ""}`}>
               {prep?.label ?? "Set a deadline"}
             </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Today&apos;s study target</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-zinc-500">📚</p>
-            <p className="mt-2 text-2xl font-semibold">{formatHoursMinutes(dailyTargetMinutes)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Studied today</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-zinc-500">⏱️</p>
-            <p className="mt-2 text-2xl font-semibold">
-              {formatHoursMinutes(studiedMinutes)} / {formatHoursMinutes(dailyTargetMinutes)}
-            </p>
-            <Progress className="mt-4" value={studyPercent} />
           </CardContent>
         </Card>
       </section>

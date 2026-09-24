@@ -2,36 +2,16 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useState } from "react";
 import { CheckCircle2, Pause, Play } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { APP_TIMEZONE, dayjs, formatClock, formatHoursMinutes } from "@/lib/dayjs";
+import { useLiveTimerSeconds, useTimerHydrated } from "@/lib/use-timer";
 import { startTodayPlan } from "@/server/actions/plan";
 import { useTimerStore } from "@/store/timer";
 
 type FirstTask = { title: string; subjectId: string; topicId: string; subjectName: string } | null;
-
-/** True once the persisted timer has been restored, so we never flash a stale "not running" state. */
-function useTimerHydrated() {
-  return useSyncExternalStore(
-    (onChange) => useTimerStore.persist.onFinishHydration(onChange),
-    () => useTimerStore.persist.hasHydrated(),
-    () => false,
-  );
-}
-
-function useElapsedSeconds(active: boolean) {
-  const [seconds, setSeconds] = useState(0);
-  useEffect(() => {
-    if (!active) return;
-    const tick = () => setSeconds(useTimerStore.getState().elapsedSeconds());
-    tick();
-    const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
-  }, [active]);
-  return seconds;
-}
 
 /**
  * "Start Today's Plan" card. Nothing starts on page load or refresh: only pressing the button
@@ -55,7 +35,7 @@ export function TodayPlanStarter({
   const hydrated = useTimerHydrated();
   const running = useTimerStore((state) => state.running);
   const paused = useTimerStore((state) => state.paused);
-  const elapsed = useElapsedSeconds(hydrated && running);
+  const elapsed = useLiveTimerSeconds();
 
   function startTimer() {
     const timer = useTimerStore.getState();
