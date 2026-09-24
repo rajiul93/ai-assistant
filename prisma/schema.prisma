@@ -1,0 +1,156 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  firebaseUid String   @unique
+  email       String   @unique
+  name        String?
+  image       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  studyPlan     StudyPlan?
+  subjects      Subject[]
+  topics        Topic[]
+  tasks         Task[]
+  studySessions StudySession[]
+  revisions     Revision[]
+}
+
+model StudyPlan {
+  id                      String   @id @default(cuid())
+  userId                  String   @unique
+  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  longTermDeadline        DateTime
+  preparationDeadline     DateTime
+  dailyStudyTargetMinutes Int      @default(180)
+  /// Only the birth date is stored; the age-limit date (birth date + ageLimitYears) is calculated when shown.
+  dateOfBirth             DateTime?
+  ageLimitYears           Int      @default(34)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+model Subject {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  topics        Topic[]
+  tasks         Task[]
+  studySessions StudySession[]
+  revisions     Revision[]
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+model Topic {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId String
+  subject   Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  parentId  String?
+  parent    Topic?   @relation("TopicTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Topic[]  @relation("TopicTree")
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tasks         Task[]
+  studySessions StudySession[]
+  revisions     Revision[]
+
+  @@index([userId])
+  @@index([subjectId])
+  @@index([parentId])
+}
+
+enum TaskStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  FINISHED
+  REVISION
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Task {
+  id               String       @id @default(cuid())
+  userId           String
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId        String?
+  subject          Subject?     @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  topicId          String?
+  topic            Topic?       @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  title            String
+  description      String?
+  estimatedMinutes Int          @default(30)
+  dueDate          DateTime?
+  priority         TaskPriority @default(MEDIUM)
+  status           TaskStatus   @default(NOT_STARTED)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@index([userId])
+  @@index([userId, dueDate])
+  @@index([userId, status])
+  @@index([createdAt])
+}
+
+model StudySession {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId       String?
+  subject         Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  topicId         String?
+  topic           Topic?   @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  startedAt       DateTime
+  endedAt         DateTime
+  durationSeconds Int
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, startedAt])
+  @@index([createdAt])
+}
+
+enum RevisionStatus {
+  PENDING
+  COMPLETED
+}
+
+model Revision {
+  id            String         @id @default(cuid())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topicId       String
+  topic         Topic          @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  subjectId     String?
+  subject       Subject?       @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  revisionDate  DateTime
+  status        RevisionStatus @default(PENDING)
+  notes         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([userId])
+  @@index([userId, revisionDate])
+  @@index([userId, status])
+}

@@ -1,0 +1,403 @@
+import { z } from "zod";
+import { APP_TIMEZONE, dayjs, now } from "@/lib/dayjs";
+import { assistantPages, type AssistantPage, type AssistantReply, type AssistantRequest, type ChatMessage, type PendingAction, type TaskDraft } from "@/lib/assistant-types";
+import { getFlatTopics, getOpenTasks, getPendingTasks, getProgressCounts, getSubjects, getTodayRevisions } from "@/server/queries";
+import { callGemini, isGeminiConfigured } from "@/server/assistant/gemini";
+
+type StudyContext = {
+  counts: Awaited<ReturnType<typeof getProgressCounts>>;
+  tasks: Awaited<ReturnType<typeof getPendingTasks>>;
+  revisions: Awaited<ReturnType<typeof getTodayRevisions>>;
+  subjects: Awaited<ReturnType<typeof getSubjects>>;
+  openTasks: Awaited<ReturnType<typeof getOpenTasks>>;
+  topics: Awaited<ReturnType<typeof getFlatTopics>>;
+};
+
+type Lang = "bn" | "en" | undefined;
+const actions = ["navigate", "create_task", "complete_task", "start_timer", "add_revision", "answer", "clarify"] as const;
+
+const pageKeys = Object.keys(assistantPages) as [AssistantPage, ...AssistantPage[]];
+
+const intentSchema = z.object({
+  action: z.enum(actions),
+  reply: z.string().default(""),
+  page: z.enum(pageKeys).nullish(),
+  task: z.object({
+    title: z.string().nullish(),
+    description: z.string().nullish(),
+    subject: z.string().nullish(),
+    dueDate: z.string().nullish(),
+    dueTime: z.string().nullish(),
+    priority: z.enum(["LOW", "MEDIUM", "HIGH"]).nullish(),
+    estimatedMinutes: z.number().nullish(),
+  }).nullish(),
+  /** complete_task: the task title as it appears in the open-task list. */
+  taskTitle: z.string().nullish(),
+  timer: z.object({ minutes: z.number().nullish(), subject: z.string().nullish(), topic: z.string().nullish() }).nullish(),
+  revision: z.object({ topic: z.string().nullish(), subject: z.string().nullish(), date: z.string().nullish(), notes: z.string().nullish() }).nullish(),
+});
+type Intent = z.infer<typeof intentSchema>;
+
+// Gemini's structured-output schema; mirrors intentSchema above.
+const intentResponseSchema = {
+  type: "OBJECT",
+  properties: {
+    action: { type: "STRING", enum: actions },
+    reply: { type: "STRING" },
+    page: { type: "STRING", enum: pageKeys, nullable: true },
+    task: {
+      type: "OBJECT",
+      nullable: true,
+      properties: {
+        title: { type: "STRING", nullable: true },
+        description: { type: "STRING", nullable: true },
+        subject: { type: "STRING", nullable: true },
+        dueDate: { type: "STRING", nullable: true, description: "YYYY-MM-DD" },
+        dueTime: { type: "STRING", nullable: true, description: "HH:mm, 24-hour" },
+        priority: { type: "STRING", enum: ["LOW", "MEDIUM", "HIGH"], nullable: true },
+        estimatedMinutes: { type: "INTEGER", nullable: true },
+      },
+    },
+    taskTitle: { type: "STRING", nullable: true },
+    timer: {
+      type: "OBJECT",
+      nullable: true,
+      properties: {
+        minutes: { type: "INTEGER", nullable: true },
+        subject: { type: "STRING", nullable: true },
+        topic: { type: "STRING", nullable: true },
+      },
+    },
+    revision: {
+      type: "OBJECT",
+      nullable: true,
+      properties: {
+        topic: { type: "STRING", nullable: true },
+        subject: { type: "STRING", nullable: true },
+        date: { type: "STRING", nullable: true, description: "YYYY-MM-DD" },
+        notes: { type: "STRING", nullable: true },
+      },
+    },
+  },
+  required: ["action", "reply"],
+};
+
+function formatHistory(history: ChatMessage[]) {
+  return history.map((item) => `${item.role === "user" ? "ব্যবহারকারী" : "সহকারী"}: ${item.text}`).join("\n") || "এটি প্রথম কথা।";
+}
+
+function upcomingDays() {
+  const today = now();
+  return Array.from({ length: 8 }, (_, index) => {
+    const day = today.add(index, "day");
+    return `${day.format("YYYY-MM-DD dddd")}${index === 0 ? " (আজ)" : index === 1 ? " (কাল)" : ""}`;
+  }).join("\n");
+}
+
+const persona = `তুমি ব্যবহারকারীর পড়াশোনার সঙ্গী — একজন কাছের বন্ধু আর যত্নশীল শিক্ষকের মতো। "তুমি" বলে সম্বোধন করবে, মানুষের মতো স্বাভাবিক কথ্য বাংলায় কথা বলবে (দরকারে ইংরেজি শব্দ চলবে), উষ্ণ ও উৎসাহ দেওয়া tone-এ। রোবটের মতো আনুষ্ঠানিক বা বইয়ের ভাষা নয়; যেমন "আরে, চিন্তা কোরো না", "চলো একসাথে দেখি"। ভুল তথ্য বানাবে না; নিশ্চিত না হলে সৎভাবে বলবে।`;
+
+function languageRule(lang?: "bn" | "en") {
+  return lang === "en"
+    ? "ব্যবহারকারী English বেছে নিয়েছে: reply এবং task-এর title/description স্বাভাবিক, বন্ধুসুলভ English-এ দাও (Bengali-তে বললেও)।"
+    : "reply স্বাভাবিক কথ্য বাংলায় দাও।";
+}
+
+function styleRule(voice?: boolean) {
+  return voice
+    ? "এই উত্তর মুখে পড়ে শোনানো হবে: ১–৩টি ছোট বাক্যে, কথা বলার ভঙ্গিতে বলো। কোনো list, markdown, emoji বা symbol নয়।"
+    : "উত্তর সংক্ষিপ্ত ও কাজের রাখো; দরকার হলে ছোট list ব্যবহার করতে পারো।";
+}
+
+function intentPrompt(request: AssistantRequest, history: ChatMessage[], context: StudyContext) {
+  return `${persona}
+
+তুমি একটি বাংলা study-planner app-এর ভেতরে আছো। ব্যবহারকারীর সর্বশেষ কথা পড়ে ঠিক করবে কী করতে হবে। ব্যবহারকারী বাংলা, Banglish, ইংরেজি বা mixed ভাষায় বলতে পারে; voice transcription-এ বানান ভুল থাকতে পারে, অর্থ বুঝে নেবে।
+
+action বেছে নাও:
+- create_task: ব্যবহারকারী কোনো task/কাজ/to-do বানাতে, যোগ করতে, মনে করিয়ে দিতে বা save করতে চায়; অথবা নিচের "অপেক্ষমাণ draft" বদলাতে চায় (যেমন "priority high করো", "কাল না, পরশু")। draft বদলালে পুরো আপডেট হওয়া task ফেরত দাও, শুধু বদলানো অংশ নয়।
+  - task.title: ছোট, স্পষ্ট নাম। task.description: শুধু task-এর আসল বিষয়বস্তু (কী পড়বে/করবে)। description-এ কখনো priority, subject, তারিখ, সময় লিখবে না (ওগুলোর আলাদা field আছে), আর কোনো প্রশ্ন বা confirmation-এর কথা ("ঠিক আছে কি না বলো", "সেভ করবো?") লিখবে না। বাড়তি বিস্তারিত না থাকলে description null।
+  - "আগের/শেষ উত্তরটা task-এ যোগ করো" বললে কথোপকথনে সহকারীর দেওয়া শেষ তথ্যমূলক উত্তর (প্রশ্নের উত্তর/ব্যাখ্যা) description-এ বসাও। সহকারীর confirmation বা প্রশ্ন ("…সেভ করবো?", "…হ্যাঁ বা না বলো") কখনো description-এ বসাবে না।
+  - অপেক্ষমাণ draft থাকলে "ঠিক আছে", "সেভ করো", "ওটা save করো", "এভাবেই রাখো" মানে শুধু সেটাই confirm করা — তখন draft-টা হুবহু আগের মতো ফেরত দাও, কিছু যোগ করবে না।
+  - task.subject: ব্যবহারকারী subject বললে নিচের তালিকা থেকে সবচেয়ে মিল থাকা নাম; না বললে null।
+  - task.dueDate: "আজ", "কাল", "পরশু", "সোমবার", "next week" ইত্যাদি নিচের তারিখ-তালিকা দেখে YYYY-MM-DD-তে বদলাও। সময় বললে dueTime (HH:mm)। না বললে null।
+  - task.priority: "জরুরি/important/high" → HIGH, "কম জরুরি/low" → LOW, না বললে null। task.estimatedMinutes: বললে মিনিটে।
+  - title বোঝা না গেলে action=clarify দিয়ে জিজ্ঞেস করো কোন task বানাতে চায়।
+  - কখনো বলবে না যে task save হয়ে গেছে; save হবে শুধু ব্যবহারকারী confirm করলে।
+- complete_task: কোনো task শেষ/done/complete হয়েছে বলে চিহ্নিত করতে চায় ("physics chapter 3 done করো", "mark X done")। taskTitle-এ নিচের "অসমাপ্ত tasks" তালিকা থেকে সবচেয়ে মিলে যাওয়া title হুবহু লেখো। কোনোটাই না মিললে বা একাধিক সমান মিললে clarify করে জিজ্ঞেস করো কোনটা।
+- start_timer: পড়ার timer/pomodoro চালু করতে চায় ("২৫ মিনিটের timer চালাও math-এর জন্য")। timer.minutes বললে মিনিটে (১ ঘণ্টা = 60), না বললে null। timer.subject/timer.topic বললে নিচের তালিকা থেকে নাম, না বললে null।
+- add_revision: কোনো topic-এর revision যোগ করতে চায়। revision.topic নিচের topics তালিকা থেকে হুবহু নাম; "এই topic/এটা" বললে আগের কথোপকথন বা timer-এর topic থেকে বুঝে নাও। revision.date YYYY-MM-DD, না বললে আগামীকাল। topic বোঝা না গেলে clarify করে জিজ্ঞেস করো কোন topic।
+- navigate: শুধু কোনো পাতা খুলতে/দেখতে চাইলে। page: dashboard, tasks, new_task (নতুন task-এর ফাঁকা form), subjects, revisions, progress, timer, plan।
+- answer: প্রশ্ন, আলাপ, পরামর্শ, মন খারাপ, সাধারণ জ্ঞান — যা কোনো app action নয়। reply-তে সরাসরি পুরো উত্তরটা দাও। পড়াশোনা নিয়ে প্রশ্নে নিচের study data ব্যবহার করে ব্যক্তিগত পরামর্শ দাও।
+- clarify: উদ্দেশ্য অস্পষ্ট, বা এমন কিছু চাইছে যা app-এ নেই (যেমন notes পাতা নেই)। reply-তে বিনয়ের সঙ্গে জানাও কী করা যায় এবং প্রশ্ন করো।
+অনুমান করে ভুল কাজ করবে না। ${languageRule(request.lang)} ${styleRule(request.voice)}
+
+সামনের তারিখগুলো (${APP_TIMEZONE}):
+${upcomingDays()}
+
+ব্যবহারকারীর subjects: ${context.subjects.map((subject) => subject.name).join(", ") || "কোনো subject নেই"}
+
+Topics (subject › topic): ${context.topics.map((topic) => `${topic.subject.name} › ${topic.parent ? `${topic.parent.name} › ` : ""}${topic.name}`).join("; ") || "কোনো topic নেই"}
+
+অসমাপ্ত tasks: ${context.openTasks.map((task) => `“${task.title}”${task.subject ? ` (${task.subject.name})` : ""}`).join(", ") || "নেই"}
+
+Study data: ${JSON.stringify(studyData(context))}
+
+অপেক্ষমাণ draft (confirm হয়নি): ${describePending(request.pending)}
+
+আগের কথোপকথন:
+${formatHistory(history)}
+
+ব্যবহারকারীর সর্বশেষ কথা${request.voice ? " (mic থেকে, ভুল শোনা থাকতে পারে)" : ""}:
+${request.message}${request.alternatives?.length ? `\n\nmic অন্যভাবেও শুনেছে (একই কথা, সবচেয়ে অর্থবহটা ধরো): ${request.alternatives.map((item) => `“${item}”`).join(", ")}` : ""}`;
+}
+
+function describePending(pending: PendingAction | null | undefined) {
+  if (!pending) return "নেই";
+  if (pending.kind === "create_task") {
+    const { draft } = pending;
+    return `নতুন task — ${JSON.stringify({ title: draft.title, description: draft.description, subject: draft.subjectName, due: draft.dueLabel, priority: draft.priority, estimatedMinutes: draft.estimatedMinutes })}`;
+  }
+  if (pending.kind === "complete_task") return `task শেষ করা — “${pending.title}”`;
+  return `revision যোগ — topic “${pending.topicName}”, তারিখ ${pending.dateLabel}${pending.notes ? `, notes: ${pending.notes}` : ""}`;
+}
+
+/** Lowercased words for loose matching of spoken names against saved ones. */
+function words(text: string) {
+  return text.toLowerCase().normalize("NFC").replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean);
+}
+
+/**
+ * Best match for a spoken name among saved items: exact, then containment, then word overlap.
+ * Returns null when nothing fits or when two items fit equally well (the user must choose).
+ */
+function bestMatch<T>(wanted: string | null | undefined, items: T[], nameOf: (item: T) => string) {
+  const target = wanted?.trim().toLowerCase();
+  if (!target) return { match: null, ambiguous: [] as T[] };
+  const exact = items.filter((item) => nameOf(item).toLowerCase() === target);
+  if (exact.length === 1) return { match: exact[0], ambiguous: [] as T[] };
+  const wantedWords = words(target);
+  const scored = items
+    .map((item) => {
+      const name = nameOf(item).toLowerCase();
+      const nameWords = words(name);
+      const overlap = wantedWords.filter((word) => nameWords.includes(word)).length / Math.max(wantedWords.length, nameWords.length, 1);
+      return { item, score: name.includes(target) || target.includes(name) ? 0.9 + overlap / 10 : overlap };
+    })
+    .filter((entry) => entry.score >= 0.5)
+    .sort((a, b) => b.score - a.score);
+  if (scored.length === 0) return { match: null, ambiguous: [] as T[] };
+  const tied = scored.filter((entry) => entry.score === scored[0].score);
+  return tied.length === 1 ? { match: scored[0].item, ambiguous: [] as T[] } : { match: null, ambiguous: tied.slice(0, 3).map((entry) => entry.item) };
+}
+
+function findSubject(name: string | null | undefined, subjects: StudyContext["subjects"]) {
+  const wanted = name?.trim().toLowerCase();
+  if (!wanted) return null;
+  return subjects.find((subject) => subject.name.toLowerCase() === wanted)
+    ?? subjects.find((subject) => subject.name.toLowerCase().includes(wanted) || wanted.includes(subject.name.toLowerCase()))
+    ?? null;
+}
+
+/**
+ * Keep only real task content in a description: drop sentences that are the assistant's own
+ * questions/confirmations or that restate fields stored separately (priority, subject, due date).
+ */
+function cleanDescription(text: string | null | undefined, title: string) {
+  const meta = /(\?|？|ঠিক আছে কি না|কি না বল|সেভ কর|save|confirm|হ্যাঁ|“না”|বদলাতে চাও|বদলাতে চান|priority|প্রায়োরিটি|অগ্রাধিকার|subject|সাবজেক্ট|due|শেষ তারিখ)/i;
+  const kept = (text ?? "")
+    .split(/(?<=[।.!?？\n])\s*/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence && !meta.test(sentence));
+  const cleaned = kept.join(" ").trim();
+  return cleaned.toLowerCase() === title.toLowerCase() ? "" : cleaned.slice(0, 2000);
+}
+
+function buildDraft(task: NonNullable<Intent["task"]>, subjects: StudyContext["subjects"]) {
+  const title = task.title?.trim().slice(0, 160);
+  if (!title) return null;
+  const subject = findSubject(task.subject, subjects);
+  let dueDate = "";
+  let dueLabel = "";
+  if (task.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(task.dueDate)) {
+    const time = task.dueTime && /^\d{1,2}:\d{2}$/.test(task.dueTime) ? task.dueTime : null;
+    const due = dayjs.tz(`${task.dueDate} ${time ?? "23:59"}`, "YYYY-MM-DD HH:mm", APP_TIMEZONE);
+    if (due.isValid()) {
+      dueDate = due.toISOString();
+      dueLabel = due.format(time ? "D MMM YYYY, h:mm A" : "D MMM YYYY");
+    }
+  }
+  const minutes = Math.round(task.estimatedMinutes ?? 30);
+  const draft: TaskDraft = {
+    title,
+    description: cleanDescription(task.description, title),
+    subjectId: subject?.id ?? "",
+    subjectName: subject?.name ?? "",
+    dueDate,
+    dueLabel,
+    priority: task.priority ?? "MEDIUM",
+    estimatedMinutes: Math.min(Math.max(minutes, 1), 24 * 60),
+  };
+  const missingSubject = task.subject?.trim() && !subject ? task.subject.trim() : null;
+  return { draft, missingSubject };
+}
+
+const priorityLabels = { LOW: "কম", MEDIUM: "মাঝারি", HIGH: "বেশি" } as const;
+
+function confirmationText(draft: TaskDraft, missingSubject: string | null, lang?: "bn" | "en") {
+  if (lang === "en") {
+    const details = [draft.subjectName && `subject ${draft.subjectName}`, draft.dueLabel && `due ${draft.dueLabel}`, `${draft.priority.toLowerCase()} priority`].filter(Boolean).join(", ");
+    const note = missingSubject ? ` I couldn't find a subject called “${missingSubject}”, so I left it without one.` : "";
+    return `I'll create “${draft.title}” — ${details}.${note} Shall I save it? Say “yes” or “no”, or tell me what to change.`;
+  }
+  const details = [draft.subjectName && `subject ${draft.subjectName}`, draft.dueLabel && `শেষ তারিখ ${draft.dueLabel}`, `priority ${priorityLabels[draft.priority]}`].filter(Boolean).join(", ");
+  const note = missingSubject ? ` “${missingSubject}” নামে কোনো subject পাইনি, তাই subject ছাড়া রাখছি।` : "";
+  return `“${draft.title}” task বানাতে চাই — ${details}।${note} সেভ করবো? “হ্যাঁ” বা “না” বলুন, অথবা কী বদলাতে চান বলুন।`;
+}
+
+function completeText(title: string, lang: Lang) {
+  return lang === "en" ? `Mark “${title}” as done? Say “yes” or “no”.` : `“${title}” শেষ হয়েছে বলে চিহ্নিত করবো? “হ্যাঁ” বা “না” বলো।`;
+}
+
+function revisionText(topicName: string, dateLabel: string, lang: Lang) {
+  return lang === "en" ? `Add a revision for “${topicName}” on ${dateLabel}? Say “yes” or “no”, or tell me a different day.` : `“${topicName}”-এর revision ${dateLabel}-এ যোগ করবো? “হ্যাঁ” বা “না” বলো, অথবা অন্য দিন বলো।`;
+}
+
+function timerText(minutes: number | null, label: string, lang: Lang) {
+  if (lang === "en") return `Done — ${minutes ? `a ${minutes}-minute ` : "the "}timer is running${label ? ` for ${label}` : ""}. Focus up; I'll tell you when time's up.`;
+  return `ঠিক আছে! ${label ? `${label}-এর জন্য ` : ""}${minutes ? `${minutes} মিনিটের ` : ""}timer চালু করলাম। মন দিয়ে পড়ো${minutes ? ", সময় শেষ হলে জানাবো" : ""}।`;
+}
+
+function listChoices(names: string[], lang: Lang) {
+  const list = names.map((name) => `“${name}”`).join(lang === "en" ? " or " : " নাকি ");
+  return lang === "en" ? `Did you mean ${list}?` : `তুমি কি ${list} বোঝাচ্ছো?`;
+}
+
+function studyData(context: StudyContext) {
+  return {
+    counts: context.counts,
+    pendingTasks: context.tasks.map((task) => ({ title: task.title, priority: task.priority, dueDate: task.dueDate, status: task.status, subject: task.subject?.name })),
+    todayRevisions: context.revisions.map((revision) => revision.topic.name),
+  };
+}
+
+async function answer(message: string, history: ChatMessage[], context: StudyContext, voice?: boolean, lang?: "bn" | "en") {
+  const basePrompt = `তুমি একজন স্বাভাবিক, বুদ্ধিমান বাংলা সহকারী। এটি একটি open-book conversation: ব্যবহারকারী পড়াশোনা ছাড়াও যেকোনো সাধারণ বা random প্রশ্ন করতে পারে। সাধারণ জ্ঞান, সাম্প্রতিক তথ্য, খবর, ব্যক্তি, জায়গা, প্রযুক্তি বা অন্য কোনো তথ্যের জন্য প্রয়োজন হলে তথ্য যাচাই করে উত্তর দাও। তুমি নিশ্চিত না হলে স্পষ্টভাবে বলবে, বানিয়ে বলবে না। ব্যবহারকারী বাংলায়, Banglish বা ইংরেজিতে লিখলেও সহজ স্বাভাবিক বাংলায় উত্তর দেবে; technical term দরকার হলে সহজ ব্যাখ্যা দেবে। কথার tone প্রসঙ্গ অনুযায়ী স্বাভাবিক, সহানুভূতিশীল, serious বা হালকা মজার হবে। আগের কথার ধারাবাহিকতা রাখবে।
+
+আগের কথোপকথন:\n${formatHistory(history)}\n\nব্যবহারকারীর বর্তমান প্রশ্ন:\n${message}\n\nঅ্যাপের ব্যক্তিগত study data (শুধু app-related প্রশ্নে ব্যবহার করবে):\n${JSON.stringify(studyData(context))}\n\n${persona}\n${languageRule(lang)} ${styleRule(voice)}`;
+  return await callGemini(`${basePrompt}\n\nপ্রয়োজন হলে Google Search ব্যবহার করে current তথ্য যাচাই করো।`, { search: true })
+    ?? await callGemini(`${basePrompt}\n\nGoogle Search এই মুহূর্তে unavailable হতে পারে। তোমার সাধারণ জ্ঞান ব্যবহার করে উত্তর দাও, তবে current তথ্য নিশ্চিত না হলে সেটা স্পষ্ট করে বলো।`);
+}
+
+const navigationRules: Array<{ pattern: RegExp; page: AssistantPage; reply: string }> = [
+  { pattern: /(subject|subjects|সাবজেক্ট|বিষয়)/i, page: "subjects", reply: "চলো, subjects দেখি।" },
+  { pattern: /(revision|রিভিশন|পুনরাবৃত্তি)/i, page: "revisions", reply: "চলো, revision-এর পাতায় যাই।" },
+  { pattern: /(progress|প্রগ্রেস|অগ্রগতি|কতদূর)/i, page: "progress", reply: "তোমার progress দেখাচ্ছি।" },
+  { pattern: /(timer|টাইমার|সময় ধর)/i, page: "timer", reply: "ঠিক আছে, timer খুলছি।" },
+  { pattern: /(plan|প্ল্যান|পরিকল্পনা|রুটিন)/i, page: "plan", reply: "চলো, study plan দেখি।" },
+  { pattern: /(dashboard|ড্যাশবোর্ড|হোম|মূল পাত)/i, page: "dashboard", reply: "চলো, dashboard-এ ফিরি।" },
+];
+
+/** Keyword rules used when Gemini is not configured or not responding. */
+function fallbackReply(message: string, context: StudyContext, lang?: "bn" | "en"): AssistantReply {
+  const text = message.toLowerCase();
+  const navigation = /(খোলো|খুলে|নিয়ে চলো|চলো|পাতায়|page|দেখাও|যাও|যাই|যেতে|দেখতে|চাই)/i.test(text);
+  const wantsTask = /(task|টাস্ক|কাজ|কাজের তালিকা)/i.test(text);
+  if (wantsTask && /(add|নতুন|যোগ|তৈরি|লিখ|বান|করতে চাই|করবো|করব|শুরু)/i.test(text)) return { type: "navigate", source: "fallback", href: assistantPages.new_task, reply: "ঠিক আছে, নতুন task-এর form খুলছি।" };
+  if (wantsTask && navigation) return { type: "navigate", source: "fallback", href: assistantPages.tasks, reply: "চলো, task page-এ যাই।" };
+  const rule = navigation ? navigationRules.find((item) => item.pattern.test(text)) : undefined;
+  if (rule) return { type: "navigate", source: "fallback", href: assistantPages[rule.page], reply: rule.reply };
+
+  if (/(পড়া|study|task|টাস্ক|কাজ|revision|রিভিশন|progress|প্রগ্রেস|বাকি|উচিত)/i.test(text)) {
+    const firstTask = context.tasks[0]?.title;
+    const reply = /(পড়া|study|উচিত)/i.test(text)
+      ? firstTask ? `চলো, এখন “${firstTask}” দিয়েই শুরু করি। আগে ২৫ মিনিট মন দিয়ে এটা পড়ো, তারপর আজকের ${context.revisions.length}টি revision থেকে একটি নাও।` : "চলো ছোট করে শুরু করি: একটি subject যোগ করো, একটি task বানাও, তারপর ২৫ মিনিট পড়ো।"
+      : `তোমার ${context.counts.completedTasks}টি task শেষ হয়েছে এবং ${context.counts.pendingTasks}টি বাকি। ${context.counts.completedRevisions}টি revision সম্পন্ন, আর ${context.counts.pendingRevisions}টি pending।`;
+    return { type: "answer", source: "fallback", reply };
+  }
+  if (lang === "en") {
+    return { type: "clarify", source: "fallback", reply: "The AI isn't responding right now, so I can only open pages for you — try “open tasks”. Please try again in a moment." };
+  }
+  return {
+    type: "clarify",
+    source: "fallback",
+    reply: isGeminiConfigured()
+      ? "AI service এই মুহূর্তে সাড়া দিচ্ছে না। এখন শুধু পাতা খোলা আর progress বলতে পারি; একটু পরে আবার চেষ্টা করুন।"
+      : "AI এখনো চালু করা হয়নি, তাই আমি শুধু পাতা খোলা আর progress বলতে পারি। যেমন বলুন: “task পাতা খোলো”।",
+  };
+}
+
+export async function respond(userId: string, request: AssistantRequest): Promise<AssistantReply> {
+  const reply = await decide(userId, request);
+  reply.source ??= "ai";
+  console.info(`[assistant] "${request.message.slice(0, 60)}" → ${reply.type}${reply.type === "confirm" ? `:${reply.action.kind}` : ""} [${reply.source}]`);
+  return reply;
+}
+
+async function decide(userId: string, request: AssistantRequest): Promise<AssistantReply> {
+  const history = (request.history ?? []).slice(-10);
+  const [counts, tasks, revisions, subjects, openTasks, topics] = await Promise.all([
+    getProgressCounts(userId),
+    getPendingTasks(userId),
+    getTodayRevisions(userId),
+    getSubjects(userId),
+    getOpenTasks(userId),
+    getFlatTopics(userId),
+  ]);
+  const context: StudyContext = { counts, tasks, revisions, subjects, openTasks, topics };
+  const lang = request.lang;
+
+  const raw = await callGemini(intentPrompt(request, history, context), { responseSchema: intentResponseSchema });
+  let intent: Intent | null = null;
+  try { intent = raw ? intentSchema.parse(JSON.parse(raw)) : null; } catch { intent = null; }
+  if (!intent) {
+    console.info("[assistant] AI unavailable, using keyword fallback");
+    return fallbackReply(request.message, context, request.lang);
+  }
+
+  if (intent.action === "navigate" && intent.page) {
+    return { type: "navigate", href: assistantPages[intent.page], reply: intent.reply || (request.lang === "en" ? "Sure, opening it." : "ঠিক আছে, খুলছি।") };
+  }
+  if (intent.action === "create_task") {
+    const built = intent.task ? buildDraft(intent.task, subjects) : null;
+    if (!built) return { type: "clarify", reply: intent.reply || (request.lang === "en" ? "Which task should I create? What's it called?" : "কোন task বানাবো? task-এর নামটা বলবে?") };
+    return { type: "confirm", action: { kind: "create_task", draft: built.draft }, reply: confirmationText(built.draft, built.missingSubject, request.lang) };
+  }
+  if (intent.action === "complete_task") {
+    const { match, ambiguous } = bestMatch(intent.taskTitle, openTasks, (task) => task.title);
+    if (ambiguous.length) return { type: "clarify", reply: listChoices(ambiguous.map((task) => task.title), lang) };
+    if (!match) return { type: "clarify", reply: intent.reply || (lang === "en" ? "I couldn't find that task among your unfinished ones. Which one did you finish?" : "অসমাপ্ত task-গুলোর মধ্যে এটা খুঁজে পেলাম না। কোনটা শেষ করেছ?") };
+    return { type: "confirm", action: { kind: "complete_task", taskId: match.id, title: match.title, subjectName: match.subject?.name ?? "" }, reply: completeText(match.title, lang) };
+  }
+  if (intent.action === "start_timer") {
+    const subject = findSubject(intent.timer?.subject, subjects);
+    const topic = bestMatch(intent.timer?.topic, subject ? topics.filter((item) => item.subjectId === subject.id) : topics, (item) => item.name).match;
+    const minutes = intent.timer?.minutes ? Math.min(Math.max(Math.round(intent.timer.minutes), 1), 300) : null;
+    const subjectName = subject?.name ?? topic?.subject.name ?? "";
+    return {
+      type: "start_timer",
+      timer: { minutes, subjectId: subject?.id ?? topic?.subjectId ?? "", subjectName, topicId: topic?.id ?? "", topicName: topic?.name ?? "" },
+      reply: timerText(minutes, topic?.name ?? subjectName, lang),
+    };
+  }
+  if (intent.action === "add_revision") {
+    const subject = findSubject(intent.revision?.subject, subjects);
+    const { match: topic, ambiguous } = bestMatch(intent.revision?.topic, subject ? topics.filter((item) => item.subjectId === subject.id) : topics, (item) => item.name);
+    if (ambiguous.length) return { type: "clarify", reply: listChoices(ambiguous.map((item) => `${item.name} (${item.subject.name})`), lang) };
+    if (!topic) return { type: "clarify", reply: intent.reply || (lang === "en" ? "Which topic should the revision be for? It needs to be one of your saved topics." : "কোন topic-এর revision যোগ করবো? তোমার Subjects পাতায় থাকা একটা topic বলো।") };
+    const requested = intent.revision?.date && /^\d{4}-\d{2}-\d{2}$/.test(intent.revision.date) ? dayjs.tz(intent.revision.date, APP_TIMEZONE) : null;
+    const date = requested?.isValid() ? requested : now().add(1, "day").startOf("day");
+    const dateLabel = date.format("D MMM YYYY");
+    return {
+      type: "confirm",
+      action: { kind: "add_revision", topicId: topic.id, topicName: topic.name, subjectName: topic.subject.name, revisionDate: date.format("YYYY-MM-DD"), dateLabel, notes: intent.revision?.notes?.trim().slice(0, 1000) ?? "" },
+      reply: revisionText(topic.name, dateLabel, lang),
+    };
+  }
+  if (intent.action === "clarify") {
+    return { type: "clarify", reply: intent.reply || (request.lang === "en" ? "I didn't quite get that — could you say it another way?" : "কথাটা পুরোপুরি বুঝিনি। একটু অন্যভাবে বলবে?") };
+  }
+  // Normally the intent call already contains the answer; only ask again (with Google Search) if it came back empty.
+  if (intent.reply.trim()) return { type: "answer", reply: intent.reply.trim() };
+  const reply = await answer(request.message, history, context, request.voice, request.lang);
+  return reply ? { type: "answer", reply } : fallbackReply(request.message, context, request.lang);
+}
