@@ -21,7 +21,6 @@ model User {
   topics        Topic[]
   tasks         Task[]
   studySessions StudySession[]
-  revisions     Revision[]
   planStarts    DailyPlanStart[]
   applications  JobApplication[]
   notes         Note[]
@@ -53,7 +52,6 @@ model Subject {
   topics        Topic[]
   tasks         Task[]
   studySessions StudySession[]
-  revisions     Revision[]
 
   @@unique([userId, name])
   @@index([userId])
@@ -74,7 +72,6 @@ model Topic {
 
   tasks         Task[]
   studySessions StudySession[]
-  revisions     Revision[]
 
   @@index([userId])
   @@index([subjectId])
@@ -108,6 +105,9 @@ model Task {
   dueDate          DateTime?
   priority         TaskPriority @default(MEDIUM)
   status           TaskStatus   @default(NOT_STARTED)
+  /// Finished (or "Revision") tasks are revised again and again; this counts how many times.
+  timesRevised     Int          @default(0)
+  lastRevisedAt    DateTime?
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
@@ -135,32 +135,7 @@ model StudySession {
   @@index([createdAt])
 }
 
-enum RevisionStatus {
-  PENDING
-  COMPLETED
-}
 
-model Revision {
-  id            String         @id @default(cuid())
-  userId        String
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  topicId       String
-  topic         Topic          @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  subjectId     String?
-  subject       Subject?       @relation(fields: [subjectId], references: [id], onDelete: SetNull)
-  revisionDate  DateTime
-  status        RevisionStatus @default(PENDING)
-  /// How many times the topic has been revised; one topic can be revised many times.
-  timesRevised  Int            @default(0)
-  lastRevisedAt DateTime?
-  notes         String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-
-  @@index([userId])
-  @@index([userId, revisionDate])
-  @@index([userId, status])
-}
 
 /// One row per day the user pressed "Start Today's Plan". Opening or refreshing the app never creates one.
 model DailyPlanStart {

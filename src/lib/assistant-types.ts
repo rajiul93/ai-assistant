@@ -34,7 +34,8 @@ export type ApplicationDraft = {
 export type PendingAction =
   | { kind: "create_task"; draft: TaskDraft }
   | { kind: "complete_task"; taskId: string; title: string; subjectName: string }
-  | { kind: "add_revision"; topicId: string; topicName: string; subjectName: string; revisionDate: string; dateLabel: string; notes: string }
+  /** Count one more revision of a finished task (revision lives on the task). */
+  | { kind: "revise_task"; taskId: string; title: string; timesRevised: number }
   | { kind: "add_application"; draft: ApplicationDraft }
   /** content is sanitized note HTML; preview is its plain text for the card. */
   | { kind: "create_note"; title: string; content: string; preview: string };

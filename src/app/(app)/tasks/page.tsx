@@ -1,14 +1,13 @@
 import { TaskBoard } from "@/components/tasks/task-board";
 import { requireUser } from "@/lib/auth";
-import { getFlatTopics, getRevisions, getSubjects, getTasks } from "@/server/queries";
+import { getFlatTopics, getSubjects, getTasks } from "@/server/queries";
 
 export default async function TasksPage() {
   const user = await requireUser();
-  const [tasks, subjects, topics, revisions] = await Promise.all([
+  const [tasks, subjects, topics] = await Promise.all([
     getTasks(user.id),
     getSubjects(user.id),
     getFlatTopics(user.id),
-    getRevisions(user.id),
   ]);
 
   return (
@@ -21,8 +20,6 @@ export default async function TasksPage() {
         subjectId: topic.subjectId,
         parentName: topic.parent?.name ?? null,
       }))}
-      revisions={revisions}
-      revisionTopics={topics.map((topic) => ({ id: topic.id, name: topic.name, subjectName: topic.subject.name }))}
     />
   );
 }

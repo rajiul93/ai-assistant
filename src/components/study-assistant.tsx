@@ -69,10 +69,9 @@ function ActionCard({ action, state, t, onConfirm, onCancel }: { action: Pending
     confirmLabel = t.confirmApplication;
   } else {
     eyebrow = t.revisionLabel;
-    title = action.topicName;
-    description = action.notes;
+    title = action.title;
     badge = <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600"><RefreshCcw className="size-3.5" /></span>;
-    rows = [[t.draftSubject, action.subjectName || "—"], [t.dateLabel, action.dateLabel]];
+    rows = [["Revised", `${action.timesRevised}× → ${action.timesRevised + 1}×`]];
     confirmLabel = t.confirmRevision;
   }
 

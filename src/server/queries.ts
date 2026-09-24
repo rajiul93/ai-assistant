@@ -88,24 +88,13 @@ export async function getPendingTasks(userId: string) {
   });
 }
 
-export async function getTodayRevisions(userId: string) {
-  const start = startOfDay().toDate();
-  const end = endOfDay().toDate();
-  return prisma.revision.findMany({
-    where: {
-      userId,
-      revisionDate: { gte: start, lte: end },
-    },
-    include: { topic: true, subject: true },
-    orderBy: { createdAt: "asc" },
-  });
-}
-
-export async function getRevisions(userId: string) {
-  return prisma.revision.findMany({
-    where: { userId },
-    include: { topic: true, subject: true },
-    orderBy: [{ revisionDate: "asc" }, { createdAt: "desc" }],
+/** Tasks in the revision list (finished or marked "Revision"): never-revised first, then least recently revised. */
+export async function getTasksToRevise(userId: string, take?: number) {
+  return prisma.task.findMany({
+    where: { userId, status: { in: ["FINISHED", "REVISION"] satisfies TaskStatus[] } },
+    include: taskInclude,
+    orderBy: [{ lastRevisedAt: { sort: "asc", nulls: "first" } }, { updatedAt: "desc" }],
+    ...(take ? { take } : {}),
   });
 }
 
@@ -141,22 +130,21 @@ export async function getMonthlyStudySeconds(userId: string) {
 }
 
 export async function getProgressCounts(userId: string) {
-  const [completedTasks, pendingTasks, completedRevisions, pendingRevisions, totalTasks] =
-    await Promise.all([
-      prisma.task.count({ where: { userId, status: "FINISHED" } }),
-      prisma.task.count({
-        where: { userId, status: { in: ["NOT_STARTED", "IN_PROGRESS"] } },
-      }),
-      prisma.revision.count({ where: { userId, status: "COMPLETED" } }),
-      prisma.revision.count({ where: { userId, status: "PENDING" } }),
-      prisma.task.count({ where: { userId } }),
-    ]);
+  const [completedTasks, pendingTasks, tasksToRevise, revisionTotals, totalTasks] = await Promise.all([
+    prisma.task.count({ where: { userId, status: "FINISHED" } }),
+    prisma.task.count({ where: { userId, status: { in: ["NOT_STARTED", "IN_PROGRESS"] } } }),
+    prisma.task.count({ where: { userId, status: { in: ["FINISHED", "REVISION"] } } }),
+    prisma.task.aggregate({ where: { userId }, _sum: { timesRevised: true } }),
+    prisma.task.count({ where: { userId } }),
+  ]);
 
   return {
     completedTasks,
     pendingTasks,
-    completedRevisions,
-    pendingRevisions,
+    /** Tasks in the revision list (finished or marked "Revision"). */
+    tasksToRevise,
+    /** How many revisions have been done across all tasks. */
+    timesRevised: revisionTotals._sum.timesRevised ?? 0,
     totalTasks,
   };
 }

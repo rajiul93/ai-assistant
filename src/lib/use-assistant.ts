@@ -9,8 +9,7 @@ import { matchQuickCommand } from "@/lib/quick-commands";
 import { speak } from "@/lib/voice";
 import { createApplication } from "@/server/actions/applications";
 import { createNote } from "@/server/actions/notes";
-import { createRevision } from "@/server/actions/revisions";
-import { createTask, updateTaskStatus } from "@/server/actions/tasks";
+import { changeTaskRevisionCount, createTask, updateTaskStatus } from "@/server/actions/tasks";
 import { findPendingAction, useAssistantStore } from "@/store/assistant";
 import { useTimerStore } from "@/store/timer";
 import { useTimerStartStore } from "@/store/timer-start";
@@ -89,8 +88,9 @@ export function useAssistant() {
       await queryClient.invalidateQueries({ queryKey: ["applications"] });
       return { status: s.applicationAddedStatus(action.draft.title), reply: s.applicationAddedReply(action.draft.title) };
     }
-    await createRevision({ topicId: action.topicId, revisionDate: action.revisionDate, notes: action.notes });
-    return { status: s.revisionAddedStatus(action.topicName), reply: s.revisionAddedReply(action.topicName, action.dateLabel) };
+    const times = await changeTaskRevisionCount(action.taskId, 1);
+    await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    return { status: s.revisedStatus(action.title, times), reply: s.revisedReply(action.title, times) };
   }
 
   function progressText(action: PendingAction) {
@@ -99,7 +99,7 @@ export function useAssistant() {
     if (action.kind === "complete_task") return s.completingTask(action.title);
     if (action.kind === "add_application") return s.addingApplication(action.draft.title);
     if (action.kind === "create_note") return s.addingNote(action.title);
-    return s.addingRevision(action.topicName);
+    return s.revising(action.title);
   }
 
   async function confirmAction({ voice }: SendOptions = {}) {

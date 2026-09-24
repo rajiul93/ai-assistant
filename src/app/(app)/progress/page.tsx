@@ -79,12 +79,12 @@ export default async function ProgressPage({ searchParams }: { searchParams: Pro
 
       <section className="grid gap-4 sm:grid-cols-2">
         <Card>
-          <p className="text-sm text-zinc-500">Revision completed</p>
-          <p className="mt-2 text-2xl font-semibold text-green-700">{counts.completedRevisions}</p>
+          <p className="text-sm text-zinc-500">Times revised</p>
+          <p className="mt-2 text-2xl font-semibold text-green-700">{counts.timesRevised}</p>
         </Card>
         <Card>
-          <p className="text-sm text-zinc-500">Revision pending</p>
-          <p className="mt-2 text-2xl font-semibold text-yellow-700">{counts.pendingRevisions}</p>
+          <p className="text-sm text-zinc-500">Tasks in revision list</p>
+          <p className="mt-2 text-2xl font-semibold text-yellow-700">{counts.tasksToRevise}</p>
         </Card>
       </section>
 

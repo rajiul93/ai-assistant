@@ -1,21 +1,21 @@
 import { z } from "zod";
 import { APP_TIMEZONE, dayjs, now } from "@/lib/dayjs";
 import { assistantPages, type AssistantPage, type AssistantReply, type AssistantRequest, type ChatMessage, type ApplicationDraft, type PendingAction, type TaskDraft } from "@/lib/assistant-types";
-import { getFlatTopics, getOpenTasks, getPendingTasks, getProgressCounts, getSubjects, getTodayRevisions } from "@/server/queries";
+import { getFlatTopics, getOpenTasks, getPendingTasks, getProgressCounts, getSubjects, getTasksToRevise } from "@/server/queries";
 import { htmlToPlainText, noteWritingRules, sanitizeNoteHtml } from "@/lib/note-html";
 import { callAI, isAIConfigured } from "@/server/assistant/ai";
 
 type StudyContext = {
   counts: Awaited<ReturnType<typeof getProgressCounts>>;
   tasks: Awaited<ReturnType<typeof getPendingTasks>>;
-  revisions: Awaited<ReturnType<typeof getTodayRevisions>>;
+  toRevise: Awaited<ReturnType<typeof getTasksToRevise>>;
   subjects: Awaited<ReturnType<typeof getSubjects>>;
   openTasks: Awaited<ReturnType<typeof getOpenTasks>>;
   topics: Awaited<ReturnType<typeof getFlatTopics>>;
 };
 
 type Lang = "bn" | "en" | undefined;
-const actions = ["navigate", "create_task", "complete_task", "start_timer", "add_revision", "add_application", "create_note", "answer", "clarify"] as const;
+const actions = ["navigate", "create_task", "complete_task", "start_timer", "revise_task", "add_application", "create_note", "answer", "clarify"] as const;
 const applicationStatuses = ["WISHLIST", "APPLIED", "EXAM", "INTERVIEW", "OFFER", "REJECTED", "WITHDRAWN"] as const;
 
 const pageKeys = Object.keys(assistantPages) as [AssistantPage, ...AssistantPage[]];
@@ -36,7 +36,6 @@ const intentSchema = z.object({
   /** complete_task: the task title as it appears in the open-task list. */
   taskTitle: z.string().nullish(),
   timer: z.object({ minutes: z.number().nullish(), subject: z.string().nullish(), topic: z.string().nullish() }).nullish(),
-  revision: z.object({ topic: z.string().nullish(), subject: z.string().nullish(), date: z.string().nullish(), notes: z.string().nullish() }).nullish(),
   note: z.object({ title: z.string().nullish(), content: z.string().nullish() }).nullish(),
   application: z.object({
     title: z.string().nullish(),
@@ -83,16 +82,6 @@ const intentResponseSchema = {
         minutes: { type: "INTEGER", nullable: true },
         subject: { type: "STRING", nullable: true },
         topic: { type: "STRING", nullable: true },
-      },
-    },
-    revision: {
-      type: "OBJECT",
-      nullable: true,
-      properties: {
-        topic: { type: "STRING", nullable: true },
-        subject: { type: "STRING", nullable: true },
-        date: { type: "STRING", nullable: true, description: "YYYY-MM-DD" },
-        notes: { type: "STRING", nullable: true },
       },
     },
     note: {
@@ -168,7 +157,7 @@ action বেছে নাও:
   - কখনো বলবে না যে task save হয়ে গেছে; save হবে শুধু ব্যবহারকারী confirm করলে।
 - complete_task: কোনো task শেষ/done/complete হয়েছে বলে চিহ্নিত করতে চায় ("physics chapter 3 done করো", "mark X done")। taskTitle-এ নিচের "অসমাপ্ত tasks" তালিকা থেকে সবচেয়ে মিলে যাওয়া title হুবহু লেখো। কোনোটাই না মিললে বা একাধিক সমান মিললে clarify করে জিজ্ঞেস করো কোনটা।
 - start_timer: পড়ার timer/pomodoro চালু করতে চায় ("২৫ মিনিটের timer চালাও math-এর জন্য")। timer.minutes বললে মিনিটে (১ ঘণ্টা = 60), না বললে null। timer.subject/timer.topic বললে নিচের তালিকা থেকে নাম, না বললে null।
-- add_revision: কোনো topic-এর revision যোগ করতে চায়। revision.topic নিচের topics তালিকা থেকে হুবহু নাম; "এই topic/এটা" বললে আগের কথোপকথন বা timer-এর topic থেকে বুঝে নাও। revision.date YYYY-MM-DD, না বললে আগামীকাল। topic বোঝা না গেলে clarify করে জিজ্ঞেস করো কোন topic।
+- revise_task: ব্যবহারকারী জানায় সে কোনো শেষ হওয়া task আবার revise/রিভিশন/পুনরায় পড়েছে ("physics chapter 3 revise করলাম", "I revised Newton's laws")। revision আলাদা কিছু না — task-এরই একটা গণনা। taskTitle-এ নিচের "Revision তালিকা" থেকে সবচেয়ে মিলে যাওয়া title হুবহু লেখো; না মিললে বা একাধিক সমান মিললে clarify।
 - add_application: ব্যবহারকারী কোনো চাকরিতে apply করেছে/করবে বলে জানায় ("আজ বাংলাদেশ ব্যাংকের Officer পদে apply করেছি", "I applied to BRAC Bank for MTO")। application.title = circular/job-এর নাম (না বললে organization + পদ থেকে ছোট একটা নাম বানাও); organization = প্রতিষ্ঠান; posts = যে যে পদে apply করেছে তার তালিকা (একটা circular-এ একাধিক পদ হতে পারে); location বললে; sector = সরকারি/government/ব্যাংক-বীমা-মন্ত্রণালয়-অধিদপ্তর-কর্পোরেশন-BCS ইত্যাদি হলে GOVERNMENT, প্রাইভেট/company/NGO/multinational হলে NON_GOVERNMENT (নিশ্চিত না হলে প্রতিষ্ঠানের নাম দেখে বিচার করো); status = "apply করবো/করতে চাই" হলে WISHLIST, "apply করেছি" হলে APPLIED; appliedAt = apply করার তারিখ (না বললে এবং "করেছি" বললে আজ); deadline, examDate বললে YYYY-MM-DD; reference = user ID/roll/tracking number বললে; link বললে। organization বোঝা না গেলে clarify।
 - create_note: ব্যবহারকারী Notes-এ কিছু লিখে রাখতে/note বানাতে চায় ("photosynthesis নিয়ে একটা note লেখো", "শেষ উত্তরটা notes-এ রাখো", "এটা note করে রাখো: …")। note.title ছোট শিরোনাম; note.content = note-এর লেখা। ${noteWritingRules} "আগের/শেষ উত্তরটা" বললে কথোপকথনে সহকারীর শেষ তথ্যমূলক উত্তরটা গুছিয়ে content-এ বসাও (confirmation বা প্রশ্ন নয়)। ব্যবহারকারী নিজে লেখা বলে দিলে সেটাই হুবহু গুছিয়ে রাখো। task বানানোর কথা বললে create_task, note-এর কথা বললে create_note।
 - navigate: শুধু কোনো পাতা খুলতে/দেখতে চাইলে। page: dashboard, tasks, new_task (নতুন task-এর ফাঁকা form), subjects, revisions, progress, timer, plan, jobs (job application-এর তালিকা), notes (Notes পাতা)।
@@ -182,6 +171,8 @@ ${upcomingDays()}
 ব্যবহারকারীর subjects: ${context.subjects.map((subject) => subject.name).join(", ") || "কোনো subject নেই"}
 
 Topics (subject › topic): ${context.topics.map((topic) => `${topic.subject.name} › ${topic.parent ? `${topic.parent.name} › ` : ""}${topic.name}`).join("; ") || "কোনো topic নেই"}
+
+Revision তালিকা (শেষ হওয়া task, কতবার revise হয়েছে): ${context.toRevise.map((task) => `“${task.title}” (${task.timesRevised}×)`).join(", ") || "নেই"}
 
 অসমাপ্ত tasks: ${context.openTasks.map((task) => `“${task.title}”${task.subject ? ` (${task.subject.name})` : ""}`).join(", ") || "নেই"}
 
@@ -214,7 +205,7 @@ function describePending(pending: PendingAction | null | undefined) {
   if (pending.kind === "complete_task") return `task শেষ করা — “${pending.title}”`;
   if (pending.kind === "add_application") return `job application যোগ — ${JSON.stringify(pending.draft)}`;
   if (pending.kind === "create_note") return `note সেভ — title “${pending.title}”, লেখা: ${pending.preview.slice(0, 1500)}`;
-  return `revision যোগ — topic “${pending.topicName}”, তারিখ ${pending.dateLabel}${pending.notes ? `, notes: ${pending.notes}` : ""}`;
+  return `task revise হিসেবে গোনা — “${pending.title}”`;
 }
 
 /** Lowercased words for loose matching of spoken names against saved ones. */
@@ -314,8 +305,8 @@ function completeText(title: string, lang: Lang) {
   return lang === "en" ? `Mark “${title}” as done? Say “yes” or “no”.` : `“${title}” শেষ হয়েছে বলে চিহ্নিত করবো? “হ্যাঁ” বা “না” বলো।`;
 }
 
-function revisionText(topicName: string, dateLabel: string, lang: Lang) {
-  return lang === "en" ? `Add a revision for “${topicName}” on ${dateLabel}? Say “yes” or “no”, or tell me a different day.` : `“${topicName}”-এর revision ${dateLabel}-এ যোগ করবো? “হ্যাঁ” বা “না” বলো, অথবা অন্য দিন বলো।`;
+function reviseText(title: string, timesRevised: number, lang: Lang) {
+  return lang === "en" ? `Count one more revision of “${title}” (${timesRevised} → ${timesRevised + 1})? Say “yes” or “no”.` : `“${title}” আরেকবার revise হিসেবে গুনবো (${timesRevised} → ${timesRevised + 1})? “হ্যাঁ” বা “না” বলো।`;
 }
 
 function timerText(minutes: number | null, label: string, lang: Lang) {
@@ -363,7 +354,7 @@ function studyData(context: StudyContext) {
   return {
     counts: context.counts,
     pendingTasks: context.tasks.map((task) => ({ title: task.title, priority: task.priority, dueDate: task.dueDate, status: task.status, subject: task.subject?.name })),
-    todayRevisions: context.revisions.map((revision) => revision.topic.name),
+    toRevise: context.toRevise.slice(0, 20).map((task) => ({ title: task.title, timesRevised: task.timesRevised, lastRevisedAt: task.lastRevisedAt })),
   };
 }
 
@@ -398,8 +389,8 @@ function fallbackReply(message: string, context: StudyContext, lang?: "bn" | "en
   if (/(পড়া|study|task|টাস্ক|কাজ|revision|রিভিশন|progress|প্রগ্রেস|বাকি|উচিত)/i.test(text)) {
     const firstTask = context.tasks[0]?.title;
     const reply = /(পড়া|study|উচিত)/i.test(text)
-      ? firstTask ? `চলো, এখন “${firstTask}” দিয়েই শুরু করি। আগে ২৫ মিনিট মন দিয়ে এটা পড়ো, তারপর আজকের ${context.revisions.length}টি revision থেকে একটি নাও।` : "চলো ছোট করে শুরু করি: একটি subject যোগ করো, একটি task বানাও, তারপর ২৫ মিনিট পড়ো।"
-      : `তোমার ${context.counts.completedTasks}টি task শেষ হয়েছে এবং ${context.counts.pendingTasks}টি বাকি। ${context.counts.completedRevisions}টি revision সম্পন্ন, আর ${context.counts.pendingRevisions}টি pending।`;
+      ? firstTask ? `চলো, এখন “${firstTask}” দিয়েই শুরু করি। আগে ২৫ মিনিট মন দিয়ে এটা পড়ো, তারপর তারপর revision তালিকার ${context.toRevise.length}টি task থেকে একটি revise করো।` : "চলো ছোট করে শুরু করি: একটি subject যোগ করো, একটি task বানাও, তারপর ২৫ মিনিট পড়ো।"
+      : `তোমার ${context.counts.completedTasks}টি task শেষ হয়েছে এবং ${context.counts.pendingTasks}টি বাকি। মোট ${context.counts.timesRevised} বার revise করেছ, আর ${context.counts.tasksToRevise}টি task revision তালিকায় আছে।`;
     return { type: "answer", source: "fallback", reply };
   }
   if (lang === "en") {
@@ -423,15 +414,15 @@ export async function respond(userId: string, request: AssistantRequest): Promis
 
 async function decide(userId: string, request: AssistantRequest): Promise<AssistantReply> {
   const history = (request.history ?? []).slice(-10);
-  const [counts, tasks, revisions, subjects, openTasks, topics] = await Promise.all([
+  const [counts, tasks, toRevise, subjects, openTasks, topics] = await Promise.all([
     getProgressCounts(userId),
     getPendingTasks(userId),
-    getTodayRevisions(userId),
+    getTasksToRevise(userId, 100),
     getSubjects(userId),
     getOpenTasks(userId),
     getFlatTopics(userId),
   ]);
-  const context: StudyContext = { counts, tasks, revisions, subjects, openTasks, topics };
+  const context: StudyContext = { counts, tasks, toRevise, subjects, openTasks, topics };
   const lang = request.lang;
 
   const raw = await callAI(intentPrompt(request, history, context), {
@@ -485,19 +476,11 @@ async function decide(userId: string, request: AssistantRequest): Promise<Assist
     if (!draft) return { type: "clarify", reply: intent.reply || (lang === "en" ? "Which organization did you apply to, and for which post?" : "কোন প্রতিষ্ঠানে, কোন পদে apply করেছ?") };
     return { type: "confirm", action: { kind: "add_application", draft }, reply: applicationText(draft, lang) };
   }
-  if (intent.action === "add_revision") {
-    const subject = findSubject(intent.revision?.subject, subjects);
-    const { match: topic, ambiguous } = bestMatch(intent.revision?.topic, subject ? topics.filter((item) => item.subjectId === subject.id) : topics, (item) => item.name);
-    if (ambiguous.length) return { type: "clarify", reply: listChoices(ambiguous.map((item) => `${item.name} (${item.subject.name})`), lang) };
-    if (!topic) return { type: "clarify", reply: intent.reply || (lang === "en" ? "Which topic should the revision be for? It needs to be one of your saved topics." : "কোন topic-এর revision যোগ করবো? তোমার Subjects পাতায় থাকা একটা topic বলো।") };
-    const requested = intent.revision?.date && /^\d{4}-\d{2}-\d{2}$/.test(intent.revision.date) ? dayjs.tz(intent.revision.date, APP_TIMEZONE) : null;
-    const date = requested?.isValid() ? requested : now().add(1, "day").startOf("day");
-    const dateLabel = date.format("D MMM YYYY");
-    return {
-      type: "confirm",
-      action: { kind: "add_revision", topicId: topic.id, topicName: topic.name, subjectName: topic.subject.name, revisionDate: date.format("YYYY-MM-DD"), dateLabel, notes: intent.revision?.notes?.trim().slice(0, 1000) ?? "" },
-      reply: revisionText(topic.name, dateLabel, lang),
-    };
+  if (intent.action === "revise_task") {
+    const { match, ambiguous } = bestMatch(intent.taskTitle, toRevise, (task) => task.title);
+    if (ambiguous.length) return { type: "clarify", reply: listChoices(ambiguous.map((task) => task.title), lang) };
+    if (!match) return { type: "clarify", reply: intent.reply || (lang === "en" ? "I couldn't find that among your finished tasks. Which task did you revise?" : "শেষ হওয়া task-গুলোর মধ্যে এটা পেলাম না। কোন task revise করেছ?") };
+    return { type: "confirm", action: { kind: "revise_task", taskId: match.id, title: match.title, timesRevised: match.timesRevised }, reply: reviseText(match.title, match.timesRevised, lang) };
   }
   if (intent.action === "clarify") {
     return { type: "clarify", reply: intent.reply || (request.lang === "en" ? "I didn't quite get that — could you say it another way?" : "কথাটা পুরোপুরি বুঝিনি। একটু অন্যভাবে বলবে?") };

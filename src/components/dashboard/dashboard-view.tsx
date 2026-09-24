@@ -7,8 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { PriorityBadge, StatusBadge } from "@/components/status-badge";
 import { formatDateTime, formatRemaining } from "@/lib/dayjs";
+import { lastRevisedLabel, needsRevision } from "@/lib/revisions";
 import type { TaskWithRelations } from "@/server/queries";
-import type { Revision, Subject, Topic } from "@prisma/client";
 
 export function DashboardView({
   longTermDeadline,
@@ -21,7 +21,8 @@ export function DashboardView({
   pendingCount,
   finishedCount,
   revisionCount,
-  revisions,
+  toRevise,
+  todayMs,
   progressPercent,
   planStartedAt,
   firstTask,
@@ -35,8 +36,11 @@ export function DashboardView({
   todayTasks: TaskWithRelations[];
   pendingCount: number;
   finishedCount: number;
+  /** Revision-list tasks that need revising (never, or not for a week). */
   revisionCount: number;
-  revisions: Array<Revision & { topic: Topic; subject: Subject | null }>;
+  /** Up to five revision-list tasks, most in need of revision first. */
+  toRevise: TaskWithRelations[];
+  todayMs: number;
   progressPercent: number;
   planStartedAt: string | null;
   firstTask: { title: string; subjectId: string; topicId: string; subjectName: string } | null;
@@ -70,7 +74,7 @@ export function DashboardView({
         startedAt={planStartedAt}
         firstTask={firstTask}
         taskCount={todayTasks.filter((task) => task.status !== "FINISHED").length}
-        revisionCount={revisions.filter((revision) => revision.status !== "COMPLETED").length}
+        revisionCount={revisionCount}
         dailyTargetMinutes={dailyTargetMinutes}
       />
 
@@ -99,7 +103,7 @@ export function DashboardView({
           <p className="mt-3 text-3xl font-semibold text-green-700">{finishedCount}</p>
         </Card>
         <Card>
-          <CardTitle>Revision tasks</CardTitle>
+          <CardTitle>Needs revision</CardTitle>
           <p className="mt-3 text-3xl font-semibold text-yellow-700">{revisionCount}</p>
         </Card>
       </section>
@@ -147,24 +151,24 @@ export function DashboardView({
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">🔄 Revision today</h2>
+            <h2 className="text-lg font-semibold">🔄 To revise</h2>
             <Link href="/tasks?view=revisions" className="text-sm text-zinc-500 hover:text-zinc-950">
               Manage
             </Link>
           </div>
           <Card>
-            {revisions.length === 0 ? (
-              <p className="text-sm text-zinc-500">Nothing to revise today.</p>
+            {toRevise.length === 0 ? (
+              <p className="text-sm text-zinc-500">Finished tasks show up here for revision.</p>
             ) : (
               <ul className="space-y-3">
-                {revisions.map((revision) => (
-                  <li key={revision.id} className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-medium">{revision.topic.name}</p>
-                      <p className="text-xs text-zinc-500">{revision.subject?.name}</p>
+                {toRevise.map((task) => (
+                  <li key={task.id} className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{task.title}</p>
+                      <p className="text-xs text-zinc-500">{task.subject?.name ?? "No subject"}</p>
                     </div>
-                    <span className={revision.status === "COMPLETED" ? "text-green-700 text-xs" : "text-yellow-700 text-xs"}>
-                      {revision.status === "COMPLETED" ? "Done" : "Pending"}
+                    <span className={needsRevision(task, todayMs) ? "shrink-0 text-xs font-medium text-yellow-700" : "shrink-0 text-xs text-zinc-500"}>
+                      {task.timesRevised}× · {lastRevisedLabel(task.lastRevisedAt, todayMs).replace("last: ", "")}
                     </span>
                   </li>
                 ))}

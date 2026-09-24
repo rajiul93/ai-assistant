@@ -6,7 +6,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { TaskStatus } from "@prisma/client";
 import { ListTodo, Play, Plus, RefreshCcw } from "lucide-react";
-import { RevisionManager, dueRevisionCount, type RevisionRow } from "@/components/revisions/revision-manager";
+import { RevisionManager } from "@/components/revisions/revision-manager";
+import { dueRevisionCount } from "@/lib/revisions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/select";
@@ -46,14 +47,10 @@ export function TaskBoard({
   initialTasks,
   subjects,
   topics,
-  revisions,
-  revisionTopics,
 }: {
   initialTasks: TaskWithRelations[];
   subjects: { id: string; name: string }[];
   topics: { id: string; name: string; subjectId: string; parentName?: string | null }[];
-  revisions: RevisionRow[];
-  revisionTopics: { id: string; name: string; subjectName: string }[];
 }) {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -61,7 +58,6 @@ export function TaskBoard({
   // Tasks and revisions share one page; the tab lives in the URL (?view=revisions) so links and voice can open it.
   const view = searchParams.get("view") === "revisions" ? "revisions" : "tasks";
   const setView = (next: "tasks" | "revisions") => router.replace(next === "revisions" ? "/tasks?view=revisions" : "/tasks", { scroll: false });
-  const [addingRevision, setAddingRevision] = useState(false);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterId>("ALL");
   const [sort, setSort] = useState<"dueDate" | "priority" | "createdAt">("dueDate");
@@ -83,8 +79,8 @@ export function TaskBoard({
 
   const [now] = useState(() => Date.now());
   const openTaskCount = tasksQuery.data.filter((task) => task.status !== "FINISHED").length;
-  // Revisions due today or already late — the number to act on.
-  const dueRevisions = dueRevisionCount(revisions, now);
+  // Finished tasks never revised or not revised for a week — the number to act on.
+  const dueRevisions = dueRevisionCount(tasksQuery.data, now);
 
   const visible = useMemo(() => {
     const tasks = tasksQuery.data ?? [];
@@ -161,7 +157,7 @@ export function TaskBoard({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Tasks</h1>
-          <p className="mt-1 text-sm text-zinc-500">{view === "tasks" ? "Create, filter, and finish your preparation work." : "Topics to revisit — what's due today and what's late."}</p>
+          <p className="mt-1 text-sm text-zinc-500">{view === "tasks" ? "Create, filter, and finish your preparation work." : "Finished tasks to revise — tap + each time you revise one."}</p>
         </div>
         {view === "tasks" ? (
           <div className="flex gap-2">
@@ -174,12 +170,7 @@ export function TaskBoard({
               Add Task
             </Button>
           </div>
-        ) : (
-          <Button onClick={() => setAddingRevision(true)}>
-            <Plus className="size-4" />
-            Add revision
-          </Button>
-        )}
+        ) : null}
       </div>
 
       <div role="tablist" aria-label="Tasks or revisions" className="grid grid-cols-2 gap-1 rounded-xl bg-zinc-100 p-1 sm:inline-grid sm:w-80">
@@ -302,13 +293,7 @@ export function TaskBoard({
         </div>
       )}
       </> : (
-        <RevisionManager
-          revisions={revisions}
-          topics={revisionTopics}
-          todayMs={now}
-          adding={addingRevision}
-          onAddingChange={setAddingRevision}
-        />
+        <RevisionManager tasks={tasksQuery.data} todayMs={now} />
       )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
