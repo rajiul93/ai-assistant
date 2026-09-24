@@ -140,26 +140,6 @@ export async function getMonthlyStudySeconds(userId: string) {
   );
 }
 
-export async function getSubjectStudySeconds(userId: string) {
-  const groups = await prisma.studySession.groupBy({
-    by: ["subjectId"],
-    where: { userId },
-    _sum: { durationSeconds: true },
-  });
-  const subjects = await prisma.subject.findMany({
-    where: { userId },
-    select: { id: true, name: true },
-  });
-  const nameById = new Map(subjects.map((subject) => [subject.id, subject.name]));
-  return groups
-    .map((group) => ({
-      subjectId: group.subjectId,
-      name: group.subjectId ? nameById.get(group.subjectId) ?? "Unassigned" : "Unassigned",
-      seconds: group._sum.durationSeconds ?? 0,
-    }))
-    .sort((a, b) => b.seconds - a.seconds);
-}
-
 export async function getProgressCounts(userId: string) {
   const [completedTasks, pendingTasks, completedRevisions, pendingRevisions, totalTasks] =
     await Promise.all([
@@ -189,3 +169,65 @@ export type SubjectWithTopics = Prisma.SubjectGetPayload<{
     };
   };
 }>;
+
+export type SubjectStat = {
+  subjectId: string | null;
+  name: string;
+  seconds: number;
+  sessions: number;
+  activeDays: number;
+  previousSeconds: number;
+  finishedTasks: number;
+  openTasks: number;
+  lastStudiedAt: Date | null;
+};
+
+/**
+ * Per-subject study analysis for [from, to], compared with [previousFrom, previousTo].
+ * Every subject is included (even with no study time) so neglected subjects show up.
+ * "Finished tasks" counts tasks marked finished in the period (by their last update time).
+ */
+export async function getSubjectAnalysis(userId: string, from: Date | null, to: Date, previous: { from: Date; to: Date } | null) {
+  const range = from ? { gte: from, lte: to } : { lte: to };
+  const [subjects, sessions, previousTotals, lastStudied, finished, open] = await Promise.all([
+    prisma.subject.findMany({ where: { userId }, select: { id: true, name: true } }),
+    prisma.studySession.findMany({ where: { userId, startedAt: range }, select: { subjectId: true, startedAt: true, durationSeconds: true } }),
+    previous
+      ? prisma.studySession.groupBy({ by: ["subjectId"], where: { userId, startedAt: { gte: previous.from, lte: previous.to } }, _sum: { durationSeconds: true } })
+      : Promise.resolve([]),
+    prisma.studySession.groupBy({ by: ["subjectId"], where: { userId }, _max: { startedAt: true } }),
+    prisma.task.groupBy({ by: ["subjectId"], where: { userId, status: "FINISHED", updatedAt: range }, _count: { _all: true } }),
+    prisma.task.groupBy({ by: ["subjectId"], where: { userId, status: { not: "FINISHED" } }, _count: { _all: true } }),
+  ]);
+
+  const stats = new Map<string | null, SubjectStat>();
+  const statFor = (subjectId: string | null) => {
+    let stat = stats.get(subjectId);
+    if (!stat) {
+      const name = subjectId ? subjects.find((subject) => subject.id === subjectId)?.name ?? "Deleted subject" : "No subject";
+      stat = { subjectId, name, seconds: 0, sessions: 0, activeDays: 0, previousSeconds: 0, finishedTasks: 0, openTasks: 0, lastStudiedAt: null };
+      stats.set(subjectId, stat);
+    }
+    return stat;
+  };
+  subjects.forEach((subject) => statFor(subject.id));
+
+  const days = new Map<string | null, Set<string>>();
+  for (const session of sessions) {
+    const stat = statFor(session.subjectId);
+    stat.seconds += session.durationSeconds;
+    stat.sessions += 1;
+    const day = startOfDay(session.startedAt).format("YYYY-MM-DD");
+    days.set(session.subjectId, (days.get(session.subjectId) ?? new Set()).add(day));
+  }
+  days.forEach((set, subjectId) => { statFor(subjectId).activeDays = set.size; });
+  previousTotals.forEach((row) => { if (stats.has(row.subjectId)) statFor(row.subjectId).previousSeconds = row._sum.durationSeconds ?? 0; });
+  lastStudied.forEach((row) => { if (stats.has(row.subjectId)) statFor(row.subjectId).lastStudiedAt = row._max.startedAt; });
+  finished.forEach((row) => { if (stats.has(row.subjectId)) statFor(row.subjectId).finishedTasks = row._count._all; });
+  open.forEach((row) => { if (stats.has(row.subjectId)) statFor(row.subjectId).openTasks = row._count._all; });
+
+  // "No subject" only matters when old, unassigned sessions exist in the period.
+  const noSubject = stats.get(null);
+  if (noSubject && noSubject.seconds === 0) stats.delete(null);
+  return [...stats.values()].sort((a, b) => b.seconds - a.seconds || a.name.localeCompare(b.name));
+}

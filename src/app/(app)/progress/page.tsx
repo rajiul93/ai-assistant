@@ -1,32 +1,50 @@
+import { SubjectAnalysis, analysisPeriods, type AnalysisPeriod } from "@/components/progress/subject-analysis";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { requireUser } from "@/lib/auth";
-import { formatDurationFromSeconds, formatHoursMinutes } from "@/lib/dayjs";
+import { formatDurationFromSeconds, formatHoursMinutes, now as appNow, startOfDay, startOfMonth } from "@/lib/dayjs";
 import {
   getMonthlyStudySeconds,
   getProgressCounts,
   getStudyPlan,
-  getSubjectStudySeconds,
+  getSubjectAnalysis,
   getTodayStudySeconds,
   getWeeklyStudySeconds,
 } from "@/server/queries";
 
-export default async function ProgressPage() {
+/** The analysis window and the equally long window just before it (for "more/less than before"). */
+function periodRange(period: AnalysisPeriod) {
+  const current = appNow();
+  const to = current.toDate();
+  if (period === "all") return { from: null, to, previous: null };
+  if (period === "month") {
+    const from = startOfMonth();
+    const previousFrom = from.subtract(1, "month");
+    // Same number of elapsed days in the previous month, so mid-month isn't compared to a full month.
+    return { from: from.toDate(), to, previous: { from: previousFrom.toDate(), to: previousFrom.add(current.diff(from)).toDate() } };
+  }
+  const days = period === "7d" ? 7 : 30;
+  const from = startOfDay(current.subtract(days - 1, "day"));
+  return { from: from.toDate(), to, previous: { from: from.subtract(days, "day").toDate(), to: from.subtract(1, "millisecond").toDate() } };
+}
+
+export default async function ProgressPage({ searchParams }: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
   const user = await requireUser();
-  const [plan, today, weekly, monthly, bySubject, counts] = await Promise.all([
+  const requested = (await searchParams).period;
+  const period = analysisPeriods.find((item) => item.key === requested)?.key ?? "30d";
+  const range = periodRange(period);
+  const [plan, today, weekly, monthly, subjectStats, counts] = await Promise.all([
     getStudyPlan(user.id),
     getTodayStudySeconds(user.id),
     getWeeklyStudySeconds(user.id),
     getMonthlyStudySeconds(user.id),
-    getSubjectStudySeconds(user.id),
+    getSubjectAnalysis(user.id, range.from, range.to, range.previous),
     getProgressCounts(user.id),
   ]);
 
   const target = plan?.dailyStudyTargetMinutes ?? 180;
   const todayMinutes = Math.floor(today / 60);
   const todayPercent = Math.min(100, Math.round((todayMinutes / target) * 100));
-  const totalSeconds = bySubject.reduce((sum, item) => sum + item.seconds, 0);
-  const maxSeconds = Math.max(...bySubject.map((item) => item.seconds), 1);
 
   return (
     <div className="space-y-8">
@@ -70,28 +88,7 @@ export default async function ProgressPage() {
         </Card>
       </section>
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-5">
-        <h2 className="font-semibold">Subject-wise study time</h2>
-        {bySubject.length === 0 ? (
-          <p className="mt-6 text-sm text-zinc-500">No study sessions yet.</p>
-        ) : (
-          <ul className="mt-6 space-y-4">
-            {bySubject.map((item) => (
-              <li key={item.subjectId ?? item.name}>
-                <div className="mb-2 flex items-center justify-between text-sm">
-                  <span>{item.name}</span>
-                  <span className="text-zinc-500">{formatDurationFromSeconds(item.seconds)}</span>
-                </div>
-                <Progress value={(item.seconds / maxSeconds) * 100} />
-              </li>
-            ))}
-            <li className="flex items-center justify-between border-t border-zinc-200 pt-4 font-medium">
-              <span>Total</span>
-              <span>{formatDurationFromSeconds(totalSeconds)}</span>
-            </li>
-          </ul>
-        )}
-      </section>
+      <SubjectAnalysis stats={subjectStats} period={period} comparable={range.previous !== null} now={range.to.getTime()} />
     </div>
   );
 }

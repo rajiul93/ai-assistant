@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { formatClock } from "@/lib/dayjs";
 import { saveStudySession } from "@/server/actions/sessions";
 import { useTimerStore } from "@/store/timer";
+import { useTimerStartStore } from "@/store/timer-start";
 
 export function StudyTimer({
   subjects,
@@ -20,7 +21,6 @@ export function StudyTimer({
 }) {
   const timer = useTimerStore();
   const [elapsed, setElapsed] = useState(0);
-  const [sessionStart, setSessionStart] = useState<Date | null>(null);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -33,15 +33,14 @@ export function StudyTimer({
   const remaining = targetSeconds === null ? null : Math.max(0, targetSeconds - elapsed);
   const goalOptions = [25, 50, 90, ...(timer.targetMinutes && ![25, 50, 90].includes(timer.targetMinutes) ? [timer.targetMinutes] : [])];
 
-  const filteredTopics = topics.filter(
-    (topic) => !timer.subjectId || topic.subjectId === timer.subjectId,
-  );
+  const subjectName = subjects.find((subject) => subject.id === timer.subjectId)?.name;
+  const topicName = topics.find((topic) => topic.id === timer.topicId)?.name;
 
   const stopMutation = useMutation({
     mutationFn: async () => {
       const seconds = Math.max(1, useTimerStore.getState().elapsedSeconds());
       const endedAt = new Date();
-      const startedAt = sessionStart ?? new Date(endedAt.getTime() - seconds * 1000);
+      const startedAt = new Date(endedAt.getTime() - seconds * 1000);
       await saveStudySession({
         subjectId: timer.subjectId,
         topicId: timer.topicId,
@@ -53,7 +52,6 @@ export function StudyTimer({
     onSuccess: () => {
       toast.success("Study session saved");
       timer.reset();
-      setSessionStart(null);
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -75,52 +73,35 @@ export function StudyTimer({
             <Progress value={Math.min(100, (elapsed / (targetSeconds ?? 1)) * 100)} />
           </div> : null}
         </div>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <NativeSelect
-            value={timer.subjectId}
-            onChange={(event) => timer.setContext(event.target.value, "")}
-            disabled={timer.running}
-          >
-            <option value="">Subject (optional)</option>
-            {subjects.map((subject) => (
-              <option key={subject.id} value={subject.id}>
-                {subject.name}
-              </option>
-            ))}
-          </NativeSelect>
-          <NativeSelect
-            value={timer.topicId}
-            onChange={(event) => timer.setContext(timer.subjectId, event.target.value)}
-            disabled={timer.running}
-          >
-            <option value="">Topic (optional)</option>
-            {filteredTopics.map((topic) => (
-              <option key={topic.id} value={topic.id}>
-                {topic.name}
-              </option>
-            ))}
-          </NativeSelect>
-          <NativeSelect
-            aria-label="Session goal"
-            value={timer.targetMinutes ?? ""}
-            onChange={(event) => timer.setTarget(event.target.value ? Number(event.target.value) : null)}
-            disabled={timer.running}
-          >
-            <option value="">No goal (open session)</option>
-            {goalOptions.map((minutes) => (
-              <option key={minutes} value={minutes}>
-                Goal: {minutes} minutes
-              </option>
-            ))}
-          </NativeSelect>
-        </div>
+        {timer.running ? (
+          <p className="text-sm text-zinc-600">
+            Studying <span className="font-medium text-zinc-950">{subjectName ?? "No subject"}</span>
+            {topicName ? <> · {topicName}</> : null}
+          </p>
+        ) : (
+          <div className="max-w-xs">
+            <NativeSelect
+              aria-label="Session goal"
+              value={timer.targetMinutes ?? ""}
+              onChange={(event) => timer.setTarget(event.target.value ? Number(event.target.value) : null)}
+            >
+              <option value="">No goal (open session)</option>
+              {goalOptions.map((minutes) => (
+                <option key={minutes} value={minutes}>
+                  Goal: {minutes} minutes
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
           {!timer.running ? (
             <Button
-              onClick={() => {
-                setSessionStart(new Date());
-                timer.start();
-              }}
+              onClick={() => useTimerStartStore.getState().open({
+                suggestedSubjectId: timer.subjectId,
+                topicId: timer.topicId,
+                minutes: timer.targetMinutes,
+              })}
             >
               Start study
             </Button>

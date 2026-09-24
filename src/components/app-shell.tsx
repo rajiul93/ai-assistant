@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import { SignOutButton } from "@/components/sign-out-button";
 import { StudyAssistant } from "@/components/study-assistant";
+import { SubjectPickerDialog } from "@/components/timer/subject-picker-dialog";
 import { TimerAlarm } from "@/components/timer/timer-alarm";
 import { VoiceCommandCenter } from "@/components/voice-command-center";
 
@@ -76,6 +77,7 @@ export function AppShell({
         <VoiceCommandCenter />
         <StudyAssistant />
         <TimerAlarm />
+        <SubjectPickerDialog />
         <main className="mx-auto w-full max-w-6xl px-4 py-6 pb-24 lg:px-8 lg:py-10 lg:pb-10">
           {children}
         </main>

@@ -10,12 +10,13 @@ import { APP_TIMEZONE, dayjs, formatClock, formatHoursMinutes } from "@/lib/dayj
 import { useLiveTimerSeconds, useTimerHydrated } from "@/lib/use-timer";
 import { startTodayPlan } from "@/server/actions/plan";
 import { useTimerStore } from "@/store/timer";
+import { useTimerStartStore } from "@/store/timer-start";
 
 type FirstTask = { title: string; subjectId: string; topicId: string; subjectName: string } | null;
 
 /**
  * "Start Today's Plan" card. Nothing starts on page load or refresh: only pressing the button
- * records today's start (server) and starts the study timer with the first task of the day.
+ * asks which subject to study, then records today's start (server) and starts the study timer.
  */
 export function TodayPlanStarter({
   startedAt,
@@ -37,26 +38,28 @@ export function TodayPlanStarter({
   const paused = useTimerStore((state) => state.paused);
   const elapsed = useLiveTimerSeconds();
 
-  function startTimer() {
-    const timer = useTimerStore.getState();
-    if (timer.running) return;
-    timer.setContext(firstTask?.subjectId ?? "", firstTask?.topicId ?? "");
-    timer.setTarget(null);
-    timer.start();
+  // Suggest the first task's subject; the picker still asks, so every session has a subject.
+  function pickSubject(onStarted?: () => Promise<void>) {
+    useTimerStartStore.getState().open({
+      suggestedSubjectId: firstTask?.subjectId,
+      topicId: firstTask?.topicId,
+      onStarted,
+    });
   }
 
-  async function startPlan() {
-    setStarting(true);
-    try {
-      await startTodayPlan();
-      startTimer();
-      toast.success("Today's plan started — good luck!");
-      router.refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't start today's plan");
-    } finally {
-      setStarting(false);
-    }
+  function startPlan() {
+    pickSubject(async () => {
+      setStarting(true);
+      try {
+        await startTodayPlan();
+        toast.success("Today's plan started — good luck!");
+        router.refresh();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Couldn't start today's plan");
+      } finally {
+        setStarting(false);
+      }
+    });
   }
 
   const summary = [
@@ -72,7 +75,7 @@ export function TodayPlanStarter({
         <p className="mt-1 text-sm text-zinc-500">{summary}</p>
         {firstTask ? <p className="mt-2 truncate text-sm text-zinc-700">Start with: <span className="font-medium">{firstTask.title}</span>{firstTask.subjectName ? ` · ${firstTask.subjectName}` : ""}</p> : null}
       </div>
-      <Button size="lg" onClick={() => void startPlan()} disabled={starting} className="shrink-0 gap-2 rounded-xl">
+      <Button size="lg" onClick={startPlan} disabled={starting} className="shrink-0 gap-2 rounded-xl">
         <Play className="size-4" /> {starting ? "Starting…" : "Start Today's Plan"}
       </Button>
     </section>;
@@ -92,7 +95,7 @@ export function TodayPlanStarter({
         <span className="text-sm text-zinc-500">{paused ? "Paused" : "Studying"} · Open timer</span>
       </Link>
     ) : (
-      <Button variant="outline" onClick={startTimer} className="shrink-0 gap-2 rounded-xl bg-white">
+      <Button variant="outline" onClick={() => pickSubject()} className="shrink-0 gap-2 rounded-xl bg-white">
         <Play className="size-4" /> Continue studying
       </Button>
     )}

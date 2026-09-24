@@ -11,6 +11,7 @@ import { createRevision } from "@/server/actions/revisions";
 import { createTask, updateTaskStatus } from "@/server/actions/tasks";
 import { findPendingAction, useAssistantStore } from "@/store/assistant";
 import { useTimerStore } from "@/store/timer";
+import { useTimerStartStore } from "@/store/timer-start";
 
 // A reply to a waiting card is a confirmation when every word is a "yes/do it" word, e.g.
 // "হ্যাঁ", "ঠিক আছে, সেভ করো", "ok save it", "yes please". Anything else goes to the AI.
@@ -130,6 +131,14 @@ export function useAssistant() {
       store.add({ role: "assistant", text });
       store.setLive({ stage: "result", tone: "warn", text });
       if (voice) speak(text);
+      return;
+    }
+    // Every session needs a subject: without one from the voice command, ask with the picker.
+    if (!timer.subjectId) {
+      useTimerStartStore.getState().open({ minutes: timer.minutes, topicId: timer.topicId });
+      store.add({ role: "assistant", text: s.pickerAskVoice, source: "ai" });
+      store.setLive({ stage: "result", tone: "ok", text: s.pickerTitle });
+      if (voice) speak(s.pickerAskVoice);
       return;
     }
     clock.setContext(timer.subjectId, timer.topicId);
