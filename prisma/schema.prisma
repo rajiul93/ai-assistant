@@ -150,6 +150,9 @@ model Revision {
   subject       Subject?       @relation(fields: [subjectId], references: [id], onDelete: SetNull)
   revisionDate  DateTime
   status        RevisionStatus @default(PENDING)
+  /// How many times the topic has been revised; one topic can be revised many times.
+  timesRevised  Int            @default(0)
+  lastRevisedAt DateTime?
   notes         String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt

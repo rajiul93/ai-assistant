@@ -48,6 +48,29 @@ export async function completeRevision(revisionId: string) {
   revalidateRevisions();
 }
 
+/**
+ * One topic can be revised many times: +1 records another revision (and when), −1 undoes a
+ * mistaken tap. Updated atomically in the database so quick repeated taps are all counted.
+ */
+export async function changeRevisionCount(revisionId: string, delta: 1 | -1) {
+  const user = await requireUser();
+  const existing = await prisma.revision.findFirst({ where: { id: revisionId, userId: user.id } });
+  if (!existing) throw new Error("Revision not found.");
+
+  if (delta === 1) {
+    const updated = await prisma.revision.update({
+      where: { id: existing.id },
+      data: { timesRevised: { increment: 1 }, lastRevisedAt: new Date() },
+    });
+    revalidateRevisions();
+    return updated.timesRevised;
+  }
+  // Never below zero.
+  await prisma.revision.updateMany({ where: { id: existing.id, timesRevised: { gt: 0 } }, data: { timesRevised: { decrement: 1 } } });
+  revalidateRevisions();
+  return (await prisma.revision.findUnique({ where: { id: existing.id }, select: { timesRevised: true } }))?.timesRevised ?? 0;
+}
+
 export async function deleteRevision(revisionId: string) {
   const user = await requireUser();
   const existing = await prisma.revision.findFirst({

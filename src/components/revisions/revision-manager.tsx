@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@tanstack/react-query";
-import { CalendarClock, Check, Play, Trash2 } from "lucide-react";
+import { CalendarClock, Check, Minus, Play, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { Revision, Subject, Topic } from "@prisma/client";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { VoiceFormAssistant } from "@/components/voice-form-assistant";
 import { APP_TIMEZONE, dayjs, formatDate } from "@/lib/dayjs";
 import { cn } from "@/lib/utils";
-import { completeRevision, createRevision, deleteRevision } from "@/server/actions/revisions";
+import { changeRevisionCount, completeRevision, createRevision, deleteRevision } from "@/server/actions/revisions";
 import { useTimerStore } from "@/store/timer";
 import { useTimerStartStore } from "@/store/timer-start";
 
@@ -36,6 +36,43 @@ function whenLabel(days: number) {
   if (days === 1) return "tomorrow";
   if (days === -1) return "1 day late";
   return days < 0 ? `${-days} days late` : `in ${days} days`;
+}
+
+/**
+ * "− 3× +" — how many times this topic has been revised. Updates instantly on tap and saves in
+ * the background; a failed save puts the number back.
+ */
+function RevisionCounter({ revision, todayMs }: { revision: RevisionRow; todayMs: number }) {
+  const router = useRouter();
+  const [count, setCount] = useState(revision.timesRevised);
+  const [lastRevisedAt, setLastRevisedAt] = useState(revision.lastRevisedAt);
+
+  async function change(delta: 1 | -1) {
+    if (delta === -1 && count === 0) return;
+    const before = { count, lastRevisedAt };
+    setCount(count + delta);
+    if (delta === 1) setLastRevisedAt(new Date());
+    try {
+      const saved = await changeRevisionCount(revision.id, delta);
+      setCount(saved);
+      if (delta === 1) toast.success(`${revision.topic.name}: revised ${saved}×`);
+      router.refresh();
+    } catch (error) {
+      setCount(before.count);
+      setLastRevisedAt(before.lastRevisedAt);
+      toast.error(error instanceof Error ? error.message : "Couldn't update the count");
+    }
+  }
+
+  const since = lastRevisedAt ? -daysFromToday(lastRevisedAt, todayMs) : null;
+  return <div className="flex items-center gap-2">
+    <div className="flex items-center rounded-xl border border-zinc-200 bg-white" role="group" aria-label={`Times revised: ${count}`}>
+      <button type="button" onClick={() => void change(-1)} disabled={count === 0} aria-label="One less revision" className="flex size-10 items-center justify-center rounded-l-xl text-zinc-600 transition hover:bg-zinc-100 active:scale-95 disabled:opacity-30 sm:size-8"><Minus className="size-4" /></button>
+      <span className="min-w-10 text-center text-sm font-semibold tabular-nums" aria-live="polite">{count}×</span>
+      <button type="button" onClick={() => void change(1)} aria-label="Revised once more" className="flex size-10 items-center justify-center rounded-r-xl text-zinc-900 transition hover:bg-zinc-100 active:scale-95 sm:size-8"><Plus className="size-4" /></button>
+    </div>
+    <span className="text-xs text-zinc-500">{since === null ? "not revised yet" : since <= 0 ? "last: today" : since === 1 ? "last: yesterday" : `last: ${since} days ago`}</span>
+  </div>;
 }
 
 function AddRevisionForm({ topics, onDone }: { topics: { id: string; name: string; subjectName: string }[]; onDone: () => void }) {
@@ -94,7 +131,7 @@ export function RevisionManager({
 
   const complete = useMutation({
     mutationFn: completeRevision,
-    onSuccess: () => { toast.success("Revision done — nice!"); router.refresh(); },
+    onSuccess: () => { toast.success("Topic finished — no more revisions needed"); router.refresh(); },
     onError: (error: Error) => toast.error(error.message),
   });
   const remove = useMutation({
@@ -131,7 +168,7 @@ export function RevisionManager({
   const chips: Array<{ id: RevisionFilter; label: string; count: number }> = [
     { id: "DUE", label: "Due", count: counts.today + counts.late },
     { id: "UPCOMING", label: "Upcoming", count: counts.upcoming },
-    { id: "DONE", label: "Done", count: counts.done },
+    { id: "DONE", label: "Finished", count: counts.done },
     { id: "ALL", label: "All", count: revisions.length },
   ];
 
@@ -141,12 +178,14 @@ export function RevisionManager({
         { label: "Today", value: counts.today, tone: "text-zinc-950" },
         { label: "Late", value: counts.late, tone: counts.late ? "text-red-700" : "text-zinc-950" },
         { label: "Upcoming", value: counts.upcoming, tone: "text-zinc-950" },
-        { label: "Done", value: counts.done, tone: "text-emerald-700" },
+        { label: "Finished", value: counts.done, tone: "text-emerald-700" },
       ].map((tile) => <div key={tile.label} className="rounded-xl border border-zinc-200 bg-white p-3 text-center">
         <p className={cn("text-xl font-semibold tabular-nums", tile.tone)}>{tile.value}</p>
         <p className="text-[11px] text-zinc-500">{tile.label}</p>
       </div>)}
     </section>
+
+    <p className="text-sm text-zinc-500">Revised <span className="font-semibold tabular-nums text-zinc-900">{revisions.reduce((sum, revision) => sum + revision.timesRevised, 0)}</span> times in total · tap <span className="font-medium">+</span> each time you revise a topic.</p>
 
     <div className="flex flex-wrap gap-2">
       {chips.map((chip) => <button
@@ -178,11 +217,15 @@ export function RevisionManager({
                   </span>
                 </p>
                 {revision.notes ? <p className="mt-1 text-sm text-zinc-600">{revision.notes}</p> : null}
+                <div className="mt-2.5">
+                  {/* Keyed on the saved count so a server refresh resets the optimistic value. */}
+                  <RevisionCounter key={`${revision.id}-${revision.timesRevised}`} revision={revision} todayMs={todayMs} />
+                </div>
               </div>
               <div className="flex flex-wrap gap-2">
                 {!done ? <>
                   <Button size="sm" variant="secondary" onClick={() => study(revision)} disabled={timerRunning} className="h-10 sm:h-8"><Play className="size-3.5" /> Start</Button>
-                  <Button size="sm" onClick={() => complete.mutate(revision.id)} disabled={complete.isPending} className="h-10 sm:h-8"><Check className="size-3.5" /> Done</Button>
+                  <Button size="sm" variant="outline" onClick={() => complete.mutate(revision.id)} disabled={complete.isPending} title="Finished for good — no more revisions needed" className="h-10 sm:h-8"><Check className="size-3.5" /> Finish</Button>
                 </> : null}
                 <Button size="sm" variant="outline" onClick={() => remove.mutate(revision.id)} disabled={remove.isPending} aria-label="Delete revision" className="h-10 sm:h-8"><Trash2 className="size-3.5" /></Button>
               </div>
