@@ -73,7 +73,7 @@ export const assistantPages = {
   subjects: "/subjects",
   revisions: "/revisions",
   progress: "/progress",
-  timer: "/timer",
+  timer: "/tasks",
   plan: "/plan",
   jobs: "/jobs",
   notes: "/notes",

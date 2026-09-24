@@ -55,7 +55,7 @@ export function DashboardView({
             <Link href="/tasks">Add Task</Link>
           </Button>
           <Button asChild variant="secondary">
-            <Link href="/timer">Start Study</Link>
+            <Link href="/tasks">Start Study</Link>
           </Button>
         </div>
       </div>

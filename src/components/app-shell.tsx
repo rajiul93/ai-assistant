@@ -13,12 +13,12 @@ import {
   Menu,
   NotebookPen,
   RefreshCcw,
-  Timer,
   TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SignOutButton } from "@/components/sign-out-button";
 import { StudyAssistant } from "@/components/study-assistant";
+import { SessionBar } from "@/components/timer/session-bar";
 import { SubjectPickerDialog } from "@/components/timer/subject-picker-dialog";
 import { TimerAlarm } from "@/components/timer/timer-alarm";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -28,7 +28,6 @@ const links = [
   { href: "/dashboard", label: "Dashboard", short: "Home", icon: LayoutDashboard },
   { href: "/tasks", label: "Tasks", short: "Tasks", icon: ListTodo },
   { href: "/subjects", label: "Subjects", short: "Subjects", icon: BookOpen },
-  { href: "/timer", label: "Timer", short: "Timer", icon: Timer },
   { href: "/revisions", label: "Revision", short: "Revision", icon: RefreshCcw },
   { href: "/progress", label: "Progress", short: "Progress", icon: TrendingUp },
   { href: "/plan", label: "Study Plan", short: "Plan", icon: CalendarClock },
@@ -38,7 +37,8 @@ const links = [
 ];
 
 // Phones get the four daily pages in the tab bar; everything else lives under "More".
-const tabHrefs = ["/dashboard", "/tasks", "/timer", "/notes"];
+// The study timer lives on the Tasks page and in the session bar, so it has no page of its own.
+const tabHrefs = ["/dashboard", "/tasks", "/notes", "/jobs"];
 const tabs = links.filter((link) => tabHrefs.includes(link.href));
 const moreLinks = links.filter((link) => !tabHrefs.includes(link.href));
 
@@ -94,7 +94,9 @@ export function AppShell({
         <StudyAssistant />
         <TimerAlarm />
         <SubjectPickerDialog />
-        <main className="mx-auto w-full max-w-6xl px-4 py-6 pb-[calc(7rem+env(safe-area-inset-bottom))] lg:px-8 lg:py-10 lg:pb-10">
+        <SessionBar />
+        {/* Bottom padding leaves room for the tab bar and a running session bar. */}
+        <main className="mx-auto w-full max-w-6xl px-4 py-6 pb-[calc(11rem+env(safe-area-inset-bottom))] lg:px-8 lg:py-10 lg:pb-28">
           {children}
         </main>
 

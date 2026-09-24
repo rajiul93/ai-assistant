@@ -5,6 +5,9 @@ export type TimerStartRequest = {
   suggestedSubjectId?: string;
   topicId?: string;
   minutes?: number | null;
+  /** Shown on the session bar instead of the subject name, e.g. the task title. */
+  label?: string;
+  taskId?: string;
   /** Runs after the timer has started with the chosen subject (e.g. recording today's plan). */
   onStarted?: (subjectId: string) => void | Promise<void>;
 };

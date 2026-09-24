@@ -10,7 +10,7 @@ function revalidateSubjects() {
   revalidatePath("/subjects");
   revalidatePath("/tasks");
   revalidatePath("/dashboard");
-  revalidatePath("/timer");
+  revalidatePath("/tasks");
   revalidatePath("/revisions");
 }
 

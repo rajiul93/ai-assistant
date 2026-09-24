@@ -89,10 +89,10 @@ export function TodayPlanStarter({
       <p className="mt-1 text-sm text-emerald-800/80">{summary}</p>
     </div>
     {!hydrated ? null : running ? (
-      <Link href="/timer" className="flex shrink-0 items-center gap-3 rounded-xl bg-white px-4 py-2.5 shadow-sm ring-1 ring-emerald-200 transition hover:ring-emerald-300">
+      <Link href="/tasks" className="flex shrink-0 items-center gap-3 rounded-xl bg-white px-4 py-2.5 shadow-sm ring-1 ring-emerald-200 transition hover:ring-emerald-300">
         {paused ? <Pause className="size-4 text-amber-600" /> : <span className="size-2.5 animate-pulse rounded-full bg-emerald-500" />}
         <span className="font-mono text-lg tabular-nums">{formatClock(elapsed)}</span>
-        <span className="text-sm text-zinc-500">{paused ? "Paused" : "Studying"} · Open timer</span>
+        <span className="text-sm text-zinc-500">{paused ? "Paused" : "Studying"} · Open tasks</span>
       </Link>
     ) : (
       <Button variant="outline" onClick={() => pickSubject()} className="shrink-0 gap-2 rounded-xl bg-white">

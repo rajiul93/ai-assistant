@@ -139,7 +139,7 @@ export function useAssistant() {
     const s = strings();
     const store = useAssistantStore.getState();
     const clock = useTimerStore.getState();
-    router.push("/timer");
+    router.push("/tasks");
     if (clock.running) {
       const text = s.timerAlreadyRunning;
       store.add({ role: "assistant", text });
@@ -156,6 +156,7 @@ export function useAssistant() {
       return;
     }
     clock.setContext(timer.subjectId, timer.topicId);
+    clock.setLabel(timer.topicName || timer.subjectName);
     clock.setTarget(timer.minutes);
     clock.start();
     store.add({ role: "assistant", text: reply, source: "ai" });

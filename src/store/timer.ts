@@ -8,11 +8,16 @@ type TimerStore = {
   accumulatedMs: number;
   subjectId: string;
   topicId: string;
+  /** What the session bar shows: the task title, or the topic/subject name. */
+  label: string;
+  /** The task being studied, when the session was started from a task. */
+  taskId: string;
   /** Optional study goal for this session, e.g. a 25-minute pomodoro. */
   targetMinutes: number | null;
   /** Set once the goal has been announced, so it is only announced once. */
   targetReached: boolean;
   setContext: (subjectId: string, topicId: string) => void;
+  setLabel: (label: string, taskId?: string) => void;
   setTarget: (minutes: number | null) => void;
   markTargetReached: () => void;
   start: () => void;
@@ -31,9 +36,12 @@ export const useTimerStore = create<TimerStore>()(persist((set, get) => ({
   accumulatedMs: 0,
   subjectId: "",
   topicId: "",
+  label: "",
+  taskId: "",
   targetMinutes: null,
   targetReached: false,
   setContext: (subjectId, topicId) => set({ subjectId, topicId }),
+  setLabel: (label, taskId = "") => set({ label, taskId }),
   setTarget: (targetMinutes) => set({ targetMinutes, targetReached: false }),
   markTargetReached: () => set({ targetReached: true }),
   start: () =>
@@ -75,6 +83,6 @@ export const useTimerStore = create<TimerStore>()(persist((set, get) => ({
   name: "study-timer",
   storage: createJSONStorage(() => localStorage),
   skipHydration: true,
-  partialize: ({ running, paused, startedAt, accumulatedMs, subjectId, topicId, targetMinutes, targetReached }) =>
-    ({ running, paused, startedAt, accumulatedMs, subjectId, topicId, targetMinutes, targetReached }),
+  partialize: ({ running, paused, startedAt, accumulatedMs, subjectId, topicId, label, taskId, targetMinutes, targetReached }) =>
+    ({ running, paused, startedAt, accumulatedMs, subjectId, topicId, label, taskId, targetMinutes, targetReached }),
 }));

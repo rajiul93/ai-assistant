@@ -35,6 +35,7 @@ function PickerBody({ request, onDone }: { request: TimerStartRequest; onDone: (
   const [newName, setNewName] = useState("");
   const [adding, setAdding] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [goal, setGoal] = useState<number | null>(request.minutes ?? null);
 
   const selected = subjects.find((subject) => subject.id === subjectId);
   const topics = selected?.topics ?? [];
@@ -63,7 +64,8 @@ function PickerBody({ request, onDone }: { request: TimerStartRequest; onDone: (
     const timer = useTimerStore.getState();
     if (!timer.running) {
       timer.setContext(selected.id, validTopicId);
-      timer.setTarget(request.minutes ?? null);
+      timer.setLabel(request.label || topics.find((topic) => topic.id === validTopicId)?.name || selected.name, request.taskId);
+      timer.setTarget(goal);
       timer.start();
     }
     try {
@@ -119,6 +121,17 @@ function PickerBody({ request, onDone }: { request: TimerStartRequest; onDone: (
         />
         <button type="submit" disabled={adding || !newName.trim()} className="flex h-9 items-center gap-1 rounded-lg px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 disabled:opacity-40"><Plus className="size-4" /> {t.pickerAdd}</button>
       </form>
+      <div role="radiogroup" aria-label={t.pickerGoal} className="flex items-center gap-1.5">
+        <span className="mr-1 text-xs font-medium text-zinc-500">{t.pickerGoal}</span>
+        {[null, 25, 50, 90].map((minutes) => <button
+          key={minutes ?? "open"}
+          type="button"
+          role="radio"
+          aria-checked={goal === minutes}
+          onClick={() => setGoal(minutes)}
+          className={cn("h-10 flex-1 rounded-lg border text-sm font-medium transition sm:h-8", goal === minutes ? "border-zinc-950 bg-zinc-950 text-white" : "border-zinc-200 text-zinc-600 hover:bg-zinc-50")}
+        >{minutes ? `${minutes}m` : t.pickerNoGoal}</button>)}
+      </div>
       {topics.length > 0 ? <NativeSelect aria-label={t.pickerTopic} value={validTopicId} onChange={(event) => setTopicId(event.target.value)}>
         <option value="">{t.pickerNoTopic}</option>
         {topics.map((topic) => <option key={topic.id} value={topic.id}>{topic.name}</option>)}
