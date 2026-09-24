@@ -12,6 +12,7 @@ export type UsagePeriod = (typeof usagePeriods)[number]["key"];
 
 const featureLabels: Record<string, string> = {
   assistant: "Assistant commands",
+  file_assistant: "Reading images & PDFs",
   answer: "Chat answers",
   answer_search: "Answers with Google Search",
   note_writer: "Note writing",

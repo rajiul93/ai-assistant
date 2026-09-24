@@ -13,8 +13,10 @@ type GeminiPayload = {
 };
 
 /** Who is using the AI and for what — every call is logged for the AI usage page. */
-export type AiFeature = "assistant" | "answer" | "answer_search" | "note_writer";
-type CallOptions = { search?: boolean; responseSchema?: object; userId: string; feature: AiFeature };
+export type AiFeature = "assistant" | "file_assistant" | "answer" | "answer_search" | "note_writer";
+/** Images/PDFs sent alongside the prompt (base64); Gemini reads them natively. */
+type InlineFile = { mimeType: string; data: string };
+type CallOptions = { search?: boolean; responseSchema?: object; files?: InlineFile[]; userId: string; feature: AiFeature };
 
 // After Google Search grounding hits its quota, skip it for a while instead of wasting a request per question.
 let searchBlockedUntil = 0;
@@ -56,7 +58,7 @@ async function callModel(model: string, apiKey: string, prompt: string, options:
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
     body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      contents: [{ role: "user", parts: [...(options.files ?? []).map((file) => ({ inline_data: { mime_type: file.mimeType, data: file.data } })), { text: prompt }] }],
       ...(options.search ? { tools: [{ google_search: {} }] } : {}),
       generationConfig: {
         // Gemini 3 models think by default; this app needs quick replies, not deep reasoning.

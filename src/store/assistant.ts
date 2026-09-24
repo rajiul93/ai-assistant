@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { AssistantLang } from "@/lib/assistant-i18n";
+import type { Attachment } from "@/lib/attachments";
 import type { ChatMessage, PendingAction, ReplySource } from "@/lib/assistant-types";
 
 export type DraftState = "pending" | "saving" | "saved" | "cancelled" | "replaced";
@@ -8,6 +9,8 @@ export type AssistantEntry = ChatMessage & {
   id: number;
   /** User message that came from the microphone. */
   viaVoice?: boolean;
+  /** Name of the image/PDF sent with this user message. */
+  attachmentName?: string;
   source?: ReplySource;
   /** A prepared change shown as a card; it only happens once the user confirms. */
   action?: PendingAction;
@@ -26,6 +29,9 @@ type AssistantStore = {
   busy: boolean;
   entries: AssistantEntry[];
   live: LiveStatus | null;
+  /** The image/PDF the conversation is about; sent with every message until the user removes it. */
+  attachment: Attachment | null;
+  setAttachment: (attachment: Attachment | null) => void;
   setLang: (lang: AssistantLang) => void;
   /** Restore the language the user picked last time (call once on the client). */
   loadLang: () => void;
@@ -46,6 +52,8 @@ export const useAssistantStore = create<AssistantStore>((set) => ({
   busy: false,
   entries: [],
   live: null,
+  attachment: null,
+  setAttachment: (attachment) => set({ attachment }),
   setLang: (lang) => {
     set({ lang });
     try { localStorage.setItem(LANG_KEY, lang); } catch { /* storage unavailable: keep for this visit only */ }

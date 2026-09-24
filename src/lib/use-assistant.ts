@@ -164,14 +164,16 @@ export function useAssistant() {
   }
 
   async function send(text: string, { voice, alternatives = [] }: SendOptions = {}) {
-    const message = text.trim();
     const store = useAssistantStore.getState();
     const s = strings();
+    const attachment = store.attachment;
+    // A file alone is a request too: "tell me what's in this".
+    const message = text.trim() || (attachment ? s.attachmentDefaultAsk : "");
     if (!message) return;
 
     // Page jumps, refresh and back run instantly — even while the AI is still busy with something else.
     // Every way the mic heard the sentence is checked, so one misheard word doesn't break the command.
-    const quick = matchQuickCommand([message, ...alternatives]);
+    const quick = text.trim() ? matchQuickCommand([message, ...alternatives]) : null;
     if (quick) {
       const reply = quick.kind === "navigate" ? s.quick[quick.page] : s.quick[quick.kind];
       store.add({ role: "user", text: message, viaVoice: voice });
@@ -190,7 +192,7 @@ export function useAssistant() {
 
     const pending = findPendingAction(store.entries);
     const history = store.entries.slice(-10).map(({ role, text: entryText }) => ({ role, text: entryText }));
-    store.add({ role: "user", text: message, viaVoice: voice });
+    store.add({ role: "user", text: message, viaVoice: voice, attachmentName: attachment?.name });
     // Spoken requests open the chat, so the user can read what was heard and what the assistant answers.
     if (voice) store.setOpen(true);
 
@@ -206,7 +208,15 @@ export function useAssistant() {
       const response = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, alternatives, history, pending: pending?.action ?? null, voice: Boolean(voice), lang: store.lang }),
+        body: JSON.stringify({
+          message,
+          alternatives,
+          history,
+          pending: pending?.action ?? null,
+          voice: Boolean(voice),
+          lang: store.lang,
+          attachment: attachment ? { name: attachment.name, mimeType: attachment.mimeType, data: attachment.data } : null,
+        }),
       });
       if (!response.ok) throw new Error("assistant request failed");
       result = (await response.json()) as AssistantReply;

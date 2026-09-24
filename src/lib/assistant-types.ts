@@ -62,6 +62,8 @@ export type AssistantRequest = {
   /** Other ways speech recognition heard the same sentence, to recover from mishearing. */
   alternatives?: string[];
   lang?: "bn" | "en";
+  /** An image or PDF the user shared; the AI reads it together with the message. */
+  attachment?: { name: string; mimeType: string; data: string } | null;
 };
 
 export const assistantPages = {
