@@ -116,7 +116,7 @@ export function AiUsageView({ usage, period, admin }: { usage: Awaited<ReturnTyp
   const tiles = [
     { label: "AI requests", value: number(totals.requests), detail: `${number(totals.succeeded)} succeeded · ${number(totals.failed)} failed` },
     { label: "Tokens used", value: compact(totals.totalTokens), detail: `${compact(totals.inputTokens)} in · ${compact(totals.outputTokens)} out` },
-    { label: "Success rate", value: `${successRate}%`, detail: totals.failed ? "Failures are mostly Google being busy" : "No failed calls" },
+    { label: "Success rate", value: `${successRate}%`, detail: totals.failed ? "Failures are mostly a provider being busy" : "No failed calls" },
     admin
       ? { label: "Active users", value: number(usage.perUser.length), detail: "used the AI in this period" }
       : { label: "Avg response time", value: totals.averageLatencyMs ? `${(totals.averageLatencyMs / 1000).toFixed(1)}s` : "—", detail: "successful calls" },
@@ -126,7 +126,7 @@ export function AiUsageView({ usage, period, admin }: { usage: Awaited<ReturnTyp
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">AI usage</h1>
-        <p className="mt-1 text-sm text-zinc-500">{admin ? "Every user's Gemini usage (you're an admin)." : "Your Gemini usage."} Each call to the AI is counted, including retries on a second model.</p>
+        <p className="mt-1 text-sm text-zinc-500">{admin ? "Every user's AI usage — Gemini and OpenAI (you're an admin)." : "Your AI usage — Gemini and OpenAI."} Each call is counted, including retries on a second model or provider.</p>
       </div>
       <nav aria-label="Period" className="flex gap-1 self-start rounded-xl bg-zinc-100 p-1 sm:self-auto">
         {usagePeriods.map((item) => <Link

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { htmlToPlainText, noteWritingRules, sanitizeNoteHtml } from "@/lib/note-html";
 import { prisma } from "@/lib/prisma";
-import { callGemini } from "@/server/assistant/gemini";
+import { callAI } from "@/server/assistant/ai";
 
 const noteSchema = z.object({
   title: z.string().trim().max(200),
@@ -85,7 +85,7 @@ ${data.currentText.slice(0, 6000) || "(ফাঁকা)"}
 ব্যবহারকারীর নির্দেশ: ${data.instruction}
 
 শুধু note-এ বসানোর HTML দাও, আর কিছু না।`;
-  const raw = await callGemini(prompt, { userId: user.id, feature: "note_writer" });
+  const raw = await callAI(prompt, { userId: user.id, feature: "note_writer" });
   if (!raw) throw new Error(data.lang === "en" ? "The AI isn't responding right now. Please try again in a moment." : "AI এখন সাড়া দিচ্ছে না। একটু পরে আবার চেষ্টা করো।");
   const html = sanitizeNoteHtml(raw.replace(/^```(?:html)?\s*|\s*```$/g, ""));
   // If the model ignored the HTML rule and sent plain text, wrap its paragraphs.

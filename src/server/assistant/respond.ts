@@ -3,7 +3,7 @@ import { APP_TIMEZONE, dayjs, now } from "@/lib/dayjs";
 import { assistantPages, type AssistantPage, type AssistantReply, type AssistantRequest, type ChatMessage, type ApplicationDraft, type PendingAction, type TaskDraft } from "@/lib/assistant-types";
 import { getFlatTopics, getOpenTasks, getPendingTasks, getProgressCounts, getSubjects, getTodayRevisions } from "@/server/queries";
 import { htmlToPlainText, noteWritingRules, sanitizeNoteHtml } from "@/lib/note-html";
-import { callGemini, isGeminiConfigured } from "@/server/assistant/gemini";
+import { callAI, isAIConfigured } from "@/server/assistant/ai";
 
 type StudyContext = {
   counts: Awaited<ReturnType<typeof getProgressCounts>>;
@@ -368,12 +368,12 @@ function studyData(context: StudyContext) {
 }
 
 async function answer(userId: string, message: string, history: ChatMessage[], context: StudyContext, voice?: boolean, lang?: "bn" | "en", attachment?: AssistantRequest["attachment"]) {
-  const files = attachment ? [{ mimeType: attachment.mimeType, data: attachment.data }] : undefined;
+  const files = attachment ? [{ mimeType: attachment.mimeType, data: attachment.data, name: attachment.name }] : undefined;
   const basePrompt = `তুমি একজন স্বাভাবিক, বুদ্ধিমান বাংলা সহকারী। এটি একটি open-book conversation: ব্যবহারকারী পড়াশোনা ছাড়াও যেকোনো সাধারণ বা random প্রশ্ন করতে পারে। সাধারণ জ্ঞান, সাম্প্রতিক তথ্য, খবর, ব্যক্তি, জায়গা, প্রযুক্তি বা অন্য কোনো তথ্যের জন্য প্রয়োজন হলে তথ্য যাচাই করে উত্তর দাও। তুমি নিশ্চিত না হলে স্পষ্টভাবে বলবে, বানিয়ে বলবে না। ব্যবহারকারী বাংলায়, Banglish বা ইংরেজিতে লিখলেও সহজ স্বাভাবিক বাংলায় উত্তর দেবে; technical term দরকার হলে সহজ ব্যাখ্যা দেবে। কথার tone প্রসঙ্গ অনুযায়ী স্বাভাবিক, সহানুভূতিশীল, serious বা হালকা মজার হবে। আগের কথার ধারাবাহিকতা রাখবে।
 
 আগের কথোপকথন:\n${formatHistory(history)}\n\nব্যবহারকারীর বর্তমান প্রশ্ন:\n${message}\n\nঅ্যাপের ব্যক্তিগত study data (শুধু app-related প্রশ্নে ব্যবহার করবে):\n${JSON.stringify(studyData(context))}\n\n${persona}\n${languageRule(lang)} ${styleRule(voice)}`;
-  return await callGemini(`${basePrompt}\n\nপ্রয়োজন হলে Google Search ব্যবহার করে current তথ্য যাচাই করো।`, { search: true, files, userId, feature: "answer_search" })
-    ?? await callGemini(`${basePrompt}\n\nGoogle Search এই মুহূর্তে unavailable হতে পারে। তোমার সাধারণ জ্ঞান ব্যবহার করে উত্তর দাও, তবে current তথ্য নিশ্চিত না হলে সেটা স্পষ্ট করে বলো।`, { files, userId, feature: "answer" });
+  return await callAI(`${basePrompt}\n\nপ্রয়োজন হলে Google Search ব্যবহার করে current তথ্য যাচাই করো।`, { search: true, files, userId, feature: "answer_search" })
+    ?? await callAI(`${basePrompt}\n\nGoogle Search এই মুহূর্তে unavailable হতে পারে। তোমার সাধারণ জ্ঞান ব্যবহার করে উত্তর দাও, তবে current তথ্য নিশ্চিত না হলে সেটা স্পষ্ট করে বলো।`, { files, userId, feature: "answer" });
 }
 
 const navigationRules: Array<{ pattern: RegExp; page: AssistantPage; reply: string }> = [
@@ -408,7 +408,7 @@ function fallbackReply(message: string, context: StudyContext, lang?: "bn" | "en
   return {
     type: "clarify",
     source: "fallback",
-    reply: isGeminiConfigured()
+    reply: isAIConfigured()
       ? "AI service এই মুহূর্তে সাড়া দিচ্ছে না। এখন শুধু পাতা খোলা আর progress বলতে পারি; একটু পরে আবার চেষ্টা করুন।"
       : "AI এখনো চালু করা হয়নি, তাই আমি শুধু পাতা খোলা আর progress বলতে পারি। যেমন বলুন: “task পাতা খোলো”।",
   };
@@ -434,9 +434,9 @@ async function decide(userId: string, request: AssistantRequest): Promise<Assist
   const context: StudyContext = { counts, tasks, revisions, subjects, openTasks, topics };
   const lang = request.lang;
 
-  const raw = await callGemini(intentPrompt(request, history, context), {
+  const raw = await callAI(intentPrompt(request, history, context), {
     responseSchema: intentResponseSchema,
-    files: request.attachment ? [{ mimeType: request.attachment.mimeType, data: request.attachment.data }] : undefined,
+    files: request.attachment ? [{ mimeType: request.attachment.mimeType, data: request.attachment.data, name: request.attachment.name }] : undefined,
     userId,
     feature: request.attachment ? "file_assistant" : "assistant",
   });
