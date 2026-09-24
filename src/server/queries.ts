@@ -231,3 +231,94 @@ export async function getSubjectAnalysis(userId: string, from: Date | null, to: 
   if (noSubject && noSubject.seconds === 0) stats.delete(null);
   return [...stats.values()].sort((a, b) => b.seconds - a.seconds || a.name.localeCompare(b.name));
 }
+
+export type AiUsageBreakdown = { key: string; requests: number; tokens: number };
+export type AiUserUsage = { userId: string | null; name: string; email: string; requests: number; failed: number; tokens: number; lastUsedAt: Date | null };
+
+/**
+ * AI usage for the usage page. `userId` limits it to one user; omit it (admins only) for everyone.
+ * Daily buckets are app-timezone days from `from` (or the first recorded call) to today.
+ */
+export async function getAiUsage({ userId, from }: { userId?: string; from: Date | null }) {
+  const where = { ...(userId ? { userId } : {}), ...(from ? { createdAt: { gte: from } } : {}) };
+  const [rows, byUser] = await Promise.all([
+    prisma.aiUsage.findMany({
+      where,
+      select: { createdAt: true, feature: true, model: true, status: true, totalTokens: true, inputTokens: true, outputTokens: true, latencyMs: true },
+      orderBy: { createdAt: "asc" },
+      take: 50_000,
+    }),
+    prisma.aiUsage.groupBy({
+      by: ["userId"],
+      where,
+      _count: { _all: true },
+      _sum: { totalTokens: true },
+      _max: { createdAt: true },
+    }),
+  ]);
+
+  const failedByUser = await prisma.aiUsage.groupBy({ by: ["userId"], where: { ...where, status: { not: "ok" } }, _count: { _all: true } });
+  const users = await prisma.user.findMany({
+    where: { id: { in: byUser.map((row) => row.userId).filter((id): id is string => Boolean(id)) } },
+    select: { id: true, name: true, email: true },
+  });
+
+  const sum = (pick: (row: (typeof rows)[number]) => number) => rows.reduce((total, row) => total + pick(row), 0);
+  const ok = rows.filter((row) => row.status === "ok");
+  const group = (key: (row: (typeof rows)[number]) => string): AiUsageBreakdown[] => {
+    const map = new Map<string, AiUsageBreakdown>();
+    for (const row of rows) {
+      const entry = map.get(key(row)) ?? { key: key(row), requests: 0, tokens: 0 };
+      entry.requests += 1;
+      entry.tokens += row.totalTokens;
+      map.set(entry.key, entry);
+    }
+    return [...map.values()].sort((a, b) => b.requests - a.requests);
+  };
+
+  const firstDay = startOfDay(from ?? rows[0]?.createdAt ?? new Date());
+  const today = startOfDay();
+  const daily: Array<{ day: string; requests: number; tokens: number; failed: number }> = [];
+  for (let day = firstDay; !day.isAfter(today); day = day.add(1, "day")) daily.push({ day: day.format("YYYY-MM-DD"), requests: 0, tokens: 0, failed: 0 });
+  const dayIndex = new Map(daily.map((entry, index) => [entry.day, index]));
+  for (const row of rows) {
+    const bucket = daily[dayIndex.get(startOfDay(row.createdAt).format("YYYY-MM-DD")) ?? -1];
+    if (!bucket) continue;
+    bucket.requests += 1;
+    bucket.tokens += row.totalTokens;
+    if (row.status !== "ok") bucket.failed += 1;
+  }
+
+  const failed = new Map(failedByUser.map((row) => [row.userId, row._count._all]));
+  const perUser: AiUserUsage[] = byUser
+    .map((row) => {
+      const user = users.find((item) => item.id === row.userId);
+      return {
+        userId: row.userId,
+        name: user?.name ?? (row.userId ? "Unknown user" : "Deleted user"),
+        email: user?.email ?? "",
+        requests: row._count._all,
+        failed: failed.get(row.userId) ?? 0,
+        tokens: row._sum.totalTokens ?? 0,
+        lastUsedAt: row._max.createdAt,
+      };
+    })
+    .sort((a, b) => b.requests - a.requests);
+
+  return {
+    totals: {
+      requests: rows.length,
+      succeeded: ok.length,
+      failed: rows.length - ok.length,
+      inputTokens: sum((row) => row.inputTokens),
+      outputTokens: sum((row) => row.outputTokens),
+      totalTokens: sum((row) => row.totalTokens),
+      averageLatencyMs: ok.length ? Math.round(ok.reduce((total, row) => total + row.latencyMs, 0) / ok.length) : 0,
+    },
+    daily,
+    byFeature: group((row) => row.feature),
+    byModel: group((row) => row.model),
+    byStatus: group((row) => row.status),
+    perUser,
+  };
+}

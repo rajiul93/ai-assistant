@@ -25,6 +25,7 @@ model User {
   planStarts    DailyPlanStart[]
   applications  JobApplication[]
   notes         Note[]
+  aiUsage       AiUsage[]
 }
 
 model StudyPlan {
@@ -226,4 +227,25 @@ model Note {
   updatedAt DateTime @updatedAt
 
   @@index([userId, updatedAt])
+}
+
+/// One row per Gemini API call (each model attempt), for the AI usage page.
+model AiUsage {
+  id           String   @id @default(cuid())
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  /// Which part of the app called the AI: assistant, answer, note_writer…
+  feature      String
+  model        String
+  /// ok, error, rate_limited, overloaded, timeout
+  status       String
+  httpStatus   Int?
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  totalTokens  Int      @default(0)
+  latencyMs    Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
 }

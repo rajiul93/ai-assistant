@@ -68,7 +68,7 @@ export async function deleteNote(noteId: string) {
  * `lang` follows the assistant's language setting.
  */
 export async function generateNoteContent(input: { instruction: string; title: string; currentText: string; lang?: "bn" | "en" }) {
-  await requireUser();
+  const user = await requireUser();
   const data = z.object({
     instruction: z.string().trim().min(1).max(2000),
     title: z.string().max(200),
@@ -85,7 +85,7 @@ ${data.currentText.slice(0, 6000) || "(ফাঁকা)"}
 ব্যবহারকারীর নির্দেশ: ${data.instruction}
 
 শুধু note-এ বসানোর HTML দাও, আর কিছু না।`;
-  const raw = await callGemini(prompt);
+  const raw = await callGemini(prompt, { userId: user.id, feature: "note_writer" });
   if (!raw) throw new Error(data.lang === "en" ? "The AI isn't responding right now. Please try again in a moment." : "AI এখন সাড়া দিচ্ছে না। একটু পরে আবার চেষ্টা করো।");
   const html = sanitizeNoteHtml(raw.replace(/^```(?:html)?\s*|\s*```$/g, ""));
   // If the model ignored the HTML rule and sent plain text, wrap its paragraphs.

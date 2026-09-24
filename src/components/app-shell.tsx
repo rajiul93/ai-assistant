@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   BookOpen,
   BriefcaseBusiness,
+  Gauge,
   NotebookPen,
   CalendarClock,
   LayoutDashboard,
@@ -30,6 +31,7 @@ const links = [
   { href: "/plan", label: "Study Plan", icon: CalendarClock },
   { href: "/notes", label: "Notes", icon: NotebookPen },
   { href: "/jobs", label: "Jobs", icon: BriefcaseBusiness },
+  { href: "/usage", label: "AI Usage", icon: Gauge },
 ];
 
 export function AppShell({
