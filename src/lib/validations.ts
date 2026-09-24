@@ -58,3 +58,25 @@ export const studySessionSchema = z.object({
 
 export type TaskInput = z.infer<typeof taskSchema>;
 export type StudyPlanInput = z.infer<typeof studyPlanSchema>;
+
+export const jobSectorSchema = z.enum(["GOVERNMENT", "NON_GOVERNMENT"]);
+export const applicationStatusSchema = z.enum(["WISHLIST", "APPLIED", "EXAM", "INTERVIEW", "OFFER", "REJECTED", "WITHDRAWN"]);
+
+const optionalDate = z.string().optional().or(z.literal(""));
+
+export const jobApplicationSchema = z.object({
+  title: z.string().trim().min(1, "Job title is required").max(200),
+  organization: z.string().trim().min(1, "Organization is required").max(160),
+  location: z.string().trim().max(160).optional().or(z.literal("")),
+  posts: z.array(z.string().trim().min(1).max(160)).max(30),
+  sector: jobSectorSchema,
+  status: applicationStatusSchema,
+  appliedAt: optionalDate,
+  deadline: optionalDate,
+  examDate: optionalDate,
+  reference: z.string().trim().max(120).optional().or(z.literal("")),
+  link: z.string().trim().url("Enter a full link, e.g. https://…").max(500).optional().or(z.literal("")),
+  notes: z.string().trim().max(2000).optional().or(z.literal("")),
+});
+
+export type JobApplicationInput = z.infer<typeof jobApplicationSchema>;

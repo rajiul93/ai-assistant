@@ -14,11 +14,28 @@ export type TaskDraft = {
   estimatedMinutes: number;
 };
 
+export type ApplicationDraft = {
+  title: string;
+  organization: string;
+  location: string;
+  posts: string[];
+  sector: "GOVERNMENT" | "NON_GOVERNMENT";
+  status: "WISHLIST" | "APPLIED" | "EXAM" | "INTERVIEW" | "OFFER" | "REJECTED" | "WITHDRAWN";
+  /** YYYY-MM-DD or "" */
+  appliedAt: string;
+  deadline: string;
+  examDate: string;
+  reference: string;
+  link: string;
+  notes: string;
+};
+
 /** A change the assistant has prepared and will only make after the user confirms it. */
 export type PendingAction =
   | { kind: "create_task"; draft: TaskDraft }
   | { kind: "complete_task"; taskId: string; title: string; subjectName: string }
-  | { kind: "add_revision"; topicId: string; topicName: string; subjectName: string; revisionDate: string; dateLabel: string; notes: string };
+  | { kind: "add_revision"; topicId: string; topicName: string; subjectName: string; revisionDate: string; dateLabel: string; notes: string }
+  | { kind: "add_application"; draft: ApplicationDraft };
 
 /** Starting the timer saves nothing, so it runs right away instead of asking first. */
 export type TimerStart = { minutes: number | null; subjectId: string; subjectName: string; topicId: string; topicName: string };
@@ -54,6 +71,7 @@ export const assistantPages = {
   progress: "/progress",
   timer: "/timer",
   plan: "/plan",
+  jobs: "/jobs",
 } as const;
 
 export type AssistantPage = keyof typeof assistantPages;

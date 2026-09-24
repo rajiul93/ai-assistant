@@ -18,6 +18,23 @@ const pendingSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("create_task"), draft: taskDraftSchema }),
   z.object({ kind: z.literal("complete_task"), taskId: z.string(), title: z.string(), subjectName: z.string() }),
   z.object({ kind: z.literal("add_revision"), topicId: z.string(), topicName: z.string(), subjectName: z.string(), revisionDate: z.string(), dateLabel: z.string(), notes: z.string() }),
+  z.object({
+    kind: z.literal("add_application"),
+    draft: z.object({
+      title: z.string(),
+      organization: z.string(),
+      location: z.string(),
+      posts: z.array(z.string()),
+      sector: z.enum(["GOVERNMENT", "NON_GOVERNMENT"]),
+      status: z.enum(["WISHLIST", "APPLIED", "EXAM", "INTERVIEW", "OFFER", "REJECTED", "WITHDRAWN"]),
+      appliedAt: z.string(),
+      deadline: z.string(),
+      examDate: z.string(),
+      reference: z.string(),
+      link: z.string(),
+      notes: z.string(),
+    }),
+  }),
 ]);
 
 const requestSchema = z.object({

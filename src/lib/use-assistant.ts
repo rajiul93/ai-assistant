@@ -7,6 +7,7 @@ import { assistantStrings } from "@/lib/assistant-i18n";
 import type { AssistantReply, PendingAction, TimerStart } from "@/lib/assistant-types";
 import { matchQuickCommand } from "@/lib/quick-commands";
 import { speak } from "@/lib/voice";
+import { createApplication } from "@/server/actions/applications";
 import { createRevision } from "@/server/actions/revisions";
 import { createTask, updateTaskStatus } from "@/server/actions/tasks";
 import { findPendingAction, useAssistantStore } from "@/store/assistant";
@@ -77,6 +78,11 @@ export function useAssistant() {
       await updateTaskStatus(action.taskId, "FINISHED");
       return { status: s.completedStatus(action.title), reply: s.completedReply(action.title) };
     }
+    if (action.kind === "add_application") {
+      await createApplication(action.draft);
+      await queryClient.invalidateQueries({ queryKey: ["applications"] });
+      return { status: s.applicationAddedStatus(action.draft.title), reply: s.applicationAddedReply(action.draft.title) };
+    }
     await createRevision({ topicId: action.topicId, revisionDate: action.revisionDate, notes: action.notes });
     return { status: s.revisionAddedStatus(action.topicName), reply: s.revisionAddedReply(action.topicName, action.dateLabel) };
   }
@@ -85,6 +91,7 @@ export function useAssistant() {
     const s = strings();
     if (action.kind === "create_task") return s.savingTask(action.draft.title);
     if (action.kind === "complete_task") return s.completingTask(action.title);
+    if (action.kind === "add_application") return s.addingApplication(action.draft.title);
     return s.addingRevision(action.topicName);
   }
 

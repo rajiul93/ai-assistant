@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BookOpen,
+  BriefcaseBusiness,
   CalendarClock,
   LayoutDashboard,
   ListTodo,
@@ -26,6 +27,7 @@ const links = [
   { href: "/revisions", label: "Revision", icon: RefreshCcw },
   { href: "/progress", label: "Progress", icon: TrendingUp },
   { href: "/plan", label: "Study Plan", icon: CalendarClock },
+  { href: "/jobs", label: "Jobs", icon: BriefcaseBusiness },
 ];
 
 export function AppShell({

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowUp, Check, CircleCheck, Mic, RefreshCcw, Sparkles, Volume2, X } from "lucide-react";
 import { VoiceWave } from "@/components/assistant-status";
+import { sectorLabels, statusLabels } from "@/lib/applications";
 import type { AssistantStrings } from "@/lib/assistant-i18n";
 import type { PendingAction } from "@/lib/assistant-types";
 import { useAssistant } from "@/lib/use-assistant";
@@ -33,6 +34,14 @@ function ActionCard({ action, state, t, onConfirm, onCancel }: { action: Pending
     badge = <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600"><CircleCheck className="size-4" /></span>;
     rows = [[t.draftSubject, action.subjectName || "—"]];
     confirmLabel = t.confirmComplete;
+  } else if (action.kind === "add_application") {
+    const { draft } = action;
+    eyebrow = t.applicationLabel;
+    title = draft.title;
+    description = [draft.posts.join(" · "), draft.notes].filter(Boolean).join(" — ");
+    badge = <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold", draft.sector === "GOVERNMENT" ? "bg-emerald-50 text-emerald-700" : "bg-indigo-50 text-indigo-700")}>{sectorLabels[draft.sector]}</span>;
+    rows = [["Organization", draft.organization], ["Status", statusLabels[draft.status]], [t.dateLabel, draft.appliedAt || draft.deadline || "—"]];
+    confirmLabel = t.confirmApplication;
   } else {
     eyebrow = t.revisionLabel;
     title = action.topicName;

@@ -23,6 +23,7 @@ model User {
   studySessions StudySession[]
   revisions     Revision[]
   planStarts    DailyPlanStart[]
+  applications  JobApplication[]
 }
 
 model StudyPlan {
@@ -166,4 +167,47 @@ model DailyPlanStart {
   startedAt DateTime @default(now())
 
   @@unique([userId, date])
+}
+
+enum JobSector {
+  GOVERNMENT
+  NON_GOVERNMENT
+}
+
+enum ApplicationStatus {
+  WISHLIST
+  APPLIED
+  EXAM
+  INTERVIEW
+  OFFER
+  REJECTED
+  WITHDRAWN
+}
+
+model JobApplication {
+  id           String            @id @default(cuid())
+  userId       String
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Circular / job title, e.g. "Bangladesh Bank Officer (General) recruitment 2026".
+  title        String
+  organization String
+  location     String?
+  /// One circular can cover several posts; every post applied for is listed here.
+  posts        String[]          @default([])
+  sector       JobSector
+  status       ApplicationStatus @default(APPLIED)
+  appliedAt    DateTime?
+  /// Last date to apply (from the circular).
+  deadline     DateTime?
+  /// Next exam or interview date.
+  examDate     DateTime?
+  /// User ID / roll / reference number from the application portal.
+  reference    String?
+  link         String?
+  notes        String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([userId])
+  @@index([userId, status])
 }

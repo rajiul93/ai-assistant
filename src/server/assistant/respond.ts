@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { APP_TIMEZONE, dayjs, now } from "@/lib/dayjs";
-import { assistantPages, type AssistantPage, type AssistantReply, type AssistantRequest, type ChatMessage, type PendingAction, type TaskDraft } from "@/lib/assistant-types";
+import { assistantPages, type AssistantPage, type AssistantReply, type AssistantRequest, type ChatMessage, type ApplicationDraft, type PendingAction, type TaskDraft } from "@/lib/assistant-types";
 import { getFlatTopics, getOpenTasks, getPendingTasks, getProgressCounts, getSubjects, getTodayRevisions } from "@/server/queries";
 import { callGemini, isGeminiConfigured } from "@/server/assistant/gemini";
 
@@ -14,7 +14,8 @@ type StudyContext = {
 };
 
 type Lang = "bn" | "en" | undefined;
-const actions = ["navigate", "create_task", "complete_task", "start_timer", "add_revision", "answer", "clarify"] as const;
+const actions = ["navigate", "create_task", "complete_task", "start_timer", "add_revision", "add_application", "answer", "clarify"] as const;
+const applicationStatuses = ["WISHLIST", "APPLIED", "EXAM", "INTERVIEW", "OFFER", "REJECTED", "WITHDRAWN"] as const;
 
 const pageKeys = Object.keys(assistantPages) as [AssistantPage, ...AssistantPage[]];
 
@@ -35,6 +36,20 @@ const intentSchema = z.object({
   taskTitle: z.string().nullish(),
   timer: z.object({ minutes: z.number().nullish(), subject: z.string().nullish(), topic: z.string().nullish() }).nullish(),
   revision: z.object({ topic: z.string().nullish(), subject: z.string().nullish(), date: z.string().nullish(), notes: z.string().nullish() }).nullish(),
+  application: z.object({
+    title: z.string().nullish(),
+    organization: z.string().nullish(),
+    location: z.string().nullish(),
+    posts: z.array(z.string()).nullish(),
+    sector: z.enum(["GOVERNMENT", "NON_GOVERNMENT"]).nullish(),
+    status: z.enum(applicationStatuses).nullish(),
+    appliedAt: z.string().nullish(),
+    deadline: z.string().nullish(),
+    examDate: z.string().nullish(),
+    reference: z.string().nullish(),
+    link: z.string().nullish(),
+    notes: z.string().nullish(),
+  }).nullish(),
 });
 type Intent = z.infer<typeof intentSchema>;
 
@@ -75,6 +90,24 @@ const intentResponseSchema = {
         topic: { type: "STRING", nullable: true },
         subject: { type: "STRING", nullable: true },
         date: { type: "STRING", nullable: true, description: "YYYY-MM-DD" },
+        notes: { type: "STRING", nullable: true },
+      },
+    },
+    application: {
+      type: "OBJECT",
+      nullable: true,
+      properties: {
+        title: { type: "STRING", nullable: true },
+        organization: { type: "STRING", nullable: true },
+        location: { type: "STRING", nullable: true },
+        posts: { type: "ARRAY", nullable: true, items: { type: "STRING" } },
+        sector: { type: "STRING", enum: ["GOVERNMENT", "NON_GOVERNMENT"], nullable: true },
+        status: { type: "STRING", enum: applicationStatuses, nullable: true },
+        appliedAt: { type: "STRING", nullable: true, description: "YYYY-MM-DD" },
+        deadline: { type: "STRING", nullable: true, description: "YYYY-MM-DD" },
+        examDate: { type: "STRING", nullable: true, description: "YYYY-MM-DD" },
+        reference: { type: "STRING", nullable: true },
+        link: { type: "STRING", nullable: true },
         notes: { type: "STRING", nullable: true },
       },
     },
@@ -126,7 +159,8 @@ action বেছে নাও:
 - complete_task: কোনো task শেষ/done/complete হয়েছে বলে চিহ্নিত করতে চায় ("physics chapter 3 done করো", "mark X done")। taskTitle-এ নিচের "অসমাপ্ত tasks" তালিকা থেকে সবচেয়ে মিলে যাওয়া title হুবহু লেখো। কোনোটাই না মিললে বা একাধিক সমান মিললে clarify করে জিজ্ঞেস করো কোনটা।
 - start_timer: পড়ার timer/pomodoro চালু করতে চায় ("২৫ মিনিটের timer চালাও math-এর জন্য")। timer.minutes বললে মিনিটে (১ ঘণ্টা = 60), না বললে null। timer.subject/timer.topic বললে নিচের তালিকা থেকে নাম, না বললে null।
 - add_revision: কোনো topic-এর revision যোগ করতে চায়। revision.topic নিচের topics তালিকা থেকে হুবহু নাম; "এই topic/এটা" বললে আগের কথোপকথন বা timer-এর topic থেকে বুঝে নাও। revision.date YYYY-MM-DD, না বললে আগামীকাল। topic বোঝা না গেলে clarify করে জিজ্ঞেস করো কোন topic।
-- navigate: শুধু কোনো পাতা খুলতে/দেখতে চাইলে। page: dashboard, tasks, new_task (নতুন task-এর ফাঁকা form), subjects, revisions, progress, timer, plan।
+- add_application: ব্যবহারকারী কোনো চাকরিতে apply করেছে/করবে বলে জানায় ("আজ বাংলাদেশ ব্যাংকের Officer পদে apply করেছি", "I applied to BRAC Bank for MTO")। application.title = circular/job-এর নাম (না বললে organization + পদ থেকে ছোট একটা নাম বানাও); organization = প্রতিষ্ঠান; posts = যে যে পদে apply করেছে তার তালিকা (একটা circular-এ একাধিক পদ হতে পারে); location বললে; sector = সরকারি/government/ব্যাংক-বীমা-মন্ত্রণালয়-অধিদপ্তর-কর্পোরেশন-BCS ইত্যাদি হলে GOVERNMENT, প্রাইভেট/company/NGO/multinational হলে NON_GOVERNMENT (নিশ্চিত না হলে প্রতিষ্ঠানের নাম দেখে বিচার করো); status = "apply করবো/করতে চাই" হলে WISHLIST, "apply করেছি" হলে APPLIED; appliedAt = apply করার তারিখ (না বললে এবং "করেছি" বললে আজ); deadline, examDate বললে YYYY-MM-DD; reference = user ID/roll/tracking number বললে; link বললে। organization বোঝা না গেলে clarify।
+- navigate: শুধু কোনো পাতা খুলতে/দেখতে চাইলে। page: dashboard, tasks, new_task (নতুন task-এর ফাঁকা form), subjects, revisions, progress, timer, plan, jobs (job application-এর তালিকা)।
 - answer: প্রশ্ন, আলাপ, পরামর্শ, মন খারাপ, সাধারণ জ্ঞান — যা কোনো app action নয়। reply-তে সরাসরি পুরো উত্তরটা দাও। পড়াশোনা নিয়ে প্রশ্নে নিচের study data ব্যবহার করে ব্যক্তিগত পরামর্শ দাও।
 - clarify: উদ্দেশ্য অস্পষ্ট, বা এমন কিছু চাইছে যা app-এ নেই (যেমন notes পাতা নেই)। reply-তে বিনয়ের সঙ্গে জানাও কী করা যায় এবং প্রশ্ন করো।
 অনুমান করে ভুল কাজ করবে না। ${languageRule(request.lang)} ${styleRule(request.voice)}
@@ -158,6 +192,7 @@ function describePending(pending: PendingAction | null | undefined) {
     return `নতুন task — ${JSON.stringify({ title: draft.title, description: draft.description, subject: draft.subjectName, due: draft.dueLabel, priority: draft.priority, estimatedMinutes: draft.estimatedMinutes })}`;
   }
   if (pending.kind === "complete_task") return `task শেষ করা — “${pending.title}”`;
+  if (pending.kind === "add_application") return `job application যোগ — ${JSON.stringify(pending.draft)}`;
   return `revision যোগ — topic “${pending.topicName}”, তারিখ ${pending.dateLabel}${pending.notes ? `, notes: ${pending.notes}` : ""}`;
 }
 
@@ -265,6 +300,37 @@ function revisionText(topicName: string, dateLabel: string, lang: Lang) {
 function timerText(minutes: number | null, label: string, lang: Lang) {
   if (lang === "en") return `Done — ${minutes ? `a ${minutes}-minute ` : "the "}timer is running${label ? ` for ${label}` : ""}. Focus up; I'll tell you when time's up.`;
   return `ঠিক আছে! ${label ? `${label}-এর জন্য ` : ""}${minutes ? `${minutes} মিনিটের ` : ""}timer চালু করলাম। মন দিয়ে পড়ো${minutes ? ", সময় শেষ হলে জানাবো" : ""}।`;
+}
+
+const dayPattern = /^\d{4}-\d{2}-\d{2}$/;
+
+function buildApplication(application: NonNullable<Intent["application"]>): ApplicationDraft | null {
+  const organization = application.organization?.trim().slice(0, 160);
+  if (!organization) return null;
+  const posts = [...new Set((application.posts ?? []).map((post) => post.trim()).filter(Boolean))].slice(0, 30);
+  const title = (application.title?.trim() || `${organization}${posts.length ? ` — ${posts[0]}` : ""}`).slice(0, 200);
+  const day = (value: string | null | undefined) => (value && dayPattern.test(value) && dayjs(value).isValid() ? value : "");
+  const link = application.link?.trim() ?? "";
+  return {
+    title,
+    organization,
+    location: application.location?.trim().slice(0, 160) ?? "",
+    posts,
+    sector: application.sector ?? "GOVERNMENT",
+    status: application.status ?? "APPLIED",
+    appliedAt: day(application.appliedAt),
+    deadline: day(application.deadline),
+    examDate: day(application.examDate),
+    reference: application.reference?.trim().slice(0, 120) ?? "",
+    link: /^https?:\/\//.test(link) ? link.slice(0, 500) : "",
+    notes: application.notes?.trim().slice(0, 2000) ?? "",
+  };
+}
+
+function applicationText(draft: ApplicationDraft, lang: Lang) {
+  const posts = draft.posts.join(", ");
+  if (lang === "en") return `Add “${draft.title}” at ${draft.organization}${posts ? ` (${posts})` : ""} to your job list as ${draft.sector === "GOVERNMENT" ? "government" : "non-government"}? Say “yes”, or tell me what to change.`;
+  return `“${draft.title}” (${draft.organization}${posts ? `, পদ: ${posts}` : ""}) তোমার Jobs তালিকায় ${draft.sector === "GOVERNMENT" ? "সরকারি" : "বেসরকারি"} হিসেবে যোগ করবো? “হ্যাঁ” বলো, অথবা কী বদলাতে হবে বলো।`;
 }
 
 function listChoices(names: string[], lang: Lang) {
@@ -378,6 +444,11 @@ async function decide(userId: string, request: AssistantRequest): Promise<Assist
       timer: { minutes, subjectId: subject?.id ?? topic?.subjectId ?? "", subjectName, topicId: topic?.id ?? "", topicName: topic?.name ?? "" },
       reply: timerText(minutes, topic?.name ?? subjectName, lang),
     };
+  }
+  if (intent.action === "add_application") {
+    const draft = intent.application ? buildApplication(intent.application) : null;
+    if (!draft) return { type: "clarify", reply: intent.reply || (lang === "en" ? "Which organization did you apply to, and for which post?" : "কোন প্রতিষ্ঠানে, কোন পদে apply করেছ?") };
+    return { type: "confirm", action: { kind: "add_application", draft }, reply: applicationText(draft, lang) };
   }
   if (intent.action === "add_revision") {
     const subject = findSubject(intent.revision?.subject, subjects);
