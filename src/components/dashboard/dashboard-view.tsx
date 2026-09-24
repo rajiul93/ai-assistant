@@ -136,7 +136,7 @@ export function DashboardView({
                       <Link href="/tasks">Finish task</Link>
                     </Button>
                     <Button asChild size="sm" variant="outline">
-                      <Link href="/revisions">Revision</Link>
+                      <Link href="/tasks?view=revisions">Revision</Link>
                     </Button>
                   </div>
                 </article>
@@ -148,7 +148,7 @@ export function DashboardView({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">🔄 Revision today</h2>
-            <Link href="/revisions" className="text-sm text-zinc-500 hover:text-zinc-950">
+            <Link href="/tasks?view=revisions" className="text-sm text-zinc-500 hover:text-zinc-950">
               Manage
             </Link>
           </div>

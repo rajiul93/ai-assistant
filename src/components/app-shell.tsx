@@ -12,7 +12,6 @@ import {
   ListTodo,
   Menu,
   NotebookPen,
-  RefreshCcw,
   TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -28,7 +27,6 @@ const links = [
   { href: "/dashboard", label: "Dashboard", short: "Home", icon: LayoutDashboard },
   { href: "/tasks", label: "Tasks", short: "Tasks", icon: ListTodo },
   { href: "/subjects", label: "Subjects", short: "Subjects", icon: BookOpen },
-  { href: "/revisions", label: "Revision", short: "Revision", icon: RefreshCcw },
   { href: "/progress", label: "Progress", short: "Progress", icon: TrendingUp },
   { href: "/plan", label: "Study Plan", short: "Plan", icon: CalendarClock },
   { href: "/notes", label: "Notes", short: "Notes", icon: NotebookPen },

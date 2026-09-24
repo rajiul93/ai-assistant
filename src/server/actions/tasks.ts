@@ -10,7 +10,6 @@ function revalidateTasks() {
   revalidatePath("/dashboard");
   revalidatePath("/tasks");
   revalidatePath("/progress");
-  revalidatePath("/revisions");
 }
 
 async function assertOwnedSubject(userId: string, subjectId?: string) {

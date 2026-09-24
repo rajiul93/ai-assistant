@@ -71,7 +71,7 @@ export const assistantPages = {
   tasks: "/tasks",
   new_task: "/tasks?add=1",
   subjects: "/subjects",
-  revisions: "/revisions",
+  revisions: "/tasks?view=revisions",
   progress: "/progress",
   timer: "/tasks",
   plan: "/plan",

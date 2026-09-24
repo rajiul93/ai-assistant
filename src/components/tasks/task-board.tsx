@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { TaskStatus } from "@prisma/client";
-import { Play, Plus } from "lucide-react";
+import { ListTodo, Play, Plus, RefreshCcw } from "lucide-react";
+import { RevisionManager, dueRevisionCount, type RevisionRow } from "@/components/revisions/revision-manager";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/select";
@@ -45,14 +46,22 @@ export function TaskBoard({
   initialTasks,
   subjects,
   topics,
+  revisions,
+  revisionTopics,
 }: {
   initialTasks: TaskWithRelations[];
   subjects: { id: string; name: string }[];
   topics: { id: string; name: string; subjectId: string; parentName?: string | null }[];
+  revisions: RevisionRow[];
+  revisionTopics: { id: string; name: string; subjectName: string }[];
 }) {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const router = useRouter();
+  // Tasks and revisions share one page; the tab lives in the URL (?view=revisions) so links and voice can open it.
+  const view = searchParams.get("view") === "revisions" ? "revisions" : "tasks";
+  const setView = (next: "tasks" | "revisions") => router.replace(next === "revisions" ? "/tasks?view=revisions" : "/tasks", { scroll: false });
+  const [addingRevision, setAddingRevision] = useState(false);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterId>("ALL");
   const [sort, setSort] = useState<"dueDate" | "priority" | "createdAt">("dueDate");
@@ -73,6 +82,9 @@ export function TaskBoard({
   });
 
   const [now] = useState(() => Date.now());
+  const openTaskCount = tasksQuery.data.filter((task) => task.status !== "FINISHED").length;
+  // Revisions due today or already late — the number to act on.
+  const dueRevisions = dueRevisionCount(revisions, now);
 
   const visible = useMemo(() => {
     const tasks = tasksQuery.data ?? [];
@@ -149,20 +161,54 @@ export function TaskBoard({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Tasks</h1>
-          <p className="mt-1 text-sm text-zinc-500">Create, filter, and finish your preparation work.</p>
+          <p className="mt-1 text-sm text-zinc-500">{view === "tasks" ? "Create, filter, and finish your preparation work." : "Topics to revisit — what's due today and what's late."}</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => startStudying()} disabled={timerRunning} className="flex-1 sm:flex-none">
-            <Play className="size-4" />
-            Start session
-          </Button>
-          <Button onClick={() => setCreateOpen(true)} className="flex-1 sm:flex-none">
+        {view === "tasks" ? (
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => startStudying()} disabled={timerRunning} className="flex-1 sm:flex-none">
+              <Play className="size-4" />
+              Start session
+            </Button>
+            <Button onClick={() => setCreateOpen(true)} className="flex-1 sm:flex-none">
+              <Plus className="size-4" />
+              Add Task
+            </Button>
+          </div>
+        ) : (
+          <Button onClick={() => setAddingRevision(true)}>
             <Plus className="size-4" />
-            Add Task
+            Add revision
           </Button>
-        </div>
+        )}
       </div>
 
+      <div role="tablist" aria-label="Tasks or revisions" className="grid grid-cols-2 gap-1 rounded-xl bg-zinc-100 p-1 sm:inline-grid sm:w-80">
+        {([
+          { id: "tasks", label: "Tasks", icon: ListTodo, count: openTaskCount },
+          { id: "revisions", label: "Revisions", icon: RefreshCcw, count: dueRevisions },
+        ] as const).map((tab) => {
+          const Icon = tab.icon;
+          const active = view === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setView(tab.id)}
+              className={cn("flex min-h-10 items-center justify-center gap-2 rounded-lg text-sm font-medium transition", active ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-500 hover:text-zinc-800")}
+            >
+              <Icon className="size-4" />
+              {tab.label}
+              {tab.count ? (
+                <span className={cn("min-w-5 rounded-full px-1.5 text-[11px] font-semibold tabular-nums", tab.id === "revisions" ? "bg-amber-100 text-amber-800" : "bg-zinc-200 text-zinc-700")}>{tab.count}</span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+
+      {view === "tasks" ? <>
       <div className="space-y-3">
         <Input
           placeholder="Search tasks, subjects, topics"
@@ -254,6 +300,15 @@ export function TaskBoard({
             </article>
           ))}
         </div>
+      )}
+      </> : (
+        <RevisionManager
+          revisions={revisions}
+          topics={revisionTopics}
+          todayMs={now}
+          adding={addingRevision}
+          onAddingChange={setAddingRevision}
+        />
       )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

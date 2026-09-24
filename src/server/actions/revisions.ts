@@ -8,7 +8,7 @@ import { startOfDay } from "@/lib/dayjs";
 
 function revalidateRevisions() {
   revalidatePath("/dashboard");
-  revalidatePath("/revisions");
+  revalidatePath("/tasks");
   revalidatePath("/progress");
 }
 
