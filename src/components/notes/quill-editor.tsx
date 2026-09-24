@@ -12,8 +12,9 @@ export type QuillHandle = {
 
 // Text formatting only — "image" and "video" are deliberately absent, so they can't be inserted.
 const formats = ["header", "bold", "italic", "underline", "strike", "list", "indent", "blockquote", "code-block", "code", "link"];
+// H2/H3 are buttons rather than a dropdown so the toolbar can scroll sideways on phones.
 const toolbar = [
-  [{ header: [2, 3, false] }],
+  [{ header: 2 }, { header: 3 }],
   ["bold", "italic", "underline", "strike"],
   [{ list: "ordered" }, { list: "bullet" }],
   ["blockquote", "code-block", "link"],
