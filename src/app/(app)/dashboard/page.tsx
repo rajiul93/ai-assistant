@@ -48,6 +48,7 @@ export default async function DashboardPage() {
       todayMs={todayMs}
       progressPercent={progressPercent}
       planStartedAt={planStartedAt ? planStartedAt.toISOString() : null}
+      firstName={user.name?.split(" ")[0] ?? ""}
       firstTask={firstTask ? { title: firstTask.title, subjectId: firstTask.subjectId ?? "", topicId: firstTask.topicId ?? "", subjectName: firstTask.subject?.name ?? "" } : null}
     />
   );

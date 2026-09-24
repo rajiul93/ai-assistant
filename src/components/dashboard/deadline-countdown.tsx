@@ -30,13 +30,14 @@ function useNow() {
   return useSyncExternalStore(subscribe, () => nowMs, () => null);
 }
 
+// Short labels keep all six units in one row on a phone.
 const units = [
-  { key: "years", label: "Years" },
-  { key: "months", label: "Months" },
-  { key: "days", label: "Days" },
-  { key: "hours", label: "Hours" },
-  { key: "minutes", label: "Minutes" },
-  { key: "seconds", label: "Seconds" },
+  { key: "years", label: "Years", short: "Yrs" },
+  { key: "months", label: "Months", short: "Mos" },
+  { key: "days", label: "Days", short: "Days" },
+  { key: "hours", label: "Hours", short: "Hrs" },
+  { key: "minutes", label: "Minutes", short: "Min" },
+  { key: "seconds", label: "Seconds", short: "Sec" },
 ] as const;
 
 /**
@@ -64,7 +65,7 @@ export function DeadlineCountdown({ deadline, dateOfBirth, ageLimitYears }: { de
   return <section
     aria-labelledby="long-term-countdown"
     className={cn(
-      "relative overflow-hidden rounded-2xl p-5 text-white shadow-[0_20px_50px_-24px_rgba(0,0,0,0.6)] sm:p-6",
+      "relative overflow-hidden rounded-2xl p-4 text-white shadow-[0_20px_50px_-24px_rgba(0,0,0,0.6)] sm:p-6",
       expired ? "bg-linear-to-br from-red-700 to-red-900" : "bg-linear-to-br from-zinc-950 via-zinc-900 to-zinc-800",
     )}
   >
@@ -78,16 +79,16 @@ export function DeadlineCountdown({ deadline, dateOfBirth, ageLimitYears }: { de
       <p className="text-3xl font-semibold tracking-tight">{dateOfBirth ? `You've reached ${ageLimitYears}` : "Deadline passed"}</p>
       <p className="mt-1 text-sm text-white/70">The countdown has ended. Update <Link href="/plan" className="underline underline-offset-4">Study Plan</Link> if your goal changed.</p>
     </div> : <>
-      <dl className="relative mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6 sm:gap-3">
-        {units.map((unit) => <div key={unit.key} className="flex flex-col-reverse rounded-xl bg-white/7 px-2 py-3 text-center ring-1 ring-white/10 backdrop-blur-sm">
-          <dt className="mt-1 text-[11px] font-medium uppercase tracking-wider text-white/55">{unit.label}</dt>
-          <dd className="text-3xl font-semibold tabular-nums tracking-tight sm:text-4xl">
+      <dl className="relative mt-3 grid grid-cols-6 gap-1.5 sm:mt-4 sm:gap-3">
+        {units.map((unit) => <div key={unit.key} className="flex flex-col-reverse rounded-lg bg-white/7 px-0.5 py-2 text-center ring-1 ring-white/10 backdrop-blur-sm sm:rounded-xl sm:px-2 sm:py-3">
+          <dt className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-white/55 sm:mt-1 sm:text-[11px] sm:tracking-wider"><span className="sm:hidden">{unit.short}</span><span className="hidden sm:inline">{unit.label}</span></dt>
+          <dd className="text-xl font-semibold tabular-nums tracking-tight sm:text-4xl">
             {parts ? String(parts[unit.key]).padStart(unit.key === "years" ? 1 : 2, "0") : "–"}
           </dd>
         </div>)}
       </dl>
       {/* Screen readers get one summary instead of an announcement every second. */}
-      {age ? <p className="relative mt-4 text-sm text-white/60">Current age: <span className="font-medium tabular-nums text-white/85">{age.years} years, {age.months} months, {age.days} days</span></p> : null}
+      {age ? <p className="relative mt-3 text-xs text-white/60 sm:mt-4 sm:text-sm">Current age: <span className="font-medium tabular-nums text-white/85">{age.years} years, {age.months} months, {age.days} days</span></p> : null}
       {parts ? <p className="sr-only">{`${parts.years} years, ${parts.months} months, ${parts.days} days left`}</p> : null}
     </>}
   </section>;

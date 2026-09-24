@@ -3,10 +3,10 @@ import { DailyTargetCard } from "@/components/dashboard/daily-target-card";
 import { DeadlineCountdown } from "@/components/dashboard/deadline-countdown";
 import { TodayPlanStarter } from "@/components/dashboard/today-plan-starter";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { PriorityBadge, StatusBadge } from "@/components/status-badge";
-import { formatDateTime, formatRemaining } from "@/lib/dayjs";
+import { StatusBadge } from "@/components/status-badge";
+import { ChevronRight, Plus } from "lucide-react";
+import { APP_TIMEZONE, dayjs, formatRemaining } from "@/lib/dayjs";
 import { lastRevisedLabel, needsRevision } from "@/lib/revisions";
 import type { TaskWithRelations } from "@/server/queries";
 
@@ -26,6 +26,7 @@ export function DashboardView({
   progressPercent,
   planStartedAt,
   firstTask,
+  firstName,
 }: {
   longTermDeadline: Date | null;
   dateOfBirth: Date | null;
@@ -44,25 +45,30 @@ export function DashboardView({
   progressPercent: number;
   planStartedAt: string | null;
   firstTask: { title: string; subjectId: string; topicId: string; subjectName: string } | null;
+  firstName: string;
 }) {
   const prep = preparationDeadline ? formatRemaining(preparationDeadline) : null;
+  const hour = dayjs(todayMs).tz(APP_TIMEZONE).hour();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const stats = [
+    { label: "Pending", value: pendingCount, href: "/tasks", tone: "text-zinc-950" },
+    { label: "Done", value: finishedCount, href: "/tasks", tone: "text-emerald-700" },
+    { label: "To revise", value: revisionCount, href: "/tasks?view=revisions", tone: revisionCount ? "text-amber-700" : "text-zinc-950" },
+  ];
+  const priorityDot = { HIGH: "bg-red-500", MEDIUM: "bg-amber-400", LOW: "bg-zinc-300" } as const;
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="mt-1 text-sm text-zinc-500">Stay on the deadline. Study what matters today.</p>
+    <div className="space-y-5 lg:space-y-6">
+      {/* Greeting + one primary action (phones scroll less, desktop keeps both actions). */}
+      <header className="flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm text-zinc-500">{dayjs(todayMs).tz(APP_TIMEZONE).format("dddd, D MMMM")}</p>
+          <h1 className="truncate text-2xl font-semibold tracking-tight">{greeting}{firstName ? `, ${firstName}` : ""}</h1>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild>
-            <Link href="/tasks">Add Task</Link>
-          </Button>
-          <Button asChild variant="secondary">
-            <Link href="/tasks">Start Study</Link>
-          </Button>
-        </div>
-      </div>
+        <Button asChild size="sm" className="h-10 shrink-0 gap-1.5 rounded-xl sm:h-9">
+          <Link href="/tasks?add=1"><Plus className="size-4" /> Add task</Link>
+        </Button>
+      </header>
 
       <DeadlineCountdown
         deadline={longTermDeadline ? longTermDeadline.toISOString() : null}
@@ -70,125 +76,97 @@ export function DashboardView({
         ageLimitYears={ageLimitYears}
       />
 
-      <TodayPlanStarter
-        startedAt={planStartedAt}
-        firstTask={firstTask}
-        taskCount={todayTasks.filter((task) => task.status !== "FINISHED").length}
-        revisionCount={revisionCount}
-        dailyTargetMinutes={dailyTargetMinutes}
-      />
+      {/* Phones: today's work first, then the numbers. Desktop: two columns. */}
+      <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr] lg:items-start lg:gap-6">
+        <div className="space-y-5">
+          <TodayPlanStarter
+            startedAt={planStartedAt}
+            firstTask={firstTask}
+            taskCount={todayTasks.filter((task) => task.status !== "FINISHED").length}
+            revisionCount={revisionCount}
+            dailyTargetMinutes={dailyTargetMinutes}
+          />
+          <DailyTargetCard dailyTargetMinutes={dailyTargetMinutes} savedSeconds={studiedSeconds} />
 
-      <section className="grid gap-4 sm:grid-cols-3">
-        <DailyTargetCard dailyTargetMinutes={dailyTargetMinutes} savedSeconds={studiedSeconds} />
-        <Card>
-          <CardHeader>
-            <CardTitle>Job preparation countdown</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-zinc-500">🔥</p>
-            <p className={`mt-2 text-2xl font-semibold ${prep?.overdue ? "text-red-600" : ""}`}>
-              {prep?.label ?? "Set a deadline"}
-            </p>
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardTitle>Pending tasks</CardTitle>
-          <p className="mt-3 text-3xl font-semibold">{pendingCount}</p>
-        </Card>
-        <Card>
-          <CardTitle>Completed tasks</CardTitle>
-          <p className="mt-3 text-3xl font-semibold text-green-700">{finishedCount}</p>
-        </Card>
-        <Card>
-          <CardTitle>Needs revision</CardTitle>
-          <p className="mt-3 text-3xl font-semibold text-yellow-700">{revisionCount}</p>
-        </Card>
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[1.4fr_0.8fr]">
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Today&apos;s tasks</h2>
-            <Link href="/tasks" className="text-sm text-zinc-500 hover:text-zinc-950">
-              View all
-            </Link>
-          </div>
-          {todayTasks.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-zinc-200 bg-white px-6 py-12 text-center text-sm text-zinc-500">
-              No tasks due today.
+          <section className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold">Today&apos;s tasks</h2>
+              <Link href="/tasks" className="flex items-center text-sm text-zinc-500 hover:text-zinc-950">All tasks <ChevronRight className="size-4" /></Link>
             </div>
-          ) : (
-            <div className="space-y-3">
-              {todayTasks.map((task) => (
-                <article key={task.id} className="rounded-lg border border-zinc-200 bg-white p-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="font-medium">{task.title}</h3>
-                    <StatusBadge status={task.status} />
-                    <PriorityBadge priority={task.priority} />
-                  </div>
-                  <p className="mt-2 text-sm text-zinc-500">
-                    {task.subject?.name ?? "No subject"}
-                    {task.topic ? ` · ${task.topic.name}` : ""}
-                    {` · ${task.estimatedMinutes}m`}
-                    {task.dueDate ? ` · ${formatDateTime(task.dueDate)}` : ""}
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button asChild size="sm" variant="secondary">
-                      <Link href="/tasks">Finish task</Link>
-                    </Button>
-                    <Button asChild size="sm" variant="outline">
-                      <Link href="/tasks?view=revisions">Revision</Link>
-                    </Button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">🔄 To revise</h2>
-            <Link href="/tasks?view=revisions" className="text-sm text-zinc-500 hover:text-zinc-950">
-              Manage
-            </Link>
-          </div>
-          <Card>
-            {toRevise.length === 0 ? (
-              <p className="text-sm text-zinc-500">Finished tasks show up here for revision.</p>
+            {todayTasks.length === 0 ? (
+              <Link href="/tasks?add=1" className="block rounded-xl border border-dashed border-zinc-300 bg-white px-4 py-6 text-center text-sm text-zinc-500">
+                Nothing due today — tap to add a task
+              </Link>
             ) : (
-              <ul className="space-y-3">
-                {toRevise.map((task) => (
-                  <li key={task.id} className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{task.title}</p>
-                      <p className="text-xs text-zinc-500">{task.subject?.name ?? "No subject"}</p>
-                    </div>
-                    <span className={needsRevision(task, todayMs) ? "shrink-0 text-xs font-medium text-yellow-700" : "shrink-0 text-xs text-zinc-500"}>
-                      {task.timesRevised}× · {lastRevisedLabel(task.lastRevisedAt, todayMs).replace("last: ", "")}
-                    </span>
+              <ul className="divide-y divide-zinc-100 overflow-hidden rounded-xl border border-zinc-200 bg-white">
+                {todayTasks.map((task) => (
+                  <li key={task.id}>
+                    <Link href="/tasks" className="flex min-h-14 items-center gap-3 px-4 py-3 transition active:bg-zinc-50">
+                      <span className={`size-2.5 shrink-0 rounded-full ${priorityDot[task.priority]}`} aria-label={`${task.priority.toLowerCase()} priority`} />
+                      <div className="min-w-0 flex-1">
+                        <p className={`truncate font-medium ${task.status === "FINISHED" ? "text-zinc-400 line-through" : ""}`}>{task.title}</p>
+                        <p className="truncate text-xs text-zinc-500">
+                          {task.subject?.name ?? "No subject"} · {task.estimatedMinutes}m{task.dueDate ? ` · ${dayjs(task.dueDate).tz(APP_TIMEZONE).format("h:mm A")}` : ""}
+                        </p>
+                      </div>
+                      <StatusBadge status={task.status} />
+                      <ChevronRight className="size-4 shrink-0 text-zinc-300" />
+                    </Link>
                   </li>
                 ))}
               </ul>
             )}
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Overall preparation</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-semibold">{progressPercent}%</p>
-              <Progress className="mt-4" value={progressPercent} />
-              <Button asChild variant="outline" className="mt-4 w-full">
-                <Link href="/progress">View progress</Link>
-              </Button>
-            </CardContent>
-          </Card>
+          </section>
         </div>
-      </section>
+
+        <div className="space-y-5">
+          <section className="grid grid-cols-3 gap-2.5" aria-label="Task counts">
+            {stats.map((stat) => (
+              <Link key={stat.label} href={stat.href} className="rounded-xl border border-zinc-200 bg-white px-3 py-3 text-center transition active:scale-[0.98]">
+                <p className={`text-2xl font-semibold tabular-nums ${stat.tone}`}>{stat.value}</p>
+                <p className="text-xs text-zinc-500">{stat.label}</p>
+              </Link>
+            ))}
+          </section>
+
+          <section className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold">To revise</h2>
+              <Link href="/tasks?view=revisions" className="flex items-center text-sm text-zinc-500 hover:text-zinc-950">Revisions <ChevronRight className="size-4" /></Link>
+            </div>
+            {toRevise.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-zinc-300 bg-white px-4 py-5 text-center text-sm text-zinc-500">Finished tasks show up here for revision.</p>
+            ) : (
+              <ul className="divide-y divide-zinc-100 overflow-hidden rounded-xl border border-zinc-200 bg-white">
+                {toRevise.map((task) => (
+                  <li key={task.id}>
+                    <Link href="/tasks?view=revisions" className="flex min-h-12 items-center justify-between gap-3 px-4 py-2.5 transition active:bg-zinc-50">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{task.title}</p>
+                        <p className="text-xs text-zinc-500">{task.subject?.name ?? "No subject"}</p>
+                      </div>
+                      <span className={needsRevision(task, todayMs) ? "shrink-0 text-xs font-medium text-amber-700" : "shrink-0 text-xs text-zinc-500"}>
+                        {task.timesRevised}× · {lastRevisedLabel(task.lastRevisedAt, todayMs).replace("last: ", "")}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <Link href="/progress" className="block rounded-xl border border-zinc-200 bg-white p-4 transition active:scale-[0.99]">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="text-sm font-medium">Overall preparation</p>
+              <p className="text-lg font-semibold tabular-nums">{progressPercent}%</p>
+            </div>
+            <Progress className="mt-2.5" value={progressPercent} />
+            <p className={`mt-3 text-xs ${prep?.overdue ? "font-medium text-red-600" : "text-zinc-500"}`}>
+              🔥 Job preparation: {prep?.label ?? "set a deadline in Study Plan"}
+            </p>
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }
