@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Check, CircleCheck, Mic, RefreshCcw, Sparkles, Volume2, X } from "lucide-react";
+import { ArrowUp, Check, CircleCheck, Mic, NotebookPen, RefreshCcw, Sparkles, Volume2, X } from "lucide-react";
 import { VoiceWave } from "@/components/assistant-status";
 import { sectorLabels, statusLabels } from "@/lib/applications";
 import type { AssistantStrings } from "@/lib/assistant-i18n";
@@ -34,6 +34,13 @@ function ActionCard({ action, state, t, onConfirm, onCancel }: { action: Pending
     badge = <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600"><CircleCheck className="size-4" /></span>;
     rows = [[t.draftSubject, action.subjectName || "—"]];
     confirmLabel = t.confirmComplete;
+  } else if (action.kind === "create_note") {
+    eyebrow = t.noteLabel;
+    title = action.title;
+    description = action.preview;
+    badge = <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-indigo-600"><NotebookPen className="size-3.5" /></span>;
+    rows = [];
+    confirmLabel = t.confirmNote;
   } else if (action.kind === "add_application") {
     const { draft } = action;
     eyebrow = t.applicationLabel;

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   BookOpen,
   BriefcaseBusiness,
+  NotebookPen,
   CalendarClock,
   LayoutDashboard,
   ListTodo,
@@ -27,6 +28,7 @@ const links = [
   { href: "/revisions", label: "Revision", icon: RefreshCcw },
   { href: "/progress", label: "Progress", icon: TrendingUp },
   { href: "/plan", label: "Study Plan", icon: CalendarClock },
+  { href: "/notes", label: "Notes", icon: NotebookPen },
   { href: "/jobs", label: "Jobs", icon: BriefcaseBusiness },
 ];
 

@@ -24,6 +24,7 @@ model User {
   revisions     Revision[]
   planStarts    DailyPlanStart[]
   applications  JobApplication[]
+  notes         Note[]
 }
 
 model StudyPlan {
@@ -210,4 +211,19 @@ model JobApplication {
 
   @@index([userId])
   @@index([userId, status])
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  /// Rich text from the Quill editor, sanitized to an allowlist of tags on save (no images).
+  content   String   @default("")
+  /// Tag-free copy of `content`, for search and list previews.
+  plainText String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, updatedAt])
 }

@@ -35,7 +35,9 @@ export type PendingAction =
   | { kind: "create_task"; draft: TaskDraft }
   | { kind: "complete_task"; taskId: string; title: string; subjectName: string }
   | { kind: "add_revision"; topicId: string; topicName: string; subjectName: string; revisionDate: string; dateLabel: string; notes: string }
-  | { kind: "add_application"; draft: ApplicationDraft };
+  | { kind: "add_application"; draft: ApplicationDraft }
+  /** content is sanitized note HTML; preview is its plain text for the card. */
+  | { kind: "create_note"; title: string; content: string; preview: string };
 
 /** Starting the timer saves nothing, so it runs right away instead of asking first. */
 export type TimerStart = { minutes: number | null; subjectId: string; subjectName: string; topicId: string; topicName: string };
@@ -72,6 +74,7 @@ export const assistantPages = {
   timer: "/timer",
   plan: "/plan",
   jobs: "/jobs",
+  notes: "/notes",
 } as const;
 
 export type AssistantPage = keyof typeof assistantPages;

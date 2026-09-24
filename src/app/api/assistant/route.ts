@@ -18,6 +18,7 @@ const pendingSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("create_task"), draft: taskDraftSchema }),
   z.object({ kind: z.literal("complete_task"), taskId: z.string(), title: z.string(), subjectName: z.string() }),
   z.object({ kind: z.literal("add_revision"), topicId: z.string(), topicName: z.string(), subjectName: z.string(), revisionDate: z.string(), dateLabel: z.string(), notes: z.string() }),
+  z.object({ kind: z.literal("create_note"), title: z.string().max(200), content: z.string().max(400_000), preview: z.string().max(4000) }),
   z.object({
     kind: z.literal("add_application"),
     draft: z.object({

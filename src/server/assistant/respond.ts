@@ -2,6 +2,7 @@ import { z } from "zod";
 import { APP_TIMEZONE, dayjs, now } from "@/lib/dayjs";
 import { assistantPages, type AssistantPage, type AssistantReply, type AssistantRequest, type ChatMessage, type ApplicationDraft, type PendingAction, type TaskDraft } from "@/lib/assistant-types";
 import { getFlatTopics, getOpenTasks, getPendingTasks, getProgressCounts, getSubjects, getTodayRevisions } from "@/server/queries";
+import { htmlToPlainText, noteWritingRules, sanitizeNoteHtml } from "@/lib/note-html";
 import { callGemini, isGeminiConfigured } from "@/server/assistant/gemini";
 
 type StudyContext = {
@@ -14,7 +15,7 @@ type StudyContext = {
 };
 
 type Lang = "bn" | "en" | undefined;
-const actions = ["navigate", "create_task", "complete_task", "start_timer", "add_revision", "add_application", "answer", "clarify"] as const;
+const actions = ["navigate", "create_task", "complete_task", "start_timer", "add_revision", "add_application", "create_note", "answer", "clarify"] as const;
 const applicationStatuses = ["WISHLIST", "APPLIED", "EXAM", "INTERVIEW", "OFFER", "REJECTED", "WITHDRAWN"] as const;
 
 const pageKeys = Object.keys(assistantPages) as [AssistantPage, ...AssistantPage[]];
@@ -36,6 +37,7 @@ const intentSchema = z.object({
   taskTitle: z.string().nullish(),
   timer: z.object({ minutes: z.number().nullish(), subject: z.string().nullish(), topic: z.string().nullish() }).nullish(),
   revision: z.object({ topic: z.string().nullish(), subject: z.string().nullish(), date: z.string().nullish(), notes: z.string().nullish() }).nullish(),
+  note: z.object({ title: z.string().nullish(), content: z.string().nullish() }).nullish(),
   application: z.object({
     title: z.string().nullish(),
     organization: z.string().nullish(),
@@ -91,6 +93,14 @@ const intentResponseSchema = {
         subject: { type: "STRING", nullable: true },
         date: { type: "STRING", nullable: true, description: "YYYY-MM-DD" },
         notes: { type: "STRING", nullable: true },
+      },
+    },
+    note: {
+      type: "OBJECT",
+      nullable: true,
+      properties: {
+        title: { type: "STRING", nullable: true },
+        content: { type: "STRING", nullable: true, description: "Simple HTML: h2, h3, p, strong, em, ul/ol+li, blockquote, code" },
       },
     },
     application: {
@@ -160,7 +170,8 @@ action বেছে নাও:
 - start_timer: পড়ার timer/pomodoro চালু করতে চায় ("২৫ মিনিটের timer চালাও math-এর জন্য")। timer.minutes বললে মিনিটে (১ ঘণ্টা = 60), না বললে null। timer.subject/timer.topic বললে নিচের তালিকা থেকে নাম, না বললে null।
 - add_revision: কোনো topic-এর revision যোগ করতে চায়। revision.topic নিচের topics তালিকা থেকে হুবহু নাম; "এই topic/এটা" বললে আগের কথোপকথন বা timer-এর topic থেকে বুঝে নাও। revision.date YYYY-MM-DD, না বললে আগামীকাল। topic বোঝা না গেলে clarify করে জিজ্ঞেস করো কোন topic।
 - add_application: ব্যবহারকারী কোনো চাকরিতে apply করেছে/করবে বলে জানায় ("আজ বাংলাদেশ ব্যাংকের Officer পদে apply করেছি", "I applied to BRAC Bank for MTO")। application.title = circular/job-এর নাম (না বললে organization + পদ থেকে ছোট একটা নাম বানাও); organization = প্রতিষ্ঠান; posts = যে যে পদে apply করেছে তার তালিকা (একটা circular-এ একাধিক পদ হতে পারে); location বললে; sector = সরকারি/government/ব্যাংক-বীমা-মন্ত্রণালয়-অধিদপ্তর-কর্পোরেশন-BCS ইত্যাদি হলে GOVERNMENT, প্রাইভেট/company/NGO/multinational হলে NON_GOVERNMENT (নিশ্চিত না হলে প্রতিষ্ঠানের নাম দেখে বিচার করো); status = "apply করবো/করতে চাই" হলে WISHLIST, "apply করেছি" হলে APPLIED; appliedAt = apply করার তারিখ (না বললে এবং "করেছি" বললে আজ); deadline, examDate বললে YYYY-MM-DD; reference = user ID/roll/tracking number বললে; link বললে। organization বোঝা না গেলে clarify।
-- navigate: শুধু কোনো পাতা খুলতে/দেখতে চাইলে। page: dashboard, tasks, new_task (নতুন task-এর ফাঁকা form), subjects, revisions, progress, timer, plan, jobs (job application-এর তালিকা)।
+- create_note: ব্যবহারকারী Notes-এ কিছু লিখে রাখতে/note বানাতে চায় ("photosynthesis নিয়ে একটা note লেখো", "শেষ উত্তরটা notes-এ রাখো", "এটা note করে রাখো: …")। note.title ছোট শিরোনাম; note.content = note-এর লেখা। ${noteWritingRules} "আগের/শেষ উত্তরটা" বললে কথোপকথনে সহকারীর শেষ তথ্যমূলক উত্তরটা গুছিয়ে content-এ বসাও (confirmation বা প্রশ্ন নয়)। ব্যবহারকারী নিজে লেখা বলে দিলে সেটাই হুবহু গুছিয়ে রাখো। task বানানোর কথা বললে create_task, note-এর কথা বললে create_note।
+- navigate: শুধু কোনো পাতা খুলতে/দেখতে চাইলে। page: dashboard, tasks, new_task (নতুন task-এর ফাঁকা form), subjects, revisions, progress, timer, plan, jobs (job application-এর তালিকা), notes (Notes পাতা)।
 - answer: প্রশ্ন, আলাপ, পরামর্শ, মন খারাপ, সাধারণ জ্ঞান — যা কোনো app action নয়। reply-তে সরাসরি পুরো উত্তরটা দাও। পড়াশোনা নিয়ে প্রশ্নে নিচের study data ব্যবহার করে ব্যক্তিগত পরামর্শ দাও।
 - clarify: উদ্দেশ্য অস্পষ্ট, বা এমন কিছু চাইছে যা app-এ নেই (যেমন notes পাতা নেই)। reply-তে বিনয়ের সঙ্গে জানাও কী করা যায় এবং প্রশ্ন করো।
 অনুমান করে ভুল কাজ করবে না। ${languageRule(request.lang)} ${styleRule(request.voice)}
@@ -193,6 +204,7 @@ function describePending(pending: PendingAction | null | undefined) {
   }
   if (pending.kind === "complete_task") return `task শেষ করা — “${pending.title}”`;
   if (pending.kind === "add_application") return `job application যোগ — ${JSON.stringify(pending.draft)}`;
+  if (pending.kind === "create_note") return `note সেভ — title “${pending.title}”, লেখা: ${pending.preview.slice(0, 1500)}`;
   return `revision যোগ — topic “${pending.topicName}”, তারিখ ${pending.dateLabel}${pending.notes ? `, notes: ${pending.notes}` : ""}`;
 }
 
@@ -444,6 +456,14 @@ async function decide(userId: string, request: AssistantRequest): Promise<Assist
       timer: { minutes, subjectId: subject?.id ?? topic?.subjectId ?? "", subjectName, topicId: topic?.id ?? "", topicName: topic?.name ?? "" },
       reply: timerText(minutes, topic?.name ?? subjectName, lang),
     };
+  }
+  if (intent.action === "create_note") {
+    const content = sanitizeNoteHtml(intent.note?.content ?? "");
+    const preview = htmlToPlainText(content);
+    if (!preview) return { type: "clarify", reply: intent.reply || (lang === "en" ? "What should the note say?" : "Note-এ কী লিখবো?") };
+    const title = (intent.note?.title?.trim() || preview.split("\n")[0]).slice(0, 200);
+    const ask = lang === "en" ? `Save this as a note called “${title}”? Say “yes”, or tell me what to change.` : `“${title}” নামে note হিসেবে সেভ করবো? “হ্যাঁ” বলো, অথবা কী বদলাতে হবে বলো।`;
+    return { type: "confirm", action: { kind: "create_note", title, content, preview: preview.slice(0, 600) }, reply: ask };
   }
   if (intent.action === "add_application") {
     const draft = intent.application ? buildApplication(intent.application) : null;

@@ -8,6 +8,7 @@ import type { AssistantReply, PendingAction, TimerStart } from "@/lib/assistant-
 import { matchQuickCommand } from "@/lib/quick-commands";
 import { speak } from "@/lib/voice";
 import { createApplication } from "@/server/actions/applications";
+import { createNote } from "@/server/actions/notes";
 import { createRevision } from "@/server/actions/revisions";
 import { createTask, updateTaskStatus } from "@/server/actions/tasks";
 import { findPendingAction, useAssistantStore } from "@/store/assistant";
@@ -78,6 +79,11 @@ export function useAssistant() {
       await updateTaskStatus(action.taskId, "FINISHED");
       return { status: s.completedStatus(action.title), reply: s.completedReply(action.title) };
     }
+    if (action.kind === "create_note") {
+      await createNote({ title: action.title, content: action.content });
+      await queryClient.invalidateQueries({ queryKey: ["notes"] });
+      return { status: s.noteAddedStatus(action.title), reply: s.noteAddedReply(action.title) };
+    }
     if (action.kind === "add_application") {
       await createApplication(action.draft);
       await queryClient.invalidateQueries({ queryKey: ["applications"] });
@@ -92,6 +98,7 @@ export function useAssistant() {
     if (action.kind === "create_task") return s.savingTask(action.draft.title);
     if (action.kind === "complete_task") return s.completingTask(action.title);
     if (action.kind === "add_application") return s.addingApplication(action.draft.title);
+    if (action.kind === "create_note") return s.addingNote(action.title);
     return s.addingRevision(action.topicName);
   }
 

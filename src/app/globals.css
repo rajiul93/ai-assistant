@@ -68,3 +68,37 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .voice-bar, .assistant-orb, .assistant-in, .assistant-panel-in { animation: none; }
 }
+
+/* Notes editor (Quill "snow" theme, blended into the app) */
+.note-editor .ql-toolbar.ql-snow {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  border: 1px solid #e4e4e7;
+  border-radius: 0.75rem 0.75rem 0 0;
+  background: #fafafa;
+  font-family: inherit;
+}
+
+.note-editor .ql-container.ql-snow {
+  border: 1px solid #e4e4e7;
+  border-top: 0;
+  border-radius: 0 0 0.75rem 0.75rem;
+  font-family: inherit;
+  font-size: 0.95rem;
+}
+
+.note-editor .ql-editor {
+  min-height: 22rem;
+  line-height: 1.7;
+  padding: 1rem 1.25rem;
+}
+
+.note-editor .ql-editor.ql-blank::before {
+  color: #a1a1aa;
+  font-style: normal;
+}
+
+.note-editor .ql-editor h2 { font-size: 1.35rem; font-weight: 600; margin: 1rem 0 0.4rem; }
+.note-editor .ql-editor h3 { font-size: 1.1rem; font-weight: 600; margin: 0.8rem 0 0.3rem; }
+.note-editor .ql-editor blockquote { border-left: 3px solid #d4d4d8; color: #52525b; }
