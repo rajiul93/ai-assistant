@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { SESSION_COOKIE } from "@/lib/session";
 
-const PUBLIC_PATHS = ["/login"];
+// The manifest and app icons are fetched by the browser without cookies, so they must stay public.
+const PUBLIC_PATHS = ["/login", "/manifest.webmanifest", "/icon", "/apple-icon"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

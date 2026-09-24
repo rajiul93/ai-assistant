@@ -75,7 +75,7 @@ function PickerBody({ request, onDone }: { request: TimerStartRequest; onDone: (
     }
   }
 
-  return <DialogContent className="max-w-md rounded-2xl p-0">
+  return <DialogContent className="p-0 sm:max-w-md sm:rounded-2xl sm:p-0">
     <div className="p-6 pb-4">
       <DialogHeader className="mb-0">
         <DialogTitle className="pr-6">{t.pickerTitle}</DialogTitle>
@@ -125,7 +125,7 @@ function PickerBody({ request, onDone }: { request: TimerStartRequest; onDone: (
       </NativeSelect> : null}
     </div>
 
-    <div className="flex justify-end gap-2 p-6 pt-5">
+    <div className="flex justify-end gap-2 p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-5 sm:pb-6">
       <button type="button" onClick={onDone} className="h-10 rounded-xl px-4 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100">{t.cancel}</button>
       <button type="button" onClick={() => void start()} disabled={!selected || starting} className="flex h-10 items-center gap-2 rounded-xl bg-zinc-950 px-5 text-sm font-medium text-white transition hover:bg-zinc-800 disabled:bg-zinc-200 disabled:text-zinc-400">
         <Play className="size-4" /> {starting ? t.pickerStarting : t.pickerStart}

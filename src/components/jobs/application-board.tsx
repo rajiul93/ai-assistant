@@ -143,7 +143,7 @@ export function ApplicationBoard({ initialApplications }: { initialApplications:
                 aria-label={`Status of ${item.title}`}
                 value={item.status}
                 onChange={(event) => statusMutation.mutate({ id: item.id, next: event.target.value as ApplicationStatus })}
-                className={cn("h-8 w-auto shrink-0 rounded-full border-0 px-3 text-xs font-semibold", option?.className)}
+                className={cn("h-10 w-auto shrink-0 rounded-full border-0 px-3 text-xs font-semibold sm:h-8", option?.className)}
               >
                 {statusOptions.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}
               </NativeSelect>
@@ -161,9 +161,9 @@ export function ApplicationBoard({ initialApplications }: { initialApplications:
             {item.notes ? <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-600">{item.notes}</p> : null}
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              {item.link ? <a href={item.link} target="_blank" rel="noreferrer" className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"><ExternalLink className="size-3.5" /> Circular</a> : null}
-              <button type="button" onClick={() => setEditing(item)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"><Pencil className="size-3.5" /> Edit</button>
-              <button type="button" onClick={() => setDeleting(item)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-zinc-600 hover:bg-red-50 hover:text-red-700"><Trash2 className="size-3.5" /> Delete</button>
+              {item.link ? <a href={item.link} target="_blank" rel="noreferrer" className="flex min-h-10 items-center gap-1 rounded-lg px-3 text-xs font-medium sm:min-h-0 sm:px-2 sm:py-1 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"><ExternalLink className="size-3.5" /> Circular</a> : null}
+              <button type="button" onClick={() => setEditing(item)} className="flex min-h-10 items-center gap-1 rounded-lg px-3 text-xs font-medium sm:min-h-0 sm:px-2 sm:py-1 text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950"><Pencil className="size-3.5" /> Edit</button>
+              <button type="button" onClick={() => setDeleting(item)} className="flex min-h-10 items-center gap-1 rounded-lg px-3 text-xs font-medium sm:min-h-0 sm:px-2 sm:py-1 text-zinc-600 hover:bg-red-50 hover:text-red-700"><Trash2 className="size-3.5" /> Delete</button>
             </div>
           </li>;
         })}
@@ -171,7 +171,7 @@ export function ApplicationBoard({ initialApplications }: { initialApplications:
     )}
 
     <Dialog open={creating || editing !== null} onOpenChange={(value) => { if (!value) { setCreating(false); setEditing(null); } }}>
-      <DialogContent className="max-h-[90dvh] max-w-2xl overflow-y-auto">
+      <DialogContent className="sm:max-h-[90dvh] sm:max-w-2xl">
         <DialogHeader><DialogTitle>{editing ? "Edit application" : "Add application"}</DialogTitle></DialogHeader>
         <ApplicationForm key={editing?.id ?? "new"} application={editing} onSuccess={() => { setCreating(false); setEditing(null); }} />
       </DialogContent>

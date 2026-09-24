@@ -17,7 +17,11 @@ function AlertDialogContent({
       <AlertDialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/40" />
       <AlertDialogPrimitive.Content
         className={cn(
-          "fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-zinc-200 bg-white p-6",
+          // Phones: a bottom sheet that is easy to reach with a thumb.
+          "sheet-content fixed inset-x-0 bottom-0 z-50 max-h-[92dvh] overflow-y-auto rounded-t-3xl border-t border-zinc-200 bg-white p-6 pt-8 pb-[calc(1.5rem+env(safe-area-inset-bottom))]",
+          // From the sm breakpoint up it is a centered dialog again.
+          "sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:w-[calc(100%-2rem)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg sm:border sm:pb-6 sm:pt-6",
+          "sm:max-w-md",
           className,
         )}
         {...props}
@@ -50,8 +54,9 @@ function AlertDialogDescription({
   );
 }
 
+/** Phones: full-width buttons stacked with the action on top; larger screens: a row on the right. */
 function AlertDialogFooter({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("mt-6 flex justify-end gap-2", className)} {...props} />;
+  return <div className={cn("mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end [&>*]:h-11 sm:[&>*]:h-10", className)} {...props} />;
 }
 
 function AlertDialogCancel({

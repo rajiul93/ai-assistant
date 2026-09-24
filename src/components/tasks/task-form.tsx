@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -46,7 +46,7 @@ export function TaskForm({
     },
   });
 
-  const subjectId = form.watch("subjectId");
+  const subjectId = useWatch({ control: form.control, name: "subjectId" });
   const filteredTopics = useMemo(
     () => topics.filter((topic) => !subjectId || topic.subjectId === subjectId),
     [topics, subjectId],

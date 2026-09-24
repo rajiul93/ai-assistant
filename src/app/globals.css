@@ -74,14 +74,14 @@ body {
   position: sticky;
   top: 0;
   z-index: 1;
-  border: 1px solid #e4e4e7;
+  border: 1px solid var(--color-zinc-200);
   border-radius: 0.75rem 0.75rem 0 0;
-  background: #fafafa;
+  background: var(--color-zinc-50);
   font-family: inherit;
 }
 
 .note-editor .ql-container.ql-snow {
-  border: 1px solid #e4e4e7;
+  border: 1px solid var(--color-zinc-200);
   border-top: 0;
   border-radius: 0 0 0.75rem 0.75rem;
   font-family: inherit;
@@ -95,10 +95,102 @@ body {
 }
 
 .note-editor .ql-editor.ql-blank::before {
-  color: #a1a1aa;
+  color: var(--color-zinc-400);
   font-style: normal;
 }
 
 .note-editor .ql-editor h2 { font-size: 1.35rem; font-weight: 600; margin: 1rem 0 0.4rem; }
 .note-editor .ql-editor h3 { font-size: 1.1rem; font-weight: 600; margin: 0.8rem 0 0.3rem; }
-.note-editor .ql-editor blockquote { border-left: 3px solid #d4d4d8; color: #52525b; }
+.note-editor .ql-editor blockquote { border-left: 3px solid var(--color-zinc-300); color: var(--color-zinc-600); }
+
+/* ---------- Phone ---------- */
+
+/* iOS Safari zooms the page when focusing a field smaller than 16px; keep fields at 16px on phones. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select,
+  .ql-editor {
+    font-size: 16px;
+  }
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Dialogs rise from the bottom as a sheet on phones (see components/ui/dialog.tsx). */
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@media (max-width: 639px) {
+  .sheet-content[data-state="open"] { animation: sheet-up 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-content[data-state="open"] { animation: none; }
+}
+
+/* ---------- Dark mode ----------
+ * Every Tailwind color utility reads a --color-* variable, so dark mode swaps the palette here
+ * instead of adding dark: variants to every component. The zinc scale is mirrored (light surfaces
+ * become dark, dark text becomes light) and tinted backgrounds/texts of the accent colors are
+ * swapped the same way, so every existing pairing keeps its contrast.
+ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --background: #0b0b0e;
+    --foreground: #f4f4f5;
+    --color-white: #141417;
+    --color-black: #000;
+    --color-zinc-50: #0f0f12;
+    --color-zinc-100: #1c1c20;
+    --color-zinc-200: #2a2a30;
+    --color-zinc-300: #3a3a42;
+    --color-zinc-400: #71717a;
+    --color-zinc-500: #a1a1aa;
+    --color-zinc-600: #c4c4cc;
+    --color-zinc-700: #d4d4d8;
+    --color-zinc-800: #e4e4e7;
+    --color-zinc-900: #f0f0f2;
+    --color-zinc-950: #fafafa;
+
+    --color-emerald-50: #052e1c;
+    --color-emerald-100: #064e3b;
+    --color-emerald-200: #065f46;
+    --color-emerald-700: #6ee7b7;
+    --color-emerald-800: #a7f3d0;
+    --color-emerald-900: #d1fae5;
+    --color-amber-50: #2e1f05;
+    --color-amber-100: #451a03;
+    --color-amber-200: #78350f;
+    --color-amber-700: #fcd34d;
+    --color-amber-800: #fde68a;
+    --color-amber-900: #fef3c7;
+    --color-red-50: #3b0a0a;
+    --color-red-100: #450a0a;
+    --color-red-200: #7f1d1d;
+    --color-red-700: #fca5a5;
+    --color-red-800: #fecaca;
+    --color-red-900: #fee2e2;
+    --color-sky-50: #082236;
+    --color-sky-700: #7dd3fc;
+    --color-indigo-50: #1a1840;
+    --color-indigo-100: #1e1b4b;
+    --color-indigo-200: #312e81;
+    --color-indigo-700: #a5b4fc;
+    --color-violet-50: #221440;
+    --color-violet-700: #c4b5fd;
+    --color-rose-50: #3a0a18;
+    --color-green-700: #86efac;
+    --color-yellow-700: #fde047;
+  }
+
+  .note-editor .ql-snow .ql-stroke { stroke: var(--color-zinc-700); }
+  .note-editor .ql-snow .ql-fill { fill: var(--color-zinc-700); }
+  .note-editor .ql-snow .ql-picker { color: var(--color-zinc-700); }
+  .note-editor .ql-snow .ql-picker-options { background: var(--color-white); }
+}

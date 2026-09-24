@@ -96,13 +96,13 @@ function NoteEditor({ noteId, onSaved, onDeleted, onBack }: { noteId: string; on
 
   return <div className="flex h-full flex-col">
     <div className="flex items-center gap-2 border-b border-zinc-100 px-4 py-2.5">
-      <button type="button" onClick={onBack} className="rounded-lg p-1.5 text-zinc-500 hover:bg-zinc-100 lg:hidden" aria-label="Back to notes"><ArrowLeft className="size-4" /></button>
+      <button type="button" onClick={onBack} className="rounded-lg p-2.5 text-zinc-500 hover:bg-zinc-100 lg:hidden" aria-label="Back to notes"><ArrowLeft className="size-4" /></button>
       <p className={cn("text-xs", saveState === "error" ? "text-red-600" : "text-zinc-400")} aria-live="polite">{saveLabel}</p>
       <div className="ml-auto flex items-center gap-1">
-        <button type="button" onClick={() => setAiOpen(!aiOpen)} className={cn("flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition", aiOpen ? "bg-indigo-50 text-indigo-700" : "text-zinc-600 hover:bg-zinc-100")}>
+        <button type="button" onClick={() => setAiOpen(!aiOpen)} className={cn("flex items-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium transition sm:px-2.5 sm:py-1.5", aiOpen ? "bg-indigo-50 text-indigo-700" : "text-zinc-600 hover:bg-zinc-100")}>
           <Sparkles className="size-4" /> Write with AI
         </button>
-        <button type="button" onClick={() => setConfirmDelete(true)} className="rounded-lg p-1.5 text-zinc-500 hover:bg-red-50 hover:text-red-700" aria-label="Delete note"><Trash2 className="size-4" /></button>
+        <button type="button" onClick={() => setConfirmDelete(true)} className="rounded-lg p-2.5 text-zinc-500 hover:bg-red-50 hover:text-red-700 sm:p-1.5" aria-label="Delete note"><Trash2 className="size-4" /></button>
       </div>
     </div>
 

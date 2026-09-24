@@ -30,7 +30,7 @@ function PostsInput({ value, onChange }: { value: string[]; onChange: (posts: st
   return <div className="flex min-h-10 flex-wrap items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1.5 focus-within:border-zinc-400">
     {value.map((post) => <span key={post} className="flex items-center gap-1 rounded-full bg-zinc-100 py-0.5 pl-2.5 pr-1 text-sm">
       {post}
-      <button type="button" aria-label={`Remove ${post}`} onClick={() => onChange(value.filter((item) => item !== post))} className="rounded-full p-0.5 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-900"><X className="size-3" /></button>
+      <button type="button" aria-label={`Remove ${post}`} onClick={() => onChange(value.filter((item) => item !== post))} className="rounded-full p-1.5 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-900 sm:p-0.5"><X className="size-3" /></button>
     </span>)}
     <input
       id="posts"

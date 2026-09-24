@@ -57,8 +57,17 @@ function DailyChart({ daily }: { daily: Awaited<ReturnType<typeof getAiUsage>>["
       <p className="text-xs text-zinc-500">peak {number(max)}</p>
     </div>
     <div className="mt-4 flex h-40 items-end gap-0.5 border-b border-zinc-200" aria-hidden>
-      {daily.map((day) => <div key={day.day} className="group relative flex h-full flex-1 items-end" title={`${label(day.day)}: ${number(day.requests)} requests${day.failed ? ` (${day.failed} failed)` : ""} · ${number(day.tokens)} tokens`}>
-        <div className="w-full rounded-t-[4px] bg-zinc-900 transition-opacity group-hover:opacity-70" style={{ height: day.requests ? `${Math.max(3, (day.requests / max) * 100)}%` : 0 }} />
+      {daily.map((day, index) => <div key={day.day} tabIndex={-1} className="group relative flex h-full flex-1 items-end outline-none">
+        <div className="w-full rounded-t-[4px] bg-zinc-900 transition-opacity group-hover:opacity-70 group-focus:opacity-70" style={{ height: day.requests ? `${Math.max(3, (day.requests / max) * 100)}%` : 0 }} />
+        {/* Hover on desktop, tap on phones (tap focuses the bar). Edge bars anchor inward so the label stays on screen. */}
+        <div className={cn(
+          "pointer-events-none absolute bottom-full z-10 mb-2 hidden w-max rounded-lg bg-zinc-950 px-2.5 py-1.5 text-[11px] leading-snug text-white shadow-lg group-hover:block group-focus:block",
+          index < daily.length / 3 ? "left-0" : index > (daily.length * 2) / 3 ? "right-0" : "left-1/2 -translate-x-1/2",
+        )}>
+          <p className="font-semibold">{label(day.day)}</p>
+          <p>{number(day.requests)} requests{day.failed ? ` · ${day.failed} failed` : ""}</p>
+          <p className="text-white/70">{number(day.tokens)} tokens</p>
+        </div>
       </div>)}
     </div>
     <div className="mt-1.5 flex justify-between text-[11px] text-zinc-400">

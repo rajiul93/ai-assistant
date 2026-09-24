@@ -91,8 +91,8 @@ function ActionCard({ action, state, t, onConfirm, onCancel }: { action: Pending
     </dl>
     {state === "pending"
       ? <div className="flex gap-2 px-3.5 pb-3.5">
-        <button type="button" onClick={onConfirm} className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-zinc-950 text-sm font-medium text-white transition hover:bg-zinc-800 active:scale-[0.98]"><Check className="size-4" /> {confirmLabel}</button>
-        <button type="button" onClick={onCancel} className="h-9 rounded-xl px-3.5 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100">{t.cancel}</button>
+        <button type="button" onClick={onConfirm} className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-zinc-950 text-sm font-medium text-white transition hover:bg-zinc-800 active:scale-[0.98]"><Check className="size-4" /> {confirmLabel}</button>
+        <button type="button" onClick={onCancel} className="h-11 rounded-xl px-3.5 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100">{t.cancel}</button>
       </div>
       : <p className={cn("px-3.5 pb-3 text-xs font-medium", state === "saved" ? "text-emerald-600" : "text-zinc-500")}>{state ? t.draftStates[state] : null}</p>}
   </div>;
@@ -159,7 +159,7 @@ export function StudyAssistant() {
       onClick={() => (open ? close() : setOpen(true))}
       aria-label={t.panelTitle}
       aria-expanded={open}
-      className="group fixed bottom-20 right-4 z-40 flex size-14 items-center justify-center rounded-full bg-zinc-950 text-white shadow-[0_12px_32px_-8px_rgba(0,0,0,0.5)] transition-transform duration-200 hover:scale-105 active:scale-95 lg:bottom-6 lg:right-6"
+      className={cn("group fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-4 z-40 flex size-14 items-center justify-center rounded-full bg-zinc-950 text-white shadow-[0_12px_32px_-8px_rgba(0,0,0,0.5)] transition-transform duration-200 hover:scale-105 active:scale-95 lg:bottom-6 lg:right-6", open && "max-sm:hidden")}
     >
       {busy ? <span className="assistant-orb absolute inset-0 rounded-full opacity-80" /> : null}
       <span className={cn("absolute flex items-center justify-center rounded-full bg-zinc-950", busy ? "inset-0.75" : "inset-0")}>
@@ -172,7 +172,7 @@ export function StudyAssistant() {
       onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); setDragging(true); } }}
       onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }}
       onDrop={(event) => { event.preventDefault(); setDragging(false); void addFile(event.dataTransfer.files[0]); }}
-      className="assistant-panel-in fixed inset-x-3 bottom-36 z-50 flex max-h-[min(40rem,calc(100dvh-12rem))] flex-col overflow-hidden rounded-3xl border border-zinc-200/80 bg-white/95 shadow-[0_24px_80px_-20px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:inset-x-auto sm:right-4 sm:w-100 lg:bottom-24 lg:right-6">
+      className="assistant-panel-in fixed inset-x-0 bottom-0 z-50 flex max-h-[88dvh] flex-col overflow-hidden rounded-t-3xl border border-zinc-200/80 bg-white/95 shadow-[0_24px_80px_-20px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:inset-x-auto sm:bottom-36 sm:right-4 sm:max-h-[min(40rem,calc(100dvh-12rem))] sm:w-100 sm:rounded-3xl lg:bottom-24 lg:right-6">
       <header className="flex items-center gap-3 border-b border-zinc-100 px-4 py-3.5">
         <span className="relative flex size-9 shrink-0 items-center justify-center">
           {busy ? <span className="assistant-orb absolute -inset-0.75 rounded-full" /> : null}
@@ -182,7 +182,7 @@ export function StudyAssistant() {
           <p className="text-sm font-semibold text-zinc-950">{t.panelTitle}</p>
           <p className="text-xs text-zinc-500">{busy ? t.thinkingBubble : t.panelSubtitle}</p>
         </div>
-        <button type="button" onClick={close} aria-label="Close" className="flex size-8 items-center justify-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900"><X className="size-4" /></button>
+        <button type="button" onClick={close} aria-label="Close" className="flex size-10 items-center justify-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 sm:size-8"><X className="size-4" /></button>
       </header>
 
       <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite">
@@ -210,7 +210,7 @@ export function StudyAssistant() {
         <Paperclip className="mr-2 size-4" /> {t.dropHere}
       </div> : null}
 
-      <div className="border-t border-zinc-100 p-3">
+      <div className="border-t border-zinc-100 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3">
         {voiceError ? <p role="alert" className="mb-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">{voiceError}</p> : null}
         {attachment || reading ? <div className="mb-2 flex items-center gap-2.5 rounded-xl border border-zinc-200 bg-white p-1.5 pr-2">
           {attachment?.mimeType.startsWith("image/") && !attachment.mimeType.includes("hei")
@@ -221,7 +221,7 @@ export function StudyAssistant() {
             <p className="truncate text-xs font-medium text-zinc-900">{attachment?.name ?? t.attachmentReading}</p>
             <p className="text-[11px] text-zinc-500">{attachment ? `${formatBytes(attachment.size)} · ${t.attachmentActive}` : t.attachmentReading}</p>
           </div>
-          {attachment ? <button type="button" onClick={() => setAttachment(null)} aria-label={t.attachmentRemove} title={t.attachmentRemove} className="rounded-full p-1 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-900"><X className="size-4" /></button> : null}
+          {attachment ? <button type="button" onClick={() => setAttachment(null)} aria-label={t.attachmentRemove} title={t.attachmentRemove} className="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-900 sm:p-1"><X className="size-4" /></button> : null}
         </div> : null}
         <input ref={fileInputRef} type="file" accept={ATTACHMENT_ACCEPT} className="hidden" onChange={(event) => { void addFile(event.target.files?.[0]); event.target.value = ""; }} />
         <div className="flex items-end gap-2 rounded-2xl border border-zinc-200 bg-zinc-50/80 p-1.5 transition focus-within:border-zinc-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-zinc-900/5">
@@ -240,7 +240,7 @@ export function StudyAssistant() {
             disabled={reading}
             aria-label={t.attach}
             title={t.attach}
-            className="flex size-9 shrink-0 items-center justify-center rounded-xl text-zinc-500 transition hover:bg-zinc-200/70 hover:text-zinc-900 disabled:opacity-40"
+            className="flex size-10 shrink-0 items-center justify-center rounded-xl sm:size-9 text-zinc-500 transition hover:bg-zinc-200/70 hover:text-zinc-900 disabled:opacity-40"
           ><Paperclip className="size-4" /></button>
           <button
             type="button"
@@ -248,14 +248,14 @@ export function StudyAssistant() {
             disabled={!voice.supported}
             aria-label={t.speakButton}
             title={voice.supported ? t.speakButton : t.noVoiceSupport}
-            className={cn("flex size-9 shrink-0 items-center justify-center rounded-xl transition disabled:opacity-40", voice.listening ? "bg-rose-500 text-white shadow-[0_0_0_4px_rgba(244,63,94,0.15)]" : "text-zinc-500 hover:bg-zinc-200/70 hover:text-zinc-900")}
+            className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl sm:size-9 transition disabled:opacity-40", voice.listening ? "bg-rose-500 text-white shadow-[0_0_0_4px_rgba(244,63,94,0.15)]" : "text-zinc-500 hover:bg-zinc-200/70 hover:text-zinc-900")}
           >{voice.listening ? <VoiceWave className="h-3.5" /> : <Mic className="size-4" />}</button>
           <button
             type="button"
             onClick={submit}
             disabled={busy || reading || (!question.trim() && !attachment)}
             aria-label={t.send}
-            className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-zinc-950 text-white transition hover:bg-zinc-800 active:scale-95 disabled:bg-zinc-200 disabled:text-zinc-400"
+            className="flex size-10 shrink-0 items-center justify-center rounded-xl sm:size-9 bg-zinc-950 text-white transition hover:bg-zinc-800 active:scale-95 disabled:bg-zinc-200 disabled:text-zinc-400"
           ><ArrowUp className="size-4" /></button>
         </div>
         {!voice.supported ? <p className="mt-2 px-1 text-[11px] text-zinc-500">{t.noVoiceSupport}</p> : null}
