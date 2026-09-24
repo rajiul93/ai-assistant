@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, Clock, Hourglass, Trophy } from "lucide-react";
+import { AlertTriangle, Clock, Hourglass, Trophy } from "lucide-react";
 import { formatDateTime, formatDurationFromSeconds } from "@/lib/dayjs";
 import { cn } from "@/lib/utils";
 import type { SubjectStat } from "@/server/queries";
@@ -16,12 +16,6 @@ type Insight = { icon: React.ReactNode; label: string; value: string; detail: st
 
 function duration(seconds: number) {
   return seconds > 0 && seconds < 60 ? `${seconds}s` : formatDurationFromSeconds(seconds);
-}
-
-function sinceLabel(date: Date | null, now: number) {
-  if (!date) return "never studied";
-  const days = Math.floor((now - date.getTime()) / 86_400_000);
-  return days <= 0 ? "studied today" : days === 1 ? "last studied yesterday" : `last studied ${days} days ago`;
 }
 
 /** Plain-language findings from the numbers: where time went, what lags, what needs attention. */
@@ -63,27 +57,12 @@ function buildInsights(stats: SubjectStat[], now: number): Insight[] {
   ];
 }
 
-function Trend({ stat }: { stat: SubjectStat }) {
-  if (stat.previousSeconds === 0) return stat.seconds > 0 ? <span className="text-zinc-500">new this period</span> : null;
-  const change = Math.round(((stat.seconds - stat.previousSeconds) / stat.previousSeconds) * 100);
-  if (change === 0) return <span className="text-zinc-500">same as before</span>;
-  const up = change > 0;
-  return <span className={cn("inline-flex items-center gap-0.5", up ? "text-emerald-700" : "text-red-700")}>
-    {up ? <ArrowUpRight className="size-3.5" /> : <ArrowDownRight className="size-3.5" />}
-    {Math.abs(change)}% {up ? "more" : "less"} than before
-  </span>;
-}
-
-/**
- * Subject-wise study analysis: insight tiles plus a single-series bar list (one color, value
- * labels on every row so the list doubles as the table view).
- */
+/** Subject-wise study analysis: where the time went, shown as insight cards for the chosen period. */
 export function SubjectAnalysis({ stats, period, comparable, now }: { stats: SubjectStat[]; period: AnalysisPeriod; comparable: boolean; now: number }) {
   const total = stats.reduce((sum, stat) => sum + stat.seconds, 0);
-  const max = Math.max(...stats.map((stat) => stat.seconds), 1);
   const insights = buildInsights(stats, now);
 
-  // Phones: header, a full-width period switch, 2×2 insight cards, then one card per subject.
+  // Header, a full-width period switch on phones, then the insight cards.
   return <section className="space-y-4" aria-labelledby="subject-analysis">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div>
@@ -114,35 +93,6 @@ export function SubjectAnalysis({ stats, period, comparable, now }: { stats: Sub
     ) : total === 0 ? (
       <p className="rounded-xl border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-500">No study time in this period yet. Start the timer and pick a subject — it will show up here.</p>
     ) : null}
-
-    {total > 0 ? <ul className="grid gap-2.5 sm:grid-cols-2 sm:gap-3">
-      {stats.map((stat) => {
-        const share = Math.round((stat.seconds / total) * 100);
-        const average = stat.sessions ? Math.round(stat.seconds / stat.sessions) : 0;
-        const tooltip = `${stat.name}: ${duration(stat.seconds)} (${share}%) · ${stat.sessions} sessions · ${stat.activeDays} days · ${stat.finishedTasks} tasks finished · ${stat.openTasks} open`;
-        return <li key={stat.subjectId ?? "none"} title={tooltip} className="rounded-xl border border-zinc-200 bg-white p-3.5 sm:p-4">
-          <div className="flex items-baseline justify-between gap-3">
-            <span className={cn("truncate font-semibold", !stat.subjectId && "text-zinc-500")}>{stat.name}</span>
-            <span className="shrink-0 tabular-nums"><span className="text-lg font-semibold">{stat.seconds ? duration(stat.seconds) : "—"}</span><span className="ml-1.5 text-xs text-zinc-500">{share}%</span></span>
-          </div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-zinc-100">
-            <div className="h-full rounded-full bg-zinc-900" style={{ width: `${(stat.seconds / max) * 100}%` }} />
-          </div>
-          <div className="mt-2.5 flex flex-wrap gap-1.5 text-[11px] text-zinc-600 sm:text-xs">
-            {stat.seconds
-              ? <>
-                <span className="rounded-md bg-zinc-100 px-2 py-0.5">{stat.sessions} session{stat.sessions === 1 ? "" : "s"}</span>
-                <span className="rounded-md bg-zinc-100 px-2 py-0.5">avg {duration(average)}</span>
-                <span className="rounded-md bg-zinc-100 px-2 py-0.5">{stat.activeDays} day{stat.activeDays === 1 ? "" : "s"}</span>
-              </>
-              : <span className="rounded-md bg-zinc-100 px-2 py-0.5">{sinceLabel(stat.lastStudiedAt, now)}</span>}
-            {stat.finishedTasks ? <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-emerald-700">{stat.finishedTasks} finished</span> : null}
-            {stat.openTasks ? <span className="rounded-md bg-zinc-100 px-2 py-0.5">{stat.openTasks} open</span> : null}
-          </div>
-          {comparable ? <p className="mt-2 text-[11px] sm:text-xs"><Trend stat={stat} /></p> : null}
-        </li>;
-      })}
-    </ul> : null}
 
     <p className="text-[11px] text-zinc-400 sm:text-xs">Updated {formatDateTime(new Date(now))}. “Takes longest to learn” = study time ÷ tasks finished in the period.</p>
   </section>;
