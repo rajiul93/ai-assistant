@@ -25,7 +25,14 @@ export function getRecognitionConstructor(): RecognitionConstructor | undefined 
   return browserWindow.SpeechRecognition || browserWindow.webkitSpeechRecognition;
 }
 
+/** Phones end every recognition session after one sentence and play a system chime on each start. */
+export function isMobileDevice() {
+  if (typeof navigator === "undefined") return false;
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+}
+
 const errorMessages: Record<AssistantLang, Record<string, string>> = { bn: {
+  "voice-paused": "অনেকক্ষণ কিছু শুনিনি, তাই mic বন্ধ করেছি। আবার বলতে mic-এ চাপ দিন।",
   "not-allowed": "Microphone-এর permission দেওয়া নেই। Address bar-এর বাঁ পাশের আইকনে ক্লিক করে Microphone “Allow” করুন, তারপর আবার চেষ্টা করুন।",
   "service-not-allowed": "Browser এই পাতায় voice recognition চালু করতে দিচ্ছে না। Chrome-এ খুলে আবার চেষ্টা করুন।",
   "audio-capture": "কোনো microphone পাওয়া যাচ্ছে না। Mic ঠিকমতো লাগানো আছে কি না দেখুন।",
@@ -36,6 +43,7 @@ const errorMessages: Record<AssistantLang, Record<string, string>> = { bn: {
   "start-failed": "Microphone চালু করা গেল না। একটু পরে আবার চেষ্টা করুন।",
   other: "Microphone-এ একটা সমস্যা হয়েছে। আবার চেষ্টা করুন।",
 }, en: {
+  "voice-paused": "I paused the mic after a quiet spell. Tap the mic to talk again.",
   "not-allowed": "Microphone access is blocked. Click the icon at the left of the address bar, set Microphone to “Allow”, then try again.",
   "service-not-allowed": "The browser won't allow voice input on this page. Try opening it in Chrome.",
   "audio-capture": "I can't find a microphone. Check that one is connected.",

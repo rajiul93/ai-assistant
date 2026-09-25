@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { speechLangs } from "@/lib/assistant-i18n";
 import { useAssistantStore } from "@/store/assistant";
-import { getRecognitionConstructor, isAssistantSpeaking, isFatalVoiceError, stopSpeaking, voiceErrorMessage, type Recognition, type VoiceError } from "@/lib/voice";
+import { getRecognitionConstructor, isAssistantSpeaking, isFatalVoiceError, isMobileDevice, stopSpeaking, voiceErrorMessage, type Recognition, type VoiceError } from "@/lib/voice";
+
+/** On phones, stop auto-restarting after this many silent sessions in a row: each restart plays a chime. */
+const MOBILE_SILENT_SESSIONS = 3;
 
 type Options = {
   /** Keep listening (and auto-restart) until stop() is called. */
@@ -45,9 +48,11 @@ export function useSpeechRecognition({ continuous = false, onResult, onInterim, 
     // In one-shot mode the user pressed the mic to talk, so don't talk over them.
     if (!continuous) stopSpeaking();
 
+    const mobile = isMobileDevice();
     const recognition = new Constructor();
     recognition.lang = lang;
-    recognition.continuous = continuous;
+    // Android's continuous mode re-sends earlier sentences, so phones listen one sentence per session.
+    recognition.continuous = continuous && !mobile;
     recognition.interimResults = true;
     recognition.maxAlternatives = 5;
     let heard = false;
@@ -55,6 +60,9 @@ export function useSpeechRecognition({ continuous = false, onResult, onInterim, 
     // Chrome gives up after a few silent seconds; a one-shot mic keeps waiting up to 15s so the user can think first.
     const startedAt = Date.now();
     let retryOnEnd = false;
+    let heardThisSession = false;
+    let silentSessions = 0;
+    let lastFinal = { text: "", at: 0 };
 
     recognition.onresult = (event) => {
       // Ignore the assistant's own voice coming back through the speakers.
@@ -65,7 +73,11 @@ export function useSpeechRecognition({ continuous = false, onResult, onInterim, 
         const transcript = result[0]?.transcript ?? "";
         if (!result.isFinal) { interim += transcript; continue; }
         if (!transcript.trim()) continue;
+        // Android sometimes reports the same sentence twice; sending it again would reopen the chat.
+        if (transcript.trim() === lastFinal.text && Date.now() - lastFinal.at < 5_000) continue;
+        lastFinal = { text: transcript.trim(), at: Date.now() };
         heard = true;
+        heardThisSession = true;
         const alternatives = Array.from({ length: result.length }, (_, alt) => result[alt]?.transcript?.trim() ?? "").filter(Boolean).slice(1);
         handlers.current.onResult(transcript.trim(), alternatives);
       }
@@ -73,22 +85,38 @@ export function useSpeechRecognition({ continuous = false, onResult, onInterim, 
     };
     recognition.onerror = (event) => {
       if (event.error === "aborted") return;
-      if (!continuous && !heard && event.error === "no-speech" && Date.now() - startedAt < 15_000) { retryOnEnd = true; return; }
+      // Not on phones: every retry plays the system chime.
+      if (!continuous && !mobile && !heard && event.error === "no-speech" && Date.now() - startedAt < 15_000) { retryOnEnd = true; return; }
       if (continuous && !isFatalVoiceError(event.error)) return; // e.g. no-speech: just keep listening
       failed = true;
       wantedRef.current = false;
       fail(event.error);
     };
-    recognition.onend = () => {
-      if (recognitionRef.current !== recognition) return;
-      if ((continuous && wantedRef.current) || retryOnEnd) {
-        retryOnEnd = false;
-        try { recognition.start(); return; } catch { /* fall through and stop */ }
-      }
+    const finish = (code?: string) => {
       recognitionRef.current = null;
       wantedRef.current = false;
       setListening(false);
-      if (!continuous && !heard && !failed) fail("no-speech");
+      if (code) fail(code);
+    };
+    const restart = () => {
+      if (recognitionRef.current !== recognition || !wantedRef.current) return;
+      // Wait out the assistant's reply so the chime and the mic don't land on top of it.
+      if (isAssistantSpeaking()) { window.setTimeout(restart, 400); return; }
+      try { recognition.start(); } catch { finish(); }
+    };
+    recognition.onend = () => {
+      if (recognitionRef.current !== recognition) return;
+      silentSessions = heardThisSession ? 0 : silentSessions + 1;
+      heardThisSession = false;
+      if (continuous && wantedRef.current) {
+        if (mobile && silentSessions >= MOBILE_SILENT_SESSIONS) { finish("voice-paused"); return; }
+        if (mobile) { window.setTimeout(restart, 400); return; }
+        try { recognition.start(); return; } catch { /* fall through and stop */ }
+      } else if (retryOnEnd) {
+        retryOnEnd = false;
+        try { recognition.start(); return; } catch { /* fall through and stop */ }
+      }
+      finish(!continuous && !heard && !failed ? "no-speech" : undefined);
     };
 
     recognitionRef.current = recognition;
