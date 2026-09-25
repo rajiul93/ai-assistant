@@ -92,7 +92,8 @@ export function VoiceCommandCenter() {
   }
 
   return <>
-    <div className="fixed right-3 top-17 z-40 flex items-center gap-1 rounded-full border border-zinc-200/80 bg-white/80 p-1 shadow-[0_8px_30px_-8px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:right-6 lg:top-4">
+    {/* Phones: sits inside the header bar; desktop: floats top-right. */}
+    <div className="fixed right-2 top-[calc(0.375rem+env(safe-area-inset-top))] z-40 flex items-center gap-1 rounded-full border border-zinc-200/80 bg-white/80 p-1 shadow-[0_8px_30px_-8px_rgba(0,0,0,0.18)] backdrop-blur-xl lg:right-6 lg:top-4">
       <div role="radiogroup" aria-label="Language" className="flex rounded-full bg-zinc-100 p-0.5">
         {languages.map((item) => <button
           key={item.value}
@@ -102,7 +103,7 @@ export function VoiceCommandCenter() {
           title={item.name}
           onClick={() => chooseLanguage(item.value)}
           className={cn(
-            "h-7 min-w-9 rounded-full px-2.5 text-xs font-semibold transition-all duration-200",
+            "h-9 min-w-10 rounded-full px-2.5 text-xs font-semibold transition-all duration-200 lg:h-7 lg:min-w-9",
             lang === item.value ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-500 hover:text-zinc-800",
           )}
         >{item.label}</button>)}
@@ -113,7 +114,7 @@ export function VoiceCommandCenter() {
         aria-pressed={system.listening}
         title={t.voiceToggleHint}
         className={cn(
-          "flex h-8 items-center gap-2 rounded-full px-3 text-sm font-medium transition-all duration-200",
+          "flex h-10 min-w-10 items-center justify-center gap-2 rounded-full px-3 text-sm font-medium transition-all duration-200 lg:h-8",
           system.listening ? "bg-zinc-950 text-white shadow-[0_0_0_4px_rgba(244,63,94,0.15)]" : "text-zinc-700 hover:bg-zinc-100",
         )}
       >
@@ -126,7 +127,7 @@ export function VoiceCommandCenter() {
         disabled={gk.listening}
         title={t.askHint}
         className={cn(
-          "flex h-8 items-center gap-2 rounded-full px-3 text-sm font-medium text-zinc-700 transition-all duration-200 hover:bg-zinc-100 disabled:cursor-default",
+          "flex h-10 min-w-10 items-center justify-center gap-2 rounded-full px-3 text-sm font-medium text-zinc-700 transition-all duration-200 hover:bg-zinc-100 disabled:cursor-default lg:h-8",
           gk.listening && "bg-rose-50 text-rose-600 hover:bg-rose-50",
         )}
       >

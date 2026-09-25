@@ -10,8 +10,7 @@ function revalidateSubjects() {
   revalidatePath("/subjects");
   revalidatePath("/tasks");
   revalidatePath("/dashboard");
-  revalidatePath("/timer");
-  revalidatePath("/revisions");
+  revalidatePath("/tasks");
 }
 
 export async function createSubject(input: unknown) {

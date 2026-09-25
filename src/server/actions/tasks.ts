@@ -4,13 +4,11 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { taskSchema } from "@/lib/validations";
-import { startOfDay } from "@/lib/dayjs";
 
 function revalidateTasks() {
   revalidatePath("/dashboard");
   revalidatePath("/tasks");
   revalidatePath("/progress");
-  revalidatePath("/revisions");
 }
 
 async function assertOwnedSubject(userId: string, subjectId?: string) {
@@ -47,18 +45,6 @@ export async function createTask(input: unknown) {
     },
   });
 
-  if (data.status === "REVISION" && topic) {
-    await prisma.revision.create({
-      data: {
-        userId: user.id,
-        topicId: topic.id,
-        subjectId: topic.subjectId,
-        revisionDate: startOfDay(data.dueDate || undefined).toDate(),
-        notes: data.description || null,
-      },
-    });
-  }
-
   revalidateTasks();
   return task.id;
 }
@@ -86,18 +72,6 @@ export async function updateTask(taskId: string, input: unknown) {
     },
   });
 
-  if (data.status === "REVISION" && topic && existing.status !== "REVISION") {
-    await prisma.revision.create({
-      data: {
-        userId: user.id,
-        topicId: topic.id,
-        subjectId: topic.subjectId,
-        revisionDate: startOfDay(data.dueDate || undefined).toDate(),
-        notes: data.description || null,
-      },
-    });
-  }
-
   revalidateTasks();
 }
 
@@ -105,7 +79,6 @@ export async function updateTaskStatus(taskId: string, status: string) {
   const user = await requireUser();
   const existing = await prisma.task.findFirst({
     where: { id: taskId, userId: user.id },
-    include: { topic: true },
   });
   if (!existing) throw new Error("Task not found.");
 
@@ -115,18 +88,25 @@ export async function updateTaskStatus(taskId: string, status: string) {
     data: { status: parsed },
   });
 
-  if (parsed === "REVISION" && existing.topic && existing.status !== "REVISION") {
-    await prisma.revision.create({
-      data: {
-        userId: user.id,
-        topicId: existing.topic.id,
-        subjectId: existing.topic.subjectId,
-        revisionDate: startOfDay().toDate(),
-      },
-    });
-  }
-
   revalidateTasks();
+}
+
+/**
+ * Revision lives on the task: +1 records another revision of a finished task (and when), −1 undoes
+ * a mistaken tap. Atomic in the database so quick repeated taps all count; never below zero.
+ */
+export async function changeTaskRevisionCount(taskId: string, delta: 1 | -1) {
+  const user = await requireUser();
+  const existing = await prisma.task.findFirst({ where: { id: taskId, userId: user.id }, select: { id: true } });
+  if (!existing) throw new Error("Task not found.");
+  if (delta === 1) {
+    const updated = await prisma.task.update({ where: { id: existing.id }, data: { timesRevised: { increment: 1 }, lastRevisedAt: new Date() } });
+    revalidateTasks();
+    return updated.timesRevised;
+  }
+  await prisma.task.updateMany({ where: { id: existing.id, timesRevised: { gt: 0 } }, data: { timesRevised: { decrement: 1 } } });
+  revalidateTasks();
+  return (await prisma.task.findUnique({ where: { id: existing.id }, select: { timesRevised: true } }))?.timesRevised ?? 0;
 }
 
 export async function deleteTask(taskId: string) {

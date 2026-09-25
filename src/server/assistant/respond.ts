@@ -1,20 +1,22 @@
 import { z } from "zod";
 import { APP_TIMEZONE, dayjs, now } from "@/lib/dayjs";
-import { assistantPages, type AssistantPage, type AssistantReply, type AssistantRequest, type ChatMessage, type PendingAction, type TaskDraft } from "@/lib/assistant-types";
-import { getFlatTopics, getOpenTasks, getPendingTasks, getProgressCounts, getSubjects, getTodayRevisions } from "@/server/queries";
-import { callGemini, isGeminiConfigured } from "@/server/assistant/gemini";
+import { assistantPages, type AssistantPage, type AssistantReply, type AssistantRequest, type ChatMessage, type ApplicationDraft, type PendingAction, type TaskDraft } from "@/lib/assistant-types";
+import { getFlatTopics, getOpenTasks, getPendingTasks, getProgressCounts, getSubjects, getTasksToRevise } from "@/server/queries";
+import { htmlToPlainText, noteWritingRules, sanitizeNoteHtml } from "@/lib/note-html";
+import { callAI, isAIConfigured } from "@/server/assistant/ai";
 
 type StudyContext = {
   counts: Awaited<ReturnType<typeof getProgressCounts>>;
   tasks: Awaited<ReturnType<typeof getPendingTasks>>;
-  revisions: Awaited<ReturnType<typeof getTodayRevisions>>;
+  toRevise: Awaited<ReturnType<typeof getTasksToRevise>>;
   subjects: Awaited<ReturnType<typeof getSubjects>>;
   openTasks: Awaited<ReturnType<typeof getOpenTasks>>;
   topics: Awaited<ReturnType<typeof getFlatTopics>>;
 };
 
 type Lang = "bn" | "en" | undefined;
-const actions = ["navigate", "create_task", "complete_task", "start_timer", "add_revision", "answer", "clarify"] as const;
+const actions = ["navigate", "create_task", "complete_task", "start_timer", "revise_task", "add_application", "create_note", "answer", "clarify"] as const;
+const applicationStatuses = ["WISHLIST", "APPLIED", "EXAM", "INTERVIEW", "OFFER", "REJECTED", "WITHDRAWN"] as const;
 
 const pageKeys = Object.keys(assistantPages) as [AssistantPage, ...AssistantPage[]];
 
@@ -34,7 +36,21 @@ const intentSchema = z.object({
   /** complete_task: the task title as it appears in the open-task list. */
   taskTitle: z.string().nullish(),
   timer: z.object({ minutes: z.number().nullish(), subject: z.string().nullish(), topic: z.string().nullish() }).nullish(),
-  revision: z.object({ topic: z.string().nullish(), subject: z.string().nullish(), date: z.string().nullish(), notes: z.string().nullish() }).nullish(),
+  note: z.object({ title: z.string().nullish(), content: z.string().nullish() }).nullish(),
+  application: z.object({
+    title: z.string().nullish(),
+    organization: z.string().nullish(),
+    location: z.string().nullish(),
+    posts: z.array(z.string()).nullish(),
+    sector: z.enum(["GOVERNMENT", "NON_GOVERNMENT"]).nullish(),
+    status: z.enum(applicationStatuses).nullish(),
+    appliedAt: z.string().nullish(),
+    deadline: z.string().nullish(),
+    examDate: z.string().nullish(),
+    reference: z.string().nullish(),
+    link: z.string().nullish(),
+    notes: z.string().nullish(),
+  }).nullish(),
 });
 type Intent = z.infer<typeof intentSchema>;
 
@@ -68,13 +84,29 @@ const intentResponseSchema = {
         topic: { type: "STRING", nullable: true },
       },
     },
-    revision: {
+    note: {
       type: "OBJECT",
       nullable: true,
       properties: {
-        topic: { type: "STRING", nullable: true },
-        subject: { type: "STRING", nullable: true },
-        date: { type: "STRING", nullable: true, description: "YYYY-MM-DD" },
+        title: { type: "STRING", nullable: true },
+        content: { type: "STRING", nullable: true, description: "Simple HTML: h2, h3, p, strong, em, ul/ol+li, blockquote, code" },
+      },
+    },
+    application: {
+      type: "OBJECT",
+      nullable: true,
+      properties: {
+        title: { type: "STRING", nullable: true },
+        organization: { type: "STRING", nullable: true },
+        location: { type: "STRING", nullable: true },
+        posts: { type: "ARRAY", nullable: true, items: { type: "STRING" } },
+        sector: { type: "STRING", enum: ["GOVERNMENT", "NON_GOVERNMENT"], nullable: true },
+        status: { type: "STRING", enum: applicationStatuses, nullable: true },
+        appliedAt: { type: "STRING", nullable: true, description: "YYYY-MM-DD" },
+        deadline: { type: "STRING", nullable: true, description: "YYYY-MM-DD" },
+        examDate: { type: "STRING", nullable: true, description: "YYYY-MM-DD" },
+        reference: { type: "STRING", nullable: true },
+        link: { type: "STRING", nullable: true },
         notes: { type: "STRING", nullable: true },
       },
     },
@@ -125,8 +157,10 @@ action বেছে নাও:
   - কখনো বলবে না যে task save হয়ে গেছে; save হবে শুধু ব্যবহারকারী confirm করলে।
 - complete_task: কোনো task শেষ/done/complete হয়েছে বলে চিহ্নিত করতে চায় ("physics chapter 3 done করো", "mark X done")। taskTitle-এ নিচের "অসমাপ্ত tasks" তালিকা থেকে সবচেয়ে মিলে যাওয়া title হুবহু লেখো। কোনোটাই না মিললে বা একাধিক সমান মিললে clarify করে জিজ্ঞেস করো কোনটা।
 - start_timer: পড়ার timer/pomodoro চালু করতে চায় ("২৫ মিনিটের timer চালাও math-এর জন্য")। timer.minutes বললে মিনিটে (১ ঘণ্টা = 60), না বললে null। timer.subject/timer.topic বললে নিচের তালিকা থেকে নাম, না বললে null।
-- add_revision: কোনো topic-এর revision যোগ করতে চায়। revision.topic নিচের topics তালিকা থেকে হুবহু নাম; "এই topic/এটা" বললে আগের কথোপকথন বা timer-এর topic থেকে বুঝে নাও। revision.date YYYY-MM-DD, না বললে আগামীকাল। topic বোঝা না গেলে clarify করে জিজ্ঞেস করো কোন topic।
-- navigate: শুধু কোনো পাতা খুলতে/দেখতে চাইলে। page: dashboard, tasks, new_task (নতুন task-এর ফাঁকা form), subjects, revisions, progress, timer, plan।
+- revise_task: ব্যবহারকারী জানায় সে কোনো শেষ হওয়া task আবার revise/রিভিশন/পুনরায় পড়েছে ("physics chapter 3 revise করলাম", "I revised Newton's laws")। revision আলাদা কিছু না — task-এরই একটা গণনা। taskTitle-এ নিচের "Revision তালিকা" থেকে সবচেয়ে মিলে যাওয়া title হুবহু লেখো; না মিললে বা একাধিক সমান মিললে clarify।
+- add_application: ব্যবহারকারী কোনো চাকরিতে apply করেছে/করবে বলে জানায় ("আজ বাংলাদেশ ব্যাংকের Officer পদে apply করেছি", "I applied to BRAC Bank for MTO")। application.title = circular/job-এর নাম (না বললে organization + পদ থেকে ছোট একটা নাম বানাও); organization = প্রতিষ্ঠান; posts = যে যে পদে apply করেছে তার তালিকা (একটা circular-এ একাধিক পদ হতে পারে); location বললে; sector = সরকারি/government/ব্যাংক-বীমা-মন্ত্রণালয়-অধিদপ্তর-কর্পোরেশন-BCS ইত্যাদি হলে GOVERNMENT, প্রাইভেট/company/NGO/multinational হলে NON_GOVERNMENT (নিশ্চিত না হলে প্রতিষ্ঠানের নাম দেখে বিচার করো); status = "apply করবো/করতে চাই" হলে WISHLIST, "apply করেছি" হলে APPLIED; appliedAt = apply করার তারিখ (না বললে এবং "করেছি" বললে আজ); deadline, examDate বললে YYYY-MM-DD; reference = user ID/roll/tracking number বললে; link বললে। organization বোঝা না গেলে clarify।
+- create_note: ব্যবহারকারী Notes-এ কিছু লিখে রাখতে/note বানাতে চায় ("photosynthesis নিয়ে একটা note লেখো", "শেষ উত্তরটা notes-এ রাখো", "এটা note করে রাখো: …")। note.title ছোট শিরোনাম; note.content = note-এর লেখা। ${noteWritingRules} "আগের/শেষ উত্তরটা" বললে কথোপকথনে সহকারীর শেষ তথ্যমূলক উত্তরটা গুছিয়ে content-এ বসাও (confirmation বা প্রশ্ন নয়)। ব্যবহারকারী নিজে লেখা বলে দিলে সেটাই হুবহু গুছিয়ে রাখো। task বানানোর কথা বললে create_task, note-এর কথা বললে create_note।
+- navigate: শুধু কোনো পাতা খুলতে/দেখতে চাইলে। page: dashboard, tasks, new_task (নতুন task-এর ফাঁকা form), subjects, revisions, progress, timer, plan, jobs (job application-এর তালিকা), notes (Notes পাতা)।
 - answer: প্রশ্ন, আলাপ, পরামর্শ, মন খারাপ, সাধারণ জ্ঞান — যা কোনো app action নয়। reply-তে সরাসরি পুরো উত্তরটা দাও। পড়াশোনা নিয়ে প্রশ্নে নিচের study data ব্যবহার করে ব্যক্তিগত পরামর্শ দাও।
 - clarify: উদ্দেশ্য অস্পষ্ট, বা এমন কিছু চাইছে যা app-এ নেই (যেমন notes পাতা নেই)। reply-তে বিনয়ের সঙ্গে জানাও কী করা যায় এবং প্রশ্ন করো।
 অনুমান করে ভুল কাজ করবে না। ${languageRule(request.lang)} ${styleRule(request.voice)}
@@ -138,6 +172,8 @@ ${upcomingDays()}
 
 Topics (subject › topic): ${context.topics.map((topic) => `${topic.subject.name} › ${topic.parent ? `${topic.parent.name} › ` : ""}${topic.name}`).join("; ") || "কোনো topic নেই"}
 
+Revision তালিকা (শেষ হওয়া task, কতবার revise হয়েছে): ${context.toRevise.map((task) => `“${task.title}” (${task.timesRevised}×)`).join(", ") || "নেই"}
+
 অসমাপ্ত tasks: ${context.openTasks.map((task) => `“${task.title}”${task.subject ? ` (${task.subject.name})` : ""}`).join(", ") || "নেই"}
 
 Study data: ${JSON.stringify(studyData(context))}
@@ -147,7 +183,16 @@ Study data: ${JSON.stringify(studyData(context))}
 আগের কথোপকথন:
 ${formatHistory(history)}
 
-ব্যবহারকারীর সর্বশেষ কথা${request.voice ? " (mic থেকে, ভুল শোনা থাকতে পারে)" : ""}:
+${request.attachment ? `সংযুক্ত ফাইল: “${request.attachment.name}” (${request.attachment.mimeType === "application/pdf" ? "PDF" : "ছবি"}) — এই message-এর সাথে দেওয়া আছে। ফাইলটা মনোযোগ দিয়ে পড়ো (হাতের লেখা/বাংলা/ইংরেজি সব) এবং ব্যবহারকারী যা চায় সেটাই ফাইলের তথ্য দিয়ে করো:
+- "text বের করো / লেখাগুলো দাও" → answer, reply-তে ফাইলের লেখা হুবহু ও গুছিয়ে (অনুবাদ চাইলে অনুবাদ)।
+- প্রশ্ন বা "বুঝিয়ে দাও / সারাংশ দাও" → answer, ফাইলের তথ্যের ভিত্তিতে।
+- চাকরির circular/বিজ্ঞপ্তি থেকে apply-এর তথ্য রাখতে চাইলে → add_application (প্রতিষ্ঠান, পদগুলো, শেষ তারিখ, পরীক্ষার তারিখ, link ফাইল থেকে নাও; apply না করে থাকলে status WISHLIST)।
+- note বানাতে চাইলে → create_note (ফাইলের বিষয়বস্তু গুছিয়ে)।
+- task বানাতে চাইলে → create_task (ফাইলের তথ্য থেকে)।
+- শুধু ফাইল দিয়ে কিছু না বললে → answer: ফাইলে কী আছে ছোট করে বলো আর এটা দিয়ে কী কী করা যায় (text বের করা, note, task, job application) প্রস্তাব দাও।
+ফাইলে যা নেই তা বানিয়ে লিখবে না; পড়া না গেলে সেটা বলবে।
+
+` : ""}ব্যবহারকারীর সর্বশেষ কথা${request.voice ? " (mic থেকে, ভুল শোনা থাকতে পারে)" : ""}:
 ${request.message}${request.alternatives?.length ? `\n\nmic অন্যভাবেও শুনেছে (একই কথা, সবচেয়ে অর্থবহটা ধরো): ${request.alternatives.map((item) => `“${item}”`).join(", ")}` : ""}`;
 }
 
@@ -158,7 +203,9 @@ function describePending(pending: PendingAction | null | undefined) {
     return `নতুন task — ${JSON.stringify({ title: draft.title, description: draft.description, subject: draft.subjectName, due: draft.dueLabel, priority: draft.priority, estimatedMinutes: draft.estimatedMinutes })}`;
   }
   if (pending.kind === "complete_task") return `task শেষ করা — “${pending.title}”`;
-  return `revision যোগ — topic “${pending.topicName}”, তারিখ ${pending.dateLabel}${pending.notes ? `, notes: ${pending.notes}` : ""}`;
+  if (pending.kind === "add_application") return `job application যোগ — ${JSON.stringify(pending.draft)}`;
+  if (pending.kind === "create_note") return `note সেভ — title “${pending.title}”, লেখা: ${pending.preview.slice(0, 1500)}`;
+  return `task revise হিসেবে গোনা — “${pending.title}”`;
 }
 
 /** Lowercased words for loose matching of spoken names against saved ones. */
@@ -258,13 +305,44 @@ function completeText(title: string, lang: Lang) {
   return lang === "en" ? `Mark “${title}” as done? Say “yes” or “no”.` : `“${title}” শেষ হয়েছে বলে চিহ্নিত করবো? “হ্যাঁ” বা “না” বলো।`;
 }
 
-function revisionText(topicName: string, dateLabel: string, lang: Lang) {
-  return lang === "en" ? `Add a revision for “${topicName}” on ${dateLabel}? Say “yes” or “no”, or tell me a different day.` : `“${topicName}”-এর revision ${dateLabel}-এ যোগ করবো? “হ্যাঁ” বা “না” বলো, অথবা অন্য দিন বলো।`;
+function reviseText(title: string, timesRevised: number, lang: Lang) {
+  return lang === "en" ? `Count one more revision of “${title}” (${timesRevised} → ${timesRevised + 1})? Say “yes” or “no”.` : `“${title}” আরেকবার revise হিসেবে গুনবো (${timesRevised} → ${timesRevised + 1})? “হ্যাঁ” বা “না” বলো।`;
 }
 
 function timerText(minutes: number | null, label: string, lang: Lang) {
   if (lang === "en") return `Done — ${minutes ? `a ${minutes}-minute ` : "the "}timer is running${label ? ` for ${label}` : ""}. Focus up; I'll tell you when time's up.`;
   return `ঠিক আছে! ${label ? `${label}-এর জন্য ` : ""}${minutes ? `${minutes} মিনিটের ` : ""}timer চালু করলাম। মন দিয়ে পড়ো${minutes ? ", সময় শেষ হলে জানাবো" : ""}।`;
+}
+
+const dayPattern = /^\d{4}-\d{2}-\d{2}$/;
+
+function buildApplication(application: NonNullable<Intent["application"]>): ApplicationDraft | null {
+  const organization = application.organization?.trim().slice(0, 160);
+  if (!organization) return null;
+  const posts = [...new Set((application.posts ?? []).map((post) => post.trim()).filter(Boolean))].slice(0, 30);
+  const title = (application.title?.trim() || `${organization}${posts.length ? ` — ${posts[0]}` : ""}`).slice(0, 200);
+  const day = (value: string | null | undefined) => (value && dayPattern.test(value) && dayjs(value).isValid() ? value : "");
+  const link = application.link?.trim() ?? "";
+  return {
+    title,
+    organization,
+    location: application.location?.trim().slice(0, 160) ?? "",
+    posts,
+    sector: application.sector ?? "GOVERNMENT",
+    status: application.status ?? "APPLIED",
+    appliedAt: day(application.appliedAt),
+    deadline: day(application.deadline),
+    examDate: day(application.examDate),
+    reference: application.reference?.trim().slice(0, 120) ?? "",
+    link: /^https?:\/\//.test(link) ? link.slice(0, 500) : "",
+    notes: application.notes?.trim().slice(0, 2000) ?? "",
+  };
+}
+
+function applicationText(draft: ApplicationDraft, lang: Lang) {
+  const posts = draft.posts.join(", ");
+  if (lang === "en") return `Add “${draft.title}” at ${draft.organization}${posts ? ` (${posts})` : ""} to your job list as ${draft.sector === "GOVERNMENT" ? "government" : "non-government"}? Say “yes”, or tell me what to change.`;
+  return `“${draft.title}” (${draft.organization}${posts ? `, পদ: ${posts}` : ""}) তোমার Jobs তালিকায় ${draft.sector === "GOVERNMENT" ? "সরকারি" : "বেসরকারি"} হিসেবে যোগ করবো? “হ্যাঁ” বলো, অথবা কী বদলাতে হবে বলো।`;
 }
 
 function listChoices(names: string[], lang: Lang) {
@@ -276,16 +354,17 @@ function studyData(context: StudyContext) {
   return {
     counts: context.counts,
     pendingTasks: context.tasks.map((task) => ({ title: task.title, priority: task.priority, dueDate: task.dueDate, status: task.status, subject: task.subject?.name })),
-    todayRevisions: context.revisions.map((revision) => revision.topic.name),
+    toRevise: context.toRevise.slice(0, 20).map((task) => ({ title: task.title, timesRevised: task.timesRevised, lastRevisedAt: task.lastRevisedAt })),
   };
 }
 
-async function answer(message: string, history: ChatMessage[], context: StudyContext, voice?: boolean, lang?: "bn" | "en") {
+async function answer(userId: string, message: string, history: ChatMessage[], context: StudyContext, voice?: boolean, lang?: "bn" | "en", attachment?: AssistantRequest["attachment"]) {
+  const files = attachment ? [{ mimeType: attachment.mimeType, data: attachment.data, name: attachment.name }] : undefined;
   const basePrompt = `তুমি একজন স্বাভাবিক, বুদ্ধিমান বাংলা সহকারী। এটি একটি open-book conversation: ব্যবহারকারী পড়াশোনা ছাড়াও যেকোনো সাধারণ বা random প্রশ্ন করতে পারে। সাধারণ জ্ঞান, সাম্প্রতিক তথ্য, খবর, ব্যক্তি, জায়গা, প্রযুক্তি বা অন্য কোনো তথ্যের জন্য প্রয়োজন হলে তথ্য যাচাই করে উত্তর দাও। তুমি নিশ্চিত না হলে স্পষ্টভাবে বলবে, বানিয়ে বলবে না। ব্যবহারকারী বাংলায়, Banglish বা ইংরেজিতে লিখলেও সহজ স্বাভাবিক বাংলায় উত্তর দেবে; technical term দরকার হলে সহজ ব্যাখ্যা দেবে। কথার tone প্রসঙ্গ অনুযায়ী স্বাভাবিক, সহানুভূতিশীল, serious বা হালকা মজার হবে। আগের কথার ধারাবাহিকতা রাখবে।
 
 আগের কথোপকথন:\n${formatHistory(history)}\n\nব্যবহারকারীর বর্তমান প্রশ্ন:\n${message}\n\nঅ্যাপের ব্যক্তিগত study data (শুধু app-related প্রশ্নে ব্যবহার করবে):\n${JSON.stringify(studyData(context))}\n\n${persona}\n${languageRule(lang)} ${styleRule(voice)}`;
-  return await callGemini(`${basePrompt}\n\nপ্রয়োজন হলে Google Search ব্যবহার করে current তথ্য যাচাই করো।`, { search: true })
-    ?? await callGemini(`${basePrompt}\n\nGoogle Search এই মুহূর্তে unavailable হতে পারে। তোমার সাধারণ জ্ঞান ব্যবহার করে উত্তর দাও, তবে current তথ্য নিশ্চিত না হলে সেটা স্পষ্ট করে বলো।`);
+  return await callAI(`${basePrompt}\n\nপ্রয়োজন হলে Google Search ব্যবহার করে current তথ্য যাচাই করো।`, { search: true, files, userId, feature: "answer_search" })
+    ?? await callAI(`${basePrompt}\n\nGoogle Search এই মুহূর্তে unavailable হতে পারে। তোমার সাধারণ জ্ঞান ব্যবহার করে উত্তর দাও, তবে current তথ্য নিশ্চিত না হলে সেটা স্পষ্ট করে বলো।`, { files, userId, feature: "answer" });
 }
 
 const navigationRules: Array<{ pattern: RegExp; page: AssistantPage; reply: string }> = [
@@ -310,8 +389,8 @@ function fallbackReply(message: string, context: StudyContext, lang?: "bn" | "en
   if (/(পড়া|study|task|টাস্ক|কাজ|revision|রিভিশন|progress|প্রগ্রেস|বাকি|উচিত)/i.test(text)) {
     const firstTask = context.tasks[0]?.title;
     const reply = /(পড়া|study|উচিত)/i.test(text)
-      ? firstTask ? `চলো, এখন “${firstTask}” দিয়েই শুরু করি। আগে ২৫ মিনিট মন দিয়ে এটা পড়ো, তারপর আজকের ${context.revisions.length}টি revision থেকে একটি নাও।` : "চলো ছোট করে শুরু করি: একটি subject যোগ করো, একটি task বানাও, তারপর ২৫ মিনিট পড়ো।"
-      : `তোমার ${context.counts.completedTasks}টি task শেষ হয়েছে এবং ${context.counts.pendingTasks}টি বাকি। ${context.counts.completedRevisions}টি revision সম্পন্ন, আর ${context.counts.pendingRevisions}টি pending।`;
+      ? firstTask ? `চলো, এখন “${firstTask}” দিয়েই শুরু করি। আগে ২৫ মিনিট মন দিয়ে এটা পড়ো, তারপর তারপর revision তালিকার ${context.toRevise.length}টি task থেকে একটি revise করো।` : "চলো ছোট করে শুরু করি: একটি subject যোগ করো, একটি task বানাও, তারপর ২৫ মিনিট পড়ো।"
+      : `তোমার ${context.counts.completedTasks}টি task শেষ হয়েছে এবং ${context.counts.pendingTasks}টি বাকি। মোট ${context.counts.timesRevised} বার revise করেছ, আর ${context.counts.tasksToRevise}টি task revision তালিকায় আছে।`;
     return { type: "answer", source: "fallback", reply };
   }
   if (lang === "en") {
@@ -320,7 +399,7 @@ function fallbackReply(message: string, context: StudyContext, lang?: "bn" | "en
   return {
     type: "clarify",
     source: "fallback",
-    reply: isGeminiConfigured()
+    reply: isAIConfigured()
       ? "AI service এই মুহূর্তে সাড়া দিচ্ছে না। এখন শুধু পাতা খোলা আর progress বলতে পারি; একটু পরে আবার চেষ্টা করুন।"
       : "AI এখনো চালু করা হয়নি, তাই আমি শুধু পাতা খোলা আর progress বলতে পারি। যেমন বলুন: “task পাতা খোলো”।",
   };
@@ -335,18 +414,23 @@ export async function respond(userId: string, request: AssistantRequest): Promis
 
 async function decide(userId: string, request: AssistantRequest): Promise<AssistantReply> {
   const history = (request.history ?? []).slice(-10);
-  const [counts, tasks, revisions, subjects, openTasks, topics] = await Promise.all([
+  const [counts, tasks, toRevise, subjects, openTasks, topics] = await Promise.all([
     getProgressCounts(userId),
     getPendingTasks(userId),
-    getTodayRevisions(userId),
+    getTasksToRevise(userId, 100),
     getSubjects(userId),
     getOpenTasks(userId),
     getFlatTopics(userId),
   ]);
-  const context: StudyContext = { counts, tasks, revisions, subjects, openTasks, topics };
+  const context: StudyContext = { counts, tasks, toRevise, subjects, openTasks, topics };
   const lang = request.lang;
 
-  const raw = await callGemini(intentPrompt(request, history, context), { responseSchema: intentResponseSchema });
+  const raw = await callAI(intentPrompt(request, history, context), {
+    responseSchema: intentResponseSchema,
+    files: request.attachment ? [{ mimeType: request.attachment.mimeType, data: request.attachment.data, name: request.attachment.name }] : undefined,
+    userId,
+    feature: request.attachment ? "file_assistant" : "assistant",
+  });
   let intent: Intent | null = null;
   try { intent = raw ? intentSchema.parse(JSON.parse(raw)) : null; } catch { intent = null; }
   if (!intent) {
@@ -379,25 +463,30 @@ async function decide(userId: string, request: AssistantRequest): Promise<Assist
       reply: timerText(minutes, topic?.name ?? subjectName, lang),
     };
   }
-  if (intent.action === "add_revision") {
-    const subject = findSubject(intent.revision?.subject, subjects);
-    const { match: topic, ambiguous } = bestMatch(intent.revision?.topic, subject ? topics.filter((item) => item.subjectId === subject.id) : topics, (item) => item.name);
-    if (ambiguous.length) return { type: "clarify", reply: listChoices(ambiguous.map((item) => `${item.name} (${item.subject.name})`), lang) };
-    if (!topic) return { type: "clarify", reply: intent.reply || (lang === "en" ? "Which topic should the revision be for? It needs to be one of your saved topics." : "কোন topic-এর revision যোগ করবো? তোমার Subjects পাতায় থাকা একটা topic বলো।") };
-    const requested = intent.revision?.date && /^\d{4}-\d{2}-\d{2}$/.test(intent.revision.date) ? dayjs.tz(intent.revision.date, APP_TIMEZONE) : null;
-    const date = requested?.isValid() ? requested : now().add(1, "day").startOf("day");
-    const dateLabel = date.format("D MMM YYYY");
-    return {
-      type: "confirm",
-      action: { kind: "add_revision", topicId: topic.id, topicName: topic.name, subjectName: topic.subject.name, revisionDate: date.format("YYYY-MM-DD"), dateLabel, notes: intent.revision?.notes?.trim().slice(0, 1000) ?? "" },
-      reply: revisionText(topic.name, dateLabel, lang),
-    };
+  if (intent.action === "create_note") {
+    const content = sanitizeNoteHtml(intent.note?.content ?? "");
+    const preview = htmlToPlainText(content);
+    if (!preview) return { type: "clarify", reply: intent.reply || (lang === "en" ? "What should the note say?" : "Note-এ কী লিখবো?") };
+    const title = (intent.note?.title?.trim() || preview.split("\n")[0]).slice(0, 200);
+    const ask = lang === "en" ? `Save this as a note called “${title}”? Say “yes”, or tell me what to change.` : `“${title}” নামে note হিসেবে সেভ করবো? “হ্যাঁ” বলো, অথবা কী বদলাতে হবে বলো।`;
+    return { type: "confirm", action: { kind: "create_note", title, content, preview: preview.slice(0, 600) }, reply: ask };
+  }
+  if (intent.action === "add_application") {
+    const draft = intent.application ? buildApplication(intent.application) : null;
+    if (!draft) return { type: "clarify", reply: intent.reply || (lang === "en" ? "Which organization did you apply to, and for which post?" : "কোন প্রতিষ্ঠানে, কোন পদে apply করেছ?") };
+    return { type: "confirm", action: { kind: "add_application", draft }, reply: applicationText(draft, lang) };
+  }
+  if (intent.action === "revise_task") {
+    const { match, ambiguous } = bestMatch(intent.taskTitle, toRevise, (task) => task.title);
+    if (ambiguous.length) return { type: "clarify", reply: listChoices(ambiguous.map((task) => task.title), lang) };
+    if (!match) return { type: "clarify", reply: intent.reply || (lang === "en" ? "I couldn't find that among your finished tasks. Which task did you revise?" : "শেষ হওয়া task-গুলোর মধ্যে এটা পেলাম না। কোন task revise করেছ?") };
+    return { type: "confirm", action: { kind: "revise_task", taskId: match.id, title: match.title, timesRevised: match.timesRevised }, reply: reviseText(match.title, match.timesRevised, lang) };
   }
   if (intent.action === "clarify") {
     return { type: "clarify", reply: intent.reply || (request.lang === "en" ? "I didn't quite get that — could you say it another way?" : "কথাটা পুরোপুরি বুঝিনি। একটু অন্যভাবে বলবে?") };
   }
   // Normally the intent call already contains the answer; only ask again (with Google Search) if it came back empty.
   if (intent.reply.trim()) return { type: "answer", reply: intent.reply.trim() };
-  const reply = await answer(request.message, history, context, request.voice, request.lang);
+  const reply = await answer(userId, request.message, history, context, request.voice, request.lang, request.attachment);
   return reply ? { type: "answer", reply } : fallbackReply(request.message, context, request.lang);
 }

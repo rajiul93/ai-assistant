@@ -52,7 +52,7 @@ export function AssistantStatus({ systemListening }: { systemListening: boolean 
   }
 
   return <div role="status" aria-live="polite" key={live?.stage === "result" ? `result-${title}` : (live?.stage ?? "listening")} className={cn(
-    "assistant-in fixed left-1/2 top-29 z-50 flex w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-3 rounded-full border border-zinc-200/80 bg-white/85 py-1.5 pl-1.5 pr-5 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.25)] backdrop-blur-xl lg:top-16",
+    "assistant-in fixed left-1/2 top-[calc(4.25rem+env(safe-area-inset-top))] z-50 flex w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 items-center gap-3 rounded-full border border-zinc-200/80 bg-white/85 py-1.5 pl-1.5 pr-5 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.25)] backdrop-blur-xl lg:top-16",
     tone,
   )}>
     {indicator}

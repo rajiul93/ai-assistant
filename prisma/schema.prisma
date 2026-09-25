@@ -21,7 +21,10 @@ model User {
   topics        Topic[]
   tasks         Task[]
   studySessions StudySession[]
-  revisions     Revision[]
+  planStarts    DailyPlanStart[]
+  applications  JobApplication[]
+  notes         Note[]
+  aiUsage       AiUsage[]
 }
 
 model StudyPlan {
@@ -49,7 +52,6 @@ model Subject {
   topics        Topic[]
   tasks         Task[]
   studySessions StudySession[]
-  revisions     Revision[]
 
   @@unique([userId, name])
   @@index([userId])
@@ -70,7 +72,6 @@ model Topic {
 
   tasks         Task[]
   studySessions StudySession[]
-  revisions     Revision[]
 
   @@index([userId])
   @@index([subjectId])
@@ -104,6 +105,9 @@ model Task {
   dueDate          DateTime?
   priority         TaskPriority @default(MEDIUM)
   status           TaskStatus   @default(NOT_STARTED)
+  /// Finished (or "Revision") tasks are revised again and again; this counts how many times.
+  timesRevised     Int          @default(0)
+  lastRevisedAt    DateTime?
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
@@ -131,26 +135,95 @@ model StudySession {
   @@index([createdAt])
 }
 
-enum RevisionStatus {
-  PENDING
-  COMPLETED
+
+
+/// One row per day the user pressed "Start Today's Plan". Opening or refreshing the app never creates one.
+model DailyPlanStart {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Start of the day in the app timezone.
+  date      DateTime
+  startedAt DateTime @default(now())
+
+  @@unique([userId, date])
 }
 
-model Revision {
-  id            String         @id @default(cuid())
-  userId        String
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  topicId       String
-  topic         Topic          @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  subjectId     String?
-  subject       Subject?       @relation(fields: [subjectId], references: [id], onDelete: SetNull)
-  revisionDate  DateTime
-  status        RevisionStatus @default(PENDING)
-  notes         String?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+enum JobSector {
+  GOVERNMENT
+  NON_GOVERNMENT
+}
+
+enum ApplicationStatus {
+  WISHLIST
+  APPLIED
+  EXAM
+  INTERVIEW
+  OFFER
+  REJECTED
+  WITHDRAWN
+}
+
+model JobApplication {
+  id           String            @id @default(cuid())
+  userId       String
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Circular / job title, e.g. "Bangladesh Bank Officer (General) recruitment 2026".
+  title        String
+  organization String
+  location     String?
+  /// One circular can cover several posts; every post applied for is listed here.
+  posts        String[]          @default([])
+  sector       JobSector
+  status       ApplicationStatus @default(APPLIED)
+  appliedAt    DateTime?
+  /// Last date to apply (from the circular).
+  deadline     DateTime?
+  /// Next exam or interview date.
+  examDate     DateTime?
+  /// User ID / roll / reference number from the application portal.
+  reference    String?
+  link         String?
+  notes        String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
 
   @@index([userId])
-  @@index([userId, revisionDate])
   @@index([userId, status])
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  /// Rich text from the Quill editor, sanitized to an allowlist of tags on save (no images).
+  content   String   @default("")
+  /// Tag-free copy of `content`, for search and list previews.
+  plainText String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, updatedAt])
+}
+
+/// One row per Gemini API call (each model attempt), for the AI usage page.
+model AiUsage {
+  id           String   @id @default(cuid())
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  /// Which part of the app called the AI: assistant, answer, note_writer…
+  feature      String
+  model        String
+  /// ok, error, rate_limited, overloaded, timeout
+  status       String
+  httpStatus   Int?
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  totalTokens  Int      @default(0)
+  latencyMs    Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
 }

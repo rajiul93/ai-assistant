@@ -14,6 +14,8 @@ const pageKeywords: Array<{ page: AssistantPage; words: string[] }> = [
   { page: "progress", words: ["progress", "প্রগ্রেস", "প্রোগ্রেস", "অগ্রগতি"] },
   { page: "timer", words: ["timer", "টাইমার", "pomodoro", "পোমোডোরো"] },
   { page: "plan", words: ["plan", "প্ল্যান", "প্লান", "পরিকল্পনা", "রুটিন", "routine"] },
+  { page: "notes", words: ["notes", "note", "নোট", "নোটস", "নোটগুলো"] },
+  { page: "jobs", words: ["jobs", "job", "জব", "জবস", "চাকরি", "চাকরির", "applications", "অ্যাপ্লিকেশন"] },
 ];
 
 const refreshWords = ["reload", "refresh", "রিলোড", "রিফ্রেশ", "রিলোডে"];

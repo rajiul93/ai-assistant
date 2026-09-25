@@ -2,7 +2,8 @@ import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 
 function getAdminApp(): App {
-  const existing = getApps()[0];
+  // Look up the default app by name: auth.ts also creates a credential-less "id-token-verifier" app.
+  const existing = getApps().find((app) => app.name === "[DEFAULT]");
   if (existing) return existing;
 
   const projectId = process.env.FIREBASE_PROJECT_ID;

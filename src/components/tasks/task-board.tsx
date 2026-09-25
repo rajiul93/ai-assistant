@@ -5,7 +5,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { TaskStatus } from "@prisma/client";
-import { Plus } from "lucide-react";
+import { ListTodo, Play, Plus, RefreshCcw } from "lucide-react";
+import { RevisionManager } from "@/components/revisions/revision-manager";
+import { dueRevisionCount } from "@/lib/revisions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/select";
@@ -25,6 +27,8 @@ import { deleteTask, updateTaskStatus } from "@/server/actions/tasks";
 import { listMyTasks } from "@/server/actions/list-tasks";
 import { formatDateTime, startOfDay } from "@/lib/dayjs";
 import { cn } from "@/lib/utils";
+import { useTimerStore } from "@/store/timer";
+import { useTimerStartStore } from "@/store/timer-start";
 import type { TaskWithRelations } from "@/server/queries";
 
 const filters = [
@@ -51,6 +55,9 @@ export function TaskBoard({
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const router = useRouter();
+  // Tasks and revisions share one page; the tab lives in the URL (?view=revisions) so links and voice can open it.
+  const view = searchParams.get("view") === "revisions" ? "revisions" : "tasks";
+  const setView = (next: "tasks" | "revisions") => router.replace(next === "revisions" ? "/tasks?view=revisions" : "/tasks", { scroll: false });
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterId>("ALL");
   const [sort, setSort] = useState<"dueDate" | "priority" | "createdAt">("dueDate");
@@ -71,6 +78,9 @@ export function TaskBoard({
   });
 
   const [now] = useState(() => Date.now());
+  const openTaskCount = tasksQuery.data.filter((task) => task.status !== "FINISHED").length;
+  // Finished tasks never revised or not revised for a week — the number to act on.
+  const dueRevisions = dueRevisionCount(tasksQuery.data, now);
 
   const visible = useMemo(() => {
     const tasks = tasksQuery.data ?? [];
@@ -112,6 +122,25 @@ export function TaskBoard({
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const timerRunning = useTimerStore((state) => state.running);
+
+  /** Study a task: pick/confirm its subject and a goal, then the session bar takes over. */
+  function startStudying(task?: TaskWithRelations) {
+    if (useTimerStore.getState().running) {
+      toast.info("A study session is already running — save it from the bar at the bottom first.");
+      return;
+    }
+    useTimerStartStore.getState().open({
+      suggestedSubjectId: task?.subjectId ?? undefined,
+      topicId: task?.topicId ?? undefined,
+      label: task?.title,
+      taskId: task?.id,
+      onStarted: task && task.status === "NOT_STARTED"
+        ? async () => { await updateTaskStatus(task.id, "IN_PROGRESS"); await queryClient.invalidateQueries({ queryKey: ["tasks"] }); }
+        : undefined,
+    });
+  }
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteTask(id),
     onSuccess: async () => {
@@ -128,14 +157,49 @@ export function TaskBoard({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Tasks</h1>
-          <p className="mt-1 text-sm text-zinc-500">Create, filter, and finish your preparation work.</p>
+          <p className="mt-1 text-sm text-zinc-500">{view === "tasks" ? "Create, filter, and finish your preparation work." : "Finished tasks to revise — tap + each time you revise one."}</p>
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="size-4" />
-          Add Task
-        </Button>
+        {view === "tasks" ? (
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => startStudying()} disabled={timerRunning} className="flex-1 sm:flex-none">
+              <Play className="size-4" />
+              Start session
+            </Button>
+            <Button onClick={() => setCreateOpen(true)} className="flex-1 sm:flex-none">
+              <Plus className="size-4" />
+              Add Task
+            </Button>
+          </div>
+        ) : null}
       </div>
 
+      <div role="tablist" aria-label="Tasks or revisions" className="grid grid-cols-2 gap-1 rounded-xl bg-zinc-100 p-1 sm:inline-grid sm:w-80">
+        {([
+          { id: "tasks", label: "Tasks", icon: ListTodo, count: openTaskCount },
+          { id: "revisions", label: "Revisions", icon: RefreshCcw, count: dueRevisions },
+        ] as const).map((tab) => {
+          const Icon = tab.icon;
+          const active = view === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setView(tab.id)}
+              className={cn("flex min-h-10 items-center justify-center gap-2 rounded-lg text-sm font-medium transition", active ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-500 hover:text-zinc-800")}
+            >
+              <Icon className="size-4" />
+              {tab.label}
+              {tab.count ? (
+                <span className={cn("min-w-5 rounded-full px-1.5 text-[11px] font-semibold tabular-nums", tab.id === "revisions" ? "bg-amber-100 text-amber-800" : "bg-zinc-200 text-zinc-700")}>{tab.count}</span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+
+      {view === "tasks" ? <>
       <div className="space-y-3">
         <Input
           placeholder="Search tasks, subjects, topics"
@@ -195,6 +259,12 @@ export function TaskBoard({
                   ) : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  {task.status !== "FINISHED" ? (
+                    <Button size="sm" onClick={() => startStudying(task)} disabled={timerRunning} className="h-10 sm:h-8">
+                      <Play className="size-3.5" />
+                      Start
+                    </Button>
+                  ) : null}
                   <NativeSelect
                     className="w-auto"
                     value={task.status}
@@ -210,10 +280,10 @@ export function TaskBoard({
                     <option value="FINISHED">Finished</option>
                     <option value="REVISION">Revision</option>
                   </NativeSelect>
-                  <Button variant="outline" size="sm" onClick={() => setEditing(task)}>
+                  <Button variant="outline" size="sm" onClick={() => setEditing(task)} className="h-10 sm:h-8">
                     Edit
                   </Button>
-                  <Button variant="outline" size="sm" onClick={() => setDeleting(task)}>
+                  <Button variant="outline" size="sm" onClick={() => setDeleting(task)} className="h-10 sm:h-8">
                     Delete
                   </Button>
                 </div>
@@ -221,6 +291,9 @@ export function TaskBoard({
             </article>
           ))}
         </div>
+      )}
+      </> : (
+        <RevisionManager tasks={tasksQuery.data} todayMs={now} />
       )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

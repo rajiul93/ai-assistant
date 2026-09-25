@@ -42,5 +42,5 @@ export async function saveStudySession(input: unknown) {
 
   revalidatePath("/dashboard");
   revalidatePath("/progress");
-  revalidatePath("/timer");
+  revalidatePath("/tasks");
 }

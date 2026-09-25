@@ -7,10 +7,12 @@ import { assistantStrings } from "@/lib/assistant-i18n";
 import type { AssistantReply, PendingAction, TimerStart } from "@/lib/assistant-types";
 import { matchQuickCommand } from "@/lib/quick-commands";
 import { speak } from "@/lib/voice";
-import { createRevision } from "@/server/actions/revisions";
-import { createTask, updateTaskStatus } from "@/server/actions/tasks";
+import { createApplication } from "@/server/actions/applications";
+import { createNote } from "@/server/actions/notes";
+import { changeTaskRevisionCount, createTask, updateTaskStatus } from "@/server/actions/tasks";
 import { findPendingAction, useAssistantStore } from "@/store/assistant";
 import { useTimerStore } from "@/store/timer";
+import { useTimerStartStore } from "@/store/timer-start";
 
 // A reply to a waiting card is a confirmation when every word is a "yes/do it" word, e.g.
 // "হ্যাঁ", "ঠিক আছে, সেভ করো", "ok save it", "yes please". Anything else goes to the AI.
@@ -76,15 +78,28 @@ export function useAssistant() {
       await updateTaskStatus(action.taskId, "FINISHED");
       return { status: s.completedStatus(action.title), reply: s.completedReply(action.title) };
     }
-    await createRevision({ topicId: action.topicId, revisionDate: action.revisionDate, notes: action.notes });
-    return { status: s.revisionAddedStatus(action.topicName), reply: s.revisionAddedReply(action.topicName, action.dateLabel) };
+    if (action.kind === "create_note") {
+      await createNote({ title: action.title, content: action.content });
+      await queryClient.invalidateQueries({ queryKey: ["notes"] });
+      return { status: s.noteAddedStatus(action.title), reply: s.noteAddedReply(action.title) };
+    }
+    if (action.kind === "add_application") {
+      await createApplication(action.draft);
+      await queryClient.invalidateQueries({ queryKey: ["applications"] });
+      return { status: s.applicationAddedStatus(action.draft.title), reply: s.applicationAddedReply(action.draft.title) };
+    }
+    const times = await changeTaskRevisionCount(action.taskId, 1);
+    await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    return { status: s.revisedStatus(action.title, times), reply: s.revisedReply(action.title, times) };
   }
 
   function progressText(action: PendingAction) {
     const s = strings();
     if (action.kind === "create_task") return s.savingTask(action.draft.title);
     if (action.kind === "complete_task") return s.completingTask(action.title);
-    return s.addingRevision(action.topicName);
+    if (action.kind === "add_application") return s.addingApplication(action.draft.title);
+    if (action.kind === "create_note") return s.addingNote(action.title);
+    return s.revising(action.title);
   }
 
   async function confirmAction({ voice }: SendOptions = {}) {
@@ -124,7 +139,7 @@ export function useAssistant() {
     const s = strings();
     const store = useAssistantStore.getState();
     const clock = useTimerStore.getState();
-    router.push("/timer");
+    router.push("/tasks");
     if (clock.running) {
       const text = s.timerAlreadyRunning;
       store.add({ role: "assistant", text });
@@ -132,7 +147,16 @@ export function useAssistant() {
       if (voice) speak(text);
       return;
     }
+    // Every session needs a subject: without one from the voice command, ask with the picker.
+    if (!timer.subjectId) {
+      useTimerStartStore.getState().open({ minutes: timer.minutes, topicId: timer.topicId });
+      store.add({ role: "assistant", text: s.pickerAskVoice, source: "ai" });
+      store.setLive({ stage: "result", tone: "ok", text: s.pickerTitle });
+      if (voice) speak(s.pickerAskVoice);
+      return;
+    }
     clock.setContext(timer.subjectId, timer.topicId);
+    clock.setLabel(timer.topicName || timer.subjectName);
     clock.setTarget(timer.minutes);
     clock.start();
     store.add({ role: "assistant", text: reply, source: "ai" });
@@ -141,14 +165,16 @@ export function useAssistant() {
   }
 
   async function send(text: string, { voice, alternatives = [] }: SendOptions = {}) {
-    const message = text.trim();
     const store = useAssistantStore.getState();
     const s = strings();
+    const attachment = store.attachment;
+    // A file alone is a request too: "tell me what's in this".
+    const message = text.trim() || (attachment ? s.attachmentDefaultAsk : "");
     if (!message) return;
 
     // Page jumps, refresh and back run instantly — even while the AI is still busy with something else.
     // Every way the mic heard the sentence is checked, so one misheard word doesn't break the command.
-    const quick = matchQuickCommand([message, ...alternatives]);
+    const quick = text.trim() ? matchQuickCommand([message, ...alternatives]) : null;
     if (quick) {
       const reply = quick.kind === "navigate" ? s.quick[quick.page] : s.quick[quick.kind];
       store.add({ role: "user", text: message, viaVoice: voice });
@@ -167,7 +193,7 @@ export function useAssistant() {
 
     const pending = findPendingAction(store.entries);
     const history = store.entries.slice(-10).map(({ role, text: entryText }) => ({ role, text: entryText }));
-    store.add({ role: "user", text: message, viaVoice: voice });
+    store.add({ role: "user", text: message, viaVoice: voice, attachmentName: attachment?.name });
     // Spoken requests open the chat, so the user can read what was heard and what the assistant answers.
     if (voice) store.setOpen(true);
 
@@ -183,7 +209,15 @@ export function useAssistant() {
       const response = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, alternatives, history, pending: pending?.action ?? null, voice: Boolean(voice), lang: store.lang }),
+        body: JSON.stringify({
+          message,
+          alternatives,
+          history,
+          pending: pending?.action ?? null,
+          voice: Boolean(voice),
+          lang: store.lang,
+          attachment: attachment ? { name: attachment.name, mimeType: attachment.mimeType, data: attachment.data } : null,
+        }),
       });
       if (!response.ok) throw new Error("assistant request failed");
       result = (await response.json()) as AssistantReply;
