@@ -51,6 +51,8 @@ model Subject {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name      String
+  /// Order on the Subjects page (drag and drop); lower first.
+  position  Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -72,6 +74,8 @@ model Topic {
   parent    Topic?   @relation("TopicTree", fields: [parentId], references: [id], onDelete: Cascade)
   children  Topic[]  @relation("TopicTree")
   name      String
+  /// Order among topics with the same parent (drag and drop); lower first.
+  position  Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -120,6 +124,8 @@ model Task {
   dueDate          DateTime?
   priority         TaskPriority @default(MEDIUM)
   status           TaskStatus   @default(NOT_STARTED)
+  /// The user's own order on the Tasks page (drag and drop); lower first.
+  position         Int          @default(0)
   /// Finished (or "Revision") tasks are revised again and again; this counts how many times.
   timesRevised     Int          @default(0)
   lastRevisedAt    DateTime?
@@ -196,9 +202,14 @@ model JobApplication {
   deadline     DateTime?
   /// Next exam or interview date.
   examDate     DateTime?
-  /// User ID / roll / reference number from the application portal.
+  /// User ID from the application portal.
   reference    String?
+  /// Roll number (usually on the admit card).
+  roll         String?
+  /// Portal password, kept as plain text so the user can look it up here later.
+  password     String?
   link         String?
+  /// Everything else from the applicant copy, as sanitized Quill HTML (older rows may be plain text).
   notes        String?
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt

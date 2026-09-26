@@ -98,5 +98,22 @@ export async function POST(request: Request) {
         : lang === "en" ? "To use the AI, send an access request to an admin from the assistant." : "AI ব্যবহার করতে assistant থেকে admin-এর কাছে access request পাঠাও।";
     return NextResponse.json({ type: "clarify", source: "fallback", reply, aiLocked: true });
   }
-  return NextResponse.json(await respond(user.id, parsed.data));
+  // Newline-delimited JSON: {"type":"delta","text"} while the answer is being written (so the page
+  // can show and speak it sentence by sentence), then one {"type":"final","reply"}.
+  const request_ = parsed.data;
+  const encoder = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const write = (line: object) => controller.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
+      try {
+        const reply = await respond(user.id, request_, { onReplyDelta: (text) => write({ type: "delta", text }) });
+        write({ type: "final", reply });
+      } catch (error) {
+        console.warn("[assistant] failed:", error);
+        write({ type: "final", reply: { type: "clarify", source: "fallback", reply: request_.lang === "en" ? "Something went wrong. Please try again." : "কিছু একটা গোলমাল হয়েছে, আবার বলো।" } });
+      }
+      controller.close();
+    },
+  });
+  return new Response(body, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store, no-transform", "X-Accel-Buffering": "no" } });
 }

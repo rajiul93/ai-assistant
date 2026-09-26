@@ -115,6 +115,18 @@ body {
   }
 }
 
+/* Paired date fields (Study plan) are too narrow at 16px; they open a picker rather than a keyboard. */
+@media (max-width: 767px) {
+  input[type="date"].compact-date { font-size: 14px; }
+}
+input[type="date"].compact-date::-webkit-calendar-picker-indicator {
+  width: 14px;
+  height: 14px;
+  margin-left: 2px;
+  padding: 0;
+  opacity: 0.55;
+}
+
 html {
   -webkit-tap-highlight-color: transparent;
 }
@@ -216,3 +228,17 @@ html {
   .note-editor .ql-container.ql-snow { border: 0; }
   .note-editor .ql-editor { min-height: 55dvh; padding: 1rem 0; font-size: 16px; }
 }
+
+/* Job application details: Quill HTML shown read-only (see components/jobs/application-board.tsx). */
+.application-details.ql-editor {
+  height: auto;
+  overflow: visible;
+  padding: 0.5rem 0.75rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: var(--color-zinc-700);
+}
+.application-details.ql-editor h2 { font-size: 1rem; font-weight: 600; margin: 0.75rem 0 0.25rem; color: var(--color-zinc-900); }
+.application-details.ql-editor h3 { font-size: 0.9rem; font-weight: 600; margin: 0.75rem 0 0.25rem; color: var(--color-zinc-900); }
+.application-details.ql-editor > :first-child { margin-top: 0; }
+.application-details.ql-editor li { padding-left: 1.25em; }

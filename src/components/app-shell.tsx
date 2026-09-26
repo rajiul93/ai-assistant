@@ -110,7 +110,7 @@ export function AppShell({
         <SubjectPickerDialog />
         <SessionBar />
         {/* Bottom padding leaves room for the tab bar and a running session bar. */}
-        <main className="mx-auto w-full max-w-6xl px-4 py-6 pb-[calc(11rem+env(safe-area-inset-bottom))] lg:px-8 lg:py-10 lg:pb-28">
+        <main className="mx-auto w-full max-w-6xl px-4 pt-4 sm:pt-6 pb-[calc(11rem+env(safe-area-inset-bottom))] lg:px-8 lg:py-10 lg:pb-28">
           {children}
         </main>
 

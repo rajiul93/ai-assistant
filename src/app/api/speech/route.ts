@@ -2,6 +2,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { checkAi } from "@/server/ai-access";
 import { logUsage } from "@/server/assistant/ai";
+import { audioFromEvents } from "@/server/speech-stream";
 
 const TTS_MODEL = process.env.OPENAI_TTS_MODEL || "gpt-4o-mini-tts-2025-12-15";
 const TTS_VOICE = process.env.OPENAI_TTS_VOICE || "marin";
@@ -14,19 +15,23 @@ const instructions = {
   en: "You are a warm, friendly study companion. Speak natural, conversational English like a real person talking to a friend — smooth and fluent from start to end, natural intonation, only brief pauses at sentence ends, never robotic or halting.",
 };
 
-/** Turns the assistant's reply into natural-sounding speech (MP3). The browser voice is the fallback. */
-export async function POST(request: Request) {
-  const user = await requireUser();
+/**
+ * Turns text into natural-sounding speech (MP3), streamed: each piece of audio is sent on as soon as
+ * OpenAI produces it, so the browser can start playing about a second in instead of waiting for the
+ * whole clip. GET (text in the URL) lets an <audio> element play the stream directly; POST is for
+ * fetching a clip ahead of time. The browser's own voice is the fallback when this fails.
+ */
+async function speech(user: { id: string; email: string }, input: unknown) {
   // Without AI access (or with the token limit used up) the page falls back to the device's own voice.
   if (!(await checkAi(user)).allowed) return new Response(null, { status: 403 });
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return new Response(null, { status: 503 });
-  const parsed = requestSchema.safeParse(await request.json().catch(() => null));
+  const parsed = requestSchema.safeParse(input);
   if (!parsed.success) return new Response(null, { status: 400 });
 
   const started = Date.now();
-  // gpt-4o TTS models can stream as events, which end with the token usage; tts-1 only returns raw audio.
-  const withUsage = !TTS_MODEL.startsWith("tts-1");
+  // gpt-4o TTS models stream as events (audio pieces, then the token usage); tts-1 returns raw audio.
+  const withEvents = !TTS_MODEL.startsWith("tts-1");
   const response = await fetch("https://api.openai.com/v1/audio/speech", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
@@ -35,51 +40,35 @@ export async function POST(request: Request) {
       voice: TTS_VOICE,
       input: parsed.data.text,
       response_format: "mp3",
-      ...(withUsage ? { instructions: instructions[parsed.data.lang], stream_format: "sse" } : {}),
+      ...(withEvents ? { instructions: instructions[parsed.data.lang], stream_format: "sse" } : {}),
     }),
     signal: AbortSignal.timeout(20_000),
   }).catch((error: unknown) => {
     console.warn("[speech] request failed:", error);
     return null;
   });
-  if (!response?.ok) {
+  if (!response?.ok || !response.body) {
     logUsage({ userId: user.id, feature: "speech", model: TTS_MODEL, httpStatus: response?.status ?? null, timedOut: !response, latencyMs: Date.now() - started });
     if (response) console.warn(`[speech] ${TTS_MODEL}: HTTP ${response.status} ${(await response.text().catch(() => "")).slice(0, 300)}`);
-    return new Response(null, { status: response?.status ?? 504 });
+    return new Response(null, { status: response?.status || 504 });
   }
-
-  let audio: Buffer;
-  let usage: { input: number; output: number; total: number } | undefined;
-  try {
-    if (withUsage) ({ audio, usage } = await readSpeechEvents(await response.text()));
-    else audio = Buffer.from(await response.arrayBuffer());
-  } catch (error) {
-    console.warn("[speech] couldn't read the audio:", error);
-    logUsage({ userId: user.id, feature: "speech", model: TTS_MODEL, httpStatus: null, latencyMs: Date.now() - started });
-    return new Response(null, { status: 502 });
+  const headers = { "Content-Type": "audio/mpeg", "Cache-Control": "no-store", "X-Accel-Buffering": "no" };
+  if (!withEvents) {
+    logUsage({ userId: user.id, feature: "speech", model: TTS_MODEL, httpStatus: 200, latencyMs: Date.now() - started });
+    return new Response(response.body, { headers });
   }
-  logUsage({ userId: user.id, feature: "speech", model: TTS_MODEL, httpStatus: 200, latencyMs: Date.now() - started, usage });
-  return new Response(new Uint8Array(audio), { headers: { "Content-Type": "audio/mpeg", "Cache-Control": "no-store" } });
+  return new Response(audioFromEvents(response.body, (usage) => {
+    logUsage({ userId: user.id, feature: "speech", model: TTS_MODEL, httpStatus: usage ? 200 : null, latencyMs: Date.now() - started, usage });
+  }), { headers });
 }
 
-type SpeechEvent = { type?: string; audio?: string; usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number } };
+export async function GET(request: Request) {
+  const user = await requireUser();
+  const url = new URL(request.url);
+  return speech(user, { text: url.searchParams.get("text") ?? "", lang: url.searchParams.get("lang") ?? "bn" });
+}
 
-/** Joins the streamed MP3 chunks and picks up the token usage sent with the final event. */
-function readSpeechEvents(body: string) {
-  const chunks: Buffer[] = [];
-  let usage: { input: number; output: number; total: number } | undefined;
-  for (const line of body.split(/\r?\n/)) {
-    if (!line.startsWith("data:")) continue;
-    const data = line.slice(5).trim();
-    if (!data || data === "[DONE]") continue;
-    const event = JSON.parse(data) as SpeechEvent;
-    if (event.type === "speech.audio.delta" && event.audio) chunks.push(Buffer.from(event.audio, "base64"));
-    if (event.type === "speech.audio.done" && event.usage) {
-      const input = event.usage.input_tokens ?? 0;
-      const output = event.usage.output_tokens ?? 0;
-      usage = { input, output, total: event.usage.total_tokens ?? input + output };
-    }
-  }
-  if (chunks.length === 0) throw new Error("no audio in the response");
-  return { audio: Buffer.concat(chunks), usage };
+export async function POST(request: Request) {
+  const user = await requireUser();
+  return speech(user, await request.json().catch(() => null));
 }
