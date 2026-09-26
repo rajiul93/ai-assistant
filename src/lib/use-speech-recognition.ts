@@ -63,18 +63,17 @@ export function useSpeechRecognition({ continuous = false, onResult, onInterim, 
     let heardThisSession = false;
     let silentSessions = 0;
     let lastFinal = { text: "", at: 0 };
-    let pausedForSpeech = false;
-    // Phones finalise a sentence late, after the reply has finished, so ignoring results while the
-    // assistant talks isn't enough: close the session and reopen it once the speaker is quiet.
-    const unsubscribeSpeak = continuous ? onAssistantSpeak(() => {
+    // Phones finalise a sentence late, after the reply has finished, so a session that overlapped the
+    // assistant's voice is dropped whole; the next session opens only once the speaker is quiet.
+    let spokeOverSession = false;
+    const unsubscribeSpeak = continuous && mobile ? onAssistantSpeak(() => {
       if (recognitionRef.current !== recognition) { unsubscribeSpeak?.(); return; }
-      pausedForSpeech = true;
-      recognition.abort();
+      spokeOverSession = true;
     }) : null;
 
     recognition.onresult = (event) => {
       // Ignore the assistant's own voice coming back through the speakers.
-      if (continuous && isAssistantSpeaking()) return;
+      if (continuous && (isAssistantSpeaking() || spokeOverSession)) return;
       let interim = "";
       for (let index = event.resultIndex; index < event.results.length; index++) {
         const result = event.results[index];
@@ -115,15 +114,9 @@ export function useSpeechRecognition({ continuous = false, onResult, onInterim, 
     };
     recognition.onend = () => {
       if (recognitionRef.current !== recognition) { unsubscribeSpeak?.(); return; }
-      if (pausedForSpeech) {
-        // Closed on purpose for the reply; not a silent session.
-        pausedForSpeech = false;
-        heardThisSession = false;
-        if (wantedRef.current) { window.setTimeout(restart, 300); return; }
-        finish();
-        return;
-      }
-      silentSessions = heardThisSession ? 0 : silentSessions + 1;
+      // A session the assistant talked over isn't the user being silent.
+      silentSessions = heardThisSession || spokeOverSession ? 0 : silentSessions + 1;
+      spokeOverSession = false;
       heardThisSession = false;
       if (continuous && wantedRef.current) {
         if (mobile && silentSessions >= MOBILE_SILENT_SESSIONS) { finish("voice-paused"); return; }
