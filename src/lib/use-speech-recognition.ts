@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { speechLangs } from "@/lib/assistant-i18n";
 import { useAssistantStore } from "@/store/assistant";
-import { getRecognitionConstructor, isAssistantSpeaking, isFatalVoiceError, isMobileDevice, stopSpeaking, voiceErrorMessage, type Recognition, type VoiceError } from "@/lib/voice";
+import { getRecognitionConstructor, isAssistantSpeaking, isFatalVoiceError, isMobileDevice, onAssistantSpeak, stopSpeaking, voiceErrorMessage, type Recognition, type VoiceError } from "@/lib/voice";
 
 /** On phones, stop auto-restarting after this many silent sessions in a row: each restart plays a chime. */
 const MOBILE_SILENT_SESSIONS = 3;
@@ -63,6 +63,14 @@ export function useSpeechRecognition({ continuous = false, onResult, onInterim, 
     let heardThisSession = false;
     let silentSessions = 0;
     let lastFinal = { text: "", at: 0 };
+    let pausedForSpeech = false;
+    // Phones finalise a sentence late, after the reply has finished, so ignoring results while the
+    // assistant talks isn't enough: close the session and reopen it once the speaker is quiet.
+    const unsubscribeSpeak = continuous ? onAssistantSpeak(() => {
+      if (recognitionRef.current !== recognition) { unsubscribeSpeak?.(); return; }
+      pausedForSpeech = true;
+      recognition.abort();
+    }) : null;
 
     recognition.onresult = (event) => {
       // Ignore the assistant's own voice coming back through the speakers.
@@ -93,6 +101,7 @@ export function useSpeechRecognition({ continuous = false, onResult, onInterim, 
       fail(event.error);
     };
     const finish = (code?: string) => {
+      unsubscribeSpeak?.();
       recognitionRef.current = null;
       wantedRef.current = false;
       setListening(false);
@@ -105,12 +114,20 @@ export function useSpeechRecognition({ continuous = false, onResult, onInterim, 
       try { recognition.start(); } catch { finish(); }
     };
     recognition.onend = () => {
-      if (recognitionRef.current !== recognition) return;
+      if (recognitionRef.current !== recognition) { unsubscribeSpeak?.(); return; }
+      if (pausedForSpeech) {
+        // Closed on purpose for the reply; not a silent session.
+        pausedForSpeech = false;
+        heardThisSession = false;
+        if (wantedRef.current) { window.setTimeout(restart, 300); return; }
+        finish();
+        return;
+      }
       silentSessions = heardThisSession ? 0 : silentSessions + 1;
       heardThisSession = false;
       if (continuous && wantedRef.current) {
         if (mobile && silentSessions >= MOBILE_SILENT_SESSIONS) { finish("voice-paused"); return; }
-        if (mobile) { window.setTimeout(restart, 400); return; }
+        if (mobile || isAssistantSpeaking()) { window.setTimeout(restart, 400); return; }
         try { recognition.start(); return; } catch { /* fall through and stop */ }
       } else if (retryOnEnd) {
         retryOnEnd = false;
@@ -124,6 +141,7 @@ export function useSpeechRecognition({ continuous = false, onResult, onInterim, 
     try {
       recognition.start();
     } catch {
+      unsubscribeSpeak?.();
       recognitionRef.current = null;
       wantedRef.current = false;
       fail("start-failed");
