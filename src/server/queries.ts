@@ -220,8 +220,9 @@ export async function getSubjectAnalysis(userId: string, from: Date | null, to: 
   return [...stats.values()].sort((a, b) => b.seconds - a.seconds || a.name.localeCompare(b.name));
 }
 
-export type AiUsageBreakdown = { key: string; requests: number; tokens: number };
-export type AiUserUsage = { userId: string | null; name: string; email: string; requests: number; failed: number; tokens: number; lastUsedAt: Date | null };
+type TokenCounts = { tokens: number; inputTokens: number; outputTokens: number };
+export type AiUsageBreakdown = { key: string; requests: number } & TokenCounts;
+export type AiUserUsage = { userId: string | null; name: string; email: string; requests: number; failed: number; lastUsedAt: Date | null } & TokenCounts;
 
 /**
  * AI usage for the usage page. `userId` limits it to one user; omit it (admins only) for everyone.
@@ -240,7 +241,7 @@ export async function getAiUsage({ userId, from }: { userId?: string; from: Date
       by: ["userId"],
       where,
       _count: { _all: true },
-      _sum: { totalTokens: true },
+      _sum: { totalTokens: true, inputTokens: true, outputTokens: true },
       _max: { createdAt: true },
     }),
   ]);
@@ -256,9 +257,11 @@ export async function getAiUsage({ userId, from }: { userId?: string; from: Date
   const group = (key: (row: (typeof rows)[number]) => string): AiUsageBreakdown[] => {
     const map = new Map<string, AiUsageBreakdown>();
     for (const row of rows) {
-      const entry = map.get(key(row)) ?? { key: key(row), requests: 0, tokens: 0 };
+      const entry = map.get(key(row)) ?? { key: key(row), requests: 0, tokens: 0, inputTokens: 0, outputTokens: 0 };
       entry.requests += 1;
       entry.tokens += row.totalTokens;
+      entry.inputTokens += row.inputTokens;
+      entry.outputTokens += row.outputTokens;
       map.set(entry.key, entry);
     }
     return [...map.values()].sort((a, b) => b.requests - a.requests);
@@ -266,14 +269,16 @@ export async function getAiUsage({ userId, from }: { userId?: string; from: Date
 
   const firstDay = startOfDay(from ?? rows[0]?.createdAt ?? new Date());
   const today = startOfDay();
-  const daily: Array<{ day: string; requests: number; tokens: number; failed: number }> = [];
-  for (let day = firstDay; !day.isAfter(today); day = day.add(1, "day")) daily.push({ day: day.format("YYYY-MM-DD"), requests: 0, tokens: 0, failed: 0 });
+  const daily: Array<{ day: string; requests: number; failed: number } & TokenCounts> = [];
+  for (let day = firstDay; !day.isAfter(today); day = day.add(1, "day")) daily.push({ day: day.format("YYYY-MM-DD"), requests: 0, tokens: 0, inputTokens: 0, outputTokens: 0, failed: 0 });
   const dayIndex = new Map(daily.map((entry, index) => [entry.day, index]));
   for (const row of rows) {
     const bucket = daily[dayIndex.get(startOfDay(row.createdAt).format("YYYY-MM-DD")) ?? -1];
     if (!bucket) continue;
     bucket.requests += 1;
     bucket.tokens += row.totalTokens;
+    bucket.inputTokens += row.inputTokens;
+    bucket.outputTokens += row.outputTokens;
     if (row.status !== "ok") bucket.failed += 1;
   }
 
@@ -288,6 +293,8 @@ export async function getAiUsage({ userId, from }: { userId?: string; from: Date
         requests: row._count._all,
         failed: failed.get(row.userId) ?? 0,
         tokens: row._sum.totalTokens ?? 0,
+        inputTokens: row._sum.inputTokens ?? 0,
+        outputTokens: row._sum.outputTokens ?? 0,
         lastUsedAt: row._max.createdAt,
       };
     })

@@ -21,7 +21,7 @@ const featureLabels: Record<string, string> = {
 const statusLabels: Record<string, string> = {
   ok: "Succeeded",
   rate_limited: "Quota limit (429)",
-  overloaded: "Google busy (503)",
+  overloaded: "OpenAI busy (503)",
   timeout: "Timed out",
   error: "Other error",
 };
@@ -38,11 +38,12 @@ function Breakdown({ title, rows, labels }: { title: string; rows: AiUsageBreakd
   return <section className="rounded-2xl border border-zinc-200 bg-white p-5">
     <h2 className="text-sm font-semibold">{title}</h2>
     {rows.length === 0 ? <p className="mt-4 text-sm text-zinc-500">No calls yet.</p> : <ul className="mt-4 space-y-3">
-      {rows.map((row) => <li key={row.key} title={`${labels?.[row.key] ?? row.key}: ${number(row.requests)} requests · ${number(row.tokens)} tokens`}>
+      {rows.map((row) => <li key={row.key} title={`${labels?.[row.key] ?? row.key}: ${number(row.requests)} requests · ${number(row.inputTokens)} input · ${number(row.outputTokens)} output tokens`}>
         <div className="flex items-baseline justify-between gap-3 text-sm">
           <span className="truncate">{labels?.[row.key] ?? row.key}</span>
           <span className="shrink-0 tabular-nums"><span className="font-semibold">{number(row.requests)}</span><span className="ml-2 text-xs text-zinc-500">{compact(row.tokens)} tokens</span></span>
         </div>
+        <p className="mt-0.5 text-right text-[11px] tabular-nums text-zinc-500">{compact(row.inputTokens)} in · {compact(row.outputTokens)} out</p>
         <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-zinc-100"><div className="h-full rounded-full bg-zinc-900" style={{ width: `${(row.requests / max) * 100}%` }} /></div>
       </li>)}
     </ul>}
@@ -67,7 +68,7 @@ function DailyChart({ daily }: { daily: Awaited<ReturnType<typeof getAiUsage>>["
         )}>
           <p className="font-semibold">{label(day.day)}</p>
           <p>{number(day.requests)} requests{day.failed ? ` · ${day.failed} failed` : ""}</p>
-          <p className="text-white/70">{number(day.tokens)} tokens</p>
+          <p className="text-white/70">{number(day.inputTokens)} in · {number(day.outputTokens)} out</p>
         </div>
       </div>)}
     </div>
@@ -77,8 +78,8 @@ function DailyChart({ daily }: { daily: Awaited<ReturnType<typeof getAiUsage>>["
     </div>
     <table className="sr-only">
       <caption>Requests per day</caption>
-      <thead><tr><th>Day</th><th>Requests</th><th>Failed</th><th>Tokens</th></tr></thead>
-      <tbody>{daily.map((day) => <tr key={day.day}><td>{label(day.day)}</td><td>{day.requests}</td><td>{day.failed}</td><td>{day.tokens}</td></tr>)}</tbody>
+      <thead><tr><th>Day</th><th>Requests</th><th>Failed</th><th>Input tokens</th><th>Output tokens</th></tr></thead>
+      <tbody>{daily.map((day) => <tr key={day.day}><td>{label(day.day)}</td><td>{day.requests}</td><td>{day.failed}</td><td>{day.inputTokens}</td><td>{day.outputTokens}</td></tr>)}</tbody>
     </table>
   </section>;
 }
@@ -88,13 +89,15 @@ function UserTable({ users, showEmail }: { users: AiUserUsage[]; showEmail: bool
   return <section className="rounded-2xl border border-zinc-200 bg-white p-5">
     <h2 className="text-sm font-semibold">Usage by user</h2>
     {users.length === 0 ? <p className="mt-4 text-sm text-zinc-500">No AI calls in this period.</p> : <div className="mt-4 overflow-x-auto">
-      <table className="w-full min-w-[36rem] text-sm">
+      <table className="w-full min-w-[44rem] text-sm">
         <thead className="text-left text-xs text-zinc-500">
           <tr className="border-b border-zinc-100">
             <th className="py-2 pr-4 font-medium">User</th>
             <th className="py-2 pr-4 font-medium">Requests</th>
             <th className="py-2 pr-4 text-right font-medium">Failed</th>
-            <th className="py-2 pr-4 text-right font-medium">Tokens</th>
+            <th className="py-2 pr-4 text-right font-medium">Input</th>
+            <th className="py-2 pr-4 text-right font-medium">Output</th>
+            <th className="py-2 pr-4 text-right font-medium">Total tokens</th>
             <th className="py-2 text-right font-medium">Last used</th>
           </tr>
         </thead>
@@ -111,7 +114,9 @@ function UserTable({ users, showEmail }: { users: AiUserUsage[]; showEmail: bool
               </div>
             </td>
             <td className={cn("py-2.5 pr-4 text-right tabular-nums", user.failed ? "text-amber-700" : "text-zinc-500")}>{number(user.failed)}</td>
-            <td className="py-2.5 pr-4 text-right tabular-nums">{number(user.tokens)}</td>
+            <td className="py-2.5 pr-4 text-right tabular-nums text-zinc-600">{number(user.inputTokens)}</td>
+            <td className="py-2.5 pr-4 text-right tabular-nums text-zinc-600">{number(user.outputTokens)}</td>
+            <td className="py-2.5 pr-4 text-right tabular-nums font-medium">{number(user.tokens)}</td>
             <td className="py-2.5 text-right text-xs text-zinc-500">{user.lastUsedAt ? formatDateTime(user.lastUsedAt) : "—"}</td>
           </tr>)}
         </tbody>
@@ -125,7 +130,8 @@ export function AiUsageView({ usage, period, admin }: { usage: Awaited<ReturnTyp
   const successRate = totals.requests ? Math.round((totals.succeeded / totals.requests) * 100) : 0;
   const tiles = [
     { label: "AI requests", value: number(totals.requests), detail: `${number(totals.succeeded)} succeeded · ${number(totals.failed)} failed` },
-    { label: "Tokens used", value: compact(totals.totalTokens), detail: `${compact(totals.inputTokens)} in · ${compact(totals.outputTokens)} out` },
+    { label: "Input tokens", value: compact(totals.inputTokens), detail: "sent to the AI (prompts, files, text to speak)" },
+    { label: "Output tokens", value: compact(totals.outputTokens), detail: `written or spoken by the AI · ${compact(totals.totalTokens)} total` },
     { label: "Success rate", value: `${successRate}%`, detail: totals.failed ? "Failures are mostly a provider being busy" : "No failed calls" },
     admin
       ? { label: "Active users", value: number(usage.perUser.length), detail: "used the AI in this period" }
@@ -149,7 +155,7 @@ export function AiUsageView({ usage, period, admin }: { usage: Awaited<ReturnTyp
       </nav>
     </div>
 
-    <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+    <section className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
       {tiles.map((tile) => <div key={tile.label} className="rounded-xl border border-zinc-200 bg-white p-4">
         <p className="text-xs text-zinc-500">{tile.label}</p>
         <p className="mt-1 text-2xl font-semibold tabular-nums">{tile.value}</p>
