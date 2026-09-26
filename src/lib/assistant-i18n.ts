@@ -7,8 +7,6 @@ const bn = {
   voiceOn: "শুনছি",
   voiceOff: "Voice",
   voiceToggleHint: "সব সময় শুনবে — “AI বন্ধ” বললে থামবে",
-  voiceStarted: "আমি শুনছি। স্বাভাবিকভাবে বলো কী করতে চাও।",
-  voiceStopped: "ঠিক আছে, শোনা বন্ধ করলাম।",
   voiceStoppedStatus: "Voice বন্ধ",
   listening: "শুনছি…",
   listeningIdle: "বলো, আমি শুনছি",
@@ -59,7 +57,7 @@ const bn = {
   attachmentDefaultAsk: "এই ফাইলে কী আছে বলো",
   attachmentActive: "এই ফাইল নিয়ে কথা হচ্ছে",
   attachmentRemove: "ফাইল সরাও",
-  attachmentOnlyTypes: "শুধু ছবি (JPG, PNG, WebP, HEIC) বা PDF দেওয়া যাবে।",
+  attachmentOnlyTypes: "শুধু ছবি (JPG, PNG, WebP) বা PDF দেওয়া যাবে।",
   attachmentTooBig: (size: string) => `ফাইলটা ${size} — ১০MB পর্যন্ত দেওয়া যাবে।`,
   attachmentReading: "ফাইল পড়ছি…",
   dropHere: "ছবি বা PDF এখানে ছাড়ো",
@@ -108,6 +106,8 @@ const bn = {
     new_task: "নতুন task-এর form খুলে দিলাম।",
     refresh: "পাতাটা নতুন করে লোড করলাম।",
     back: "আগের পাতায় ফিরলাম।",
+    thanks: "তোমাকেও ধন্যবাদ! আর কিছু লাগলে বলো।",
+    greet: "হ্যালো! বলো, কী করতে পারি?",
   },
 };
 
@@ -118,8 +118,6 @@ const en: AssistantStrings = {
   voiceOn: "Listening",
   voiceOff: "Voice",
   voiceToggleHint: "Always listening — say “stop listening” to turn off",
-  voiceStarted: "I'm listening. Just tell me what you'd like to do.",
-  voiceStopped: "Okay, I've stopped listening.",
   voiceStoppedStatus: "Voice off",
   listening: "Listening…",
   listeningIdle: "Go ahead, I'm listening",
@@ -170,7 +168,7 @@ const en: AssistantStrings = {
   attachmentDefaultAsk: "What's in this file?",
   attachmentActive: "Talking about this file",
   attachmentRemove: "Remove file",
-  attachmentOnlyTypes: "Only images (JPG, PNG, WebP, HEIC) or PDFs can be added.",
+  attachmentOnlyTypes: "Only images (JPG, PNG, WebP) or PDFs can be added.",
   attachmentTooBig: (size: string) => `That file is ${size} — the limit is 10MB.`,
   attachmentReading: "Reading file…",
   dropHere: "Drop an image or PDF here",
@@ -219,6 +217,8 @@ const en: AssistantStrings = {
     new_task: "Opened a new task form.",
     refresh: "Refreshed the page.",
     back: "Went back to the previous page.",
+    thanks: "You're welcome! Anything else I can help with?",
+    greet: "Hi! What can I do for you?",
   },
 };
 

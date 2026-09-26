@@ -207,7 +207,7 @@ model Note {
   @@index([userId, updatedAt])
 }
 
-/// One row per Gemini API call (each model attempt), for the AI usage page.
+/// One row per AI API call (each model attempt), for the AI usage page.
 model AiUsage {
   id           String   @id @default(cuid())
   userId       String?

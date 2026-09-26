@@ -68,7 +68,7 @@ export async function POST(request: Request) {
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     const fileProblem = parsed.error.issues.some((issue) => issue.path[0] === "attachment");
-    return NextResponse.json({ type: "clarify", reply: fileProblem ? "শুধু ছবি (JPG, PNG, WebP, HEIC) বা PDF, ১০MB পর্যন্ত দেওয়া যাবে। / Only images or PDFs up to 10MB are supported." : "আমি কিছু শুনতে পাইনি। আবার বলবেন?" });
+    return NextResponse.json({ type: "clarify", reply: fileProblem ? "শুধু ছবি (JPG, PNG, WebP) বা PDF, ১০MB পর্যন্ত দেওয়া যাবে। / Only images or PDFs up to 10MB are supported." : "আমি কিছু শুনতে পাইনি। আবার বলবেন?" });
   }
   const { attachment } = parsed.data;
   if (attachment) {

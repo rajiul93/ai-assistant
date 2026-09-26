@@ -43,11 +43,13 @@ export type PendingAction =
 /** Starting the timer saves nothing, so it runs right away instead of asking first. */
 export type TimerStart = { minutes: number | null; subjectId: string; subjectName: string; topicId: string; topicName: string };
 
-/** "ai" when Gemini understood the request, "fallback" when simple keyword rules had to answer. */
+/** "ai" when the AI understood the request, "fallback" when simple keyword rules had to answer. */
 export type ReplySource = "ai" | "fallback";
 
 export type AssistantReply = (
   | { type: "answer" | "clarify"; reply: string }
+  /** Voice only: the mic heard talk that wasn't meant for the assistant. */
+  | { type: "ignore"; reply: "" }
   | { type: "navigate"; reply: string; href: string }
   | { type: "confirm"; reply: string; action: PendingAction }
   | { type: "start_timer"; reply: string; timer: TimerStart }

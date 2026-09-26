@@ -1,35 +1,31 @@
 import { prisma } from "@/lib/prisma";
 
 /**
- * One entry point for every AI call in the app, backed by Gemini and/or OpenAI.
- * Providers are tried in order (AI_PROVIDER picks the first); if one is busy, fails or times out,
- * the next one answers. Every attempt is logged for the AI Usage page.
+ * One entry point for every AI call in the app, backed by OpenAI.
+ * If the main model is busy, fails or times out, the fallback model answers. Every attempt is logged
+ * for the AI Usage page.
  */
 
-// Flash-Lite answers in ~1s on the free tier (Flash took 25–40s) and handles the assistant's intents well.
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-lite-latest";
-// Tried when the main Gemini model is overloaded (503) or rate-limited (429).
-const GEMINI_FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.6-flash";
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5-mini";
-// Free-tier responses can take 25–30s; with a second provider available, give each attempt less.
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-6-luna";
+// Optional; tried when the main model is overloaded, rate-limited or times out.
+const OPENAI_FALLBACK_MODEL = process.env.OPENAI_FALLBACK_MODEL;
 const TOTAL_BUDGET_MS = 40_000;
-const PER_ATTEMPT_WITH_BACKUP_MS = 20_000;
+const PER_ATTEMPT_WITH_BACKUP_MS = 25_000;
 
 /** Who is using the AI and for what — every call is logged for the AI usage page. */
-export type AiFeature = "assistant" | "file_assistant" | "answer" | "answer_search" | "note_writer";
+export type AiFeature = "assistant" | "file_assistant" | "answer" | "answer_search" | "note_writer" | "speech";
 /** Images/PDFs sent alongside the prompt (base64). */
 type InlineFile = { mimeType: string; data: string; name?: string };
-/** `responseSchema` uses Gemini's OpenAPI-style schema; it is converted for OpenAI. */
+/** `responseSchema` is written in an OpenAPI style (type: "OBJECT", nullable: true) and converted to JSON Schema. */
 type CallOptions = { search?: boolean; responseSchema?: object; files?: InlineFile[]; userId: string; feature: AiFeature };
 type Usage = { input: number; output: number; total: number };
 type Attempt = { status: number | null; text: string | null; usage?: Usage };
-type Provider = { name: "gemini" | "openai"; model: string; call: (prompt: string, options: CallOptions, timeoutMs: number) => Promise<Attempt> };
 
-// After Google Search grounding hits its quota, skip it for a while instead of wasting a request per question.
+// After web search hits its quota, skip it for a while instead of wasting a request per question.
 let searchBlockedUntil = 0;
 
 export function isAIConfigured() {
-  return Boolean(process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY);
+  return Boolean(process.env.OPENAI_API_KEY);
 }
 
 function statusName(httpStatus: number | null, timedOut: boolean) {
@@ -41,7 +37,7 @@ function statusName(httpStatus: number | null, timedOut: boolean) {
 }
 
 /** Usage logging must never break or slow the assistant, so failures are only reported to the console. */
-function logUsage(entry: { userId: string; feature: AiFeature; model: string; httpStatus: number | null; timedOut?: boolean; latencyMs: number; usage?: Usage }) {
+export function logUsage(entry: { userId: string; feature: AiFeature; model: string; httpStatus: number | null; timedOut?: boolean; latencyMs: number; usage?: Usage }) {
   void prisma.aiUsage.create({
     data: {
       userId: entry.userId,
@@ -57,46 +53,7 @@ function logUsage(entry: { userId: string; feature: AiFeature; model: string; ht
   }).catch((error: unknown) => console.warn("[ai] couldn't log AI usage:", error));
 }
 
-// ---------- Gemini ----------
-
-type GeminiPayload = {
-  candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number; totalTokenCount?: number };
-};
-
-function geminiProvider(model: string, apiKey: string): Provider {
-  return {
-    name: "gemini",
-    model,
-    call: async (prompt, options, timeoutMs) => {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [...(options.files ?? []).map((file) => ({ inline_data: { mime_type: file.mimeType, data: file.data } })), { text: prompt }] }],
-          ...(options.search ? { tools: [{ google_search: {} }] } : {}),
-          generationConfig: {
-            // Gemini 3 models think by default; this app needs quick replies, not deep reasoning.
-            ...(model.startsWith("gemini-3") ? { thinkingConfig: { thinkingLevel: "minimal" } } : {}),
-            ...(options.responseSchema ? { responseMimeType: "application/json", responseSchema: options.responseSchema } : {}),
-          },
-        }),
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      if (!response.ok) return { status: response.status, text: null };
-      const payload = (await response.json()) as GeminiPayload;
-      const meta = payload.usageMetadata;
-      const input = meta?.promptTokenCount ?? 0;
-      const output = (meta?.candidatesTokenCount ?? 0) + (meta?.thoughtsTokenCount ?? 0);
-      const text = payload.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim();
-      return { status: 200, text: text || null, usage: { input, output, total: meta?.totalTokenCount ?? input + output } };
-    },
-  };
-}
-
-// ---------- OpenAI ----------
-
-/** Gemini's OpenAPI-style schema (type: "OBJECT", nullable: true) → standard JSON Schema for OpenAI. */
+/** OpenAPI-style schema (type: "OBJECT", nullable: true) → standard JSON Schema. */
 function toJsonSchema(schema: unknown): unknown {
   if (!schema || typeof schema !== "object") return schema;
   const source = schema as Record<string, unknown>;
@@ -121,86 +78,114 @@ type OpenAIPayload = {
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 };
 
-function openaiProvider(model: string, apiKey: string): Provider {
-  return {
-    name: "openai",
-    model,
-    call: async (prompt, options, timeoutMs) => {
-      const fileParts = (options.files ?? []).map((file) => (file.mimeType === "application/pdf"
-        ? { type: "file", file: { filename: file.name ?? "document.pdf", file_data: `data:application/pdf;base64,${file.data}` } }
-        : { type: "image_url", image_url: { url: `data:${file.mimeType};base64,${file.data}` } }));
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model,
-          messages: [{ role: "user", content: fileParts.length ? [...fileParts, { type: "text", text: prompt }] : prompt }],
-          // GPT-5 models reason by default; the assistant needs quick replies.
-          ...(model.startsWith("gpt-5") ? { reasoning_effort: "minimal" } : {}),
-          ...(options.responseSchema
-            ? { response_format: { type: "json_schema", json_schema: { name: "assistant_reply", strict: false, schema: toJsonSchema(options.responseSchema) } } }
-            : {}),
-        }),
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      if (!response.ok) {
-        console.warn(`[ai] openai ${model}: HTTP ${response.status} ${(await response.text().catch(() => "")).slice(0, 300)}`);
-        return { status: response.status, text: null };
-      }
-      const payload = (await response.json()) as OpenAIPayload;
-      const text = payload.choices?.[0]?.message?.content?.trim();
-      const input = payload.usage?.prompt_tokens ?? 0;
-      const output = payload.usage?.completion_tokens ?? 0;
-      return { status: 200, text: text || null, usage: { input, output, total: payload.usage?.total_tokens ?? input + output } };
-    },
-  };
+/**
+ * The assistant needs quick replies, not deep reasoning. GPT-6 models accept "none"; GPT-5 models
+ * go no lower than "minimal", and their web search needs at least "low".
+ */
+function reasoningEffort(model: string, search: boolean) {
+  if (model.startsWith("gpt-6")) return "none";
+  if (model.startsWith("gpt-5")) return search ? "low" : "minimal";
+  return null;
 }
 
-// ---------- Routing ----------
+const dataUrl = (file: InlineFile) => `data:${file.mimeType};base64,${file.data}`;
 
-/** Providers that can handle this call, in the order to try them. */
-function providersFor(options: CallOptions): Provider[] {
-  const gemini: Provider[] = process.env.GEMINI_API_KEY
-    ? [...new Set([GEMINI_MODEL, GEMINI_FALLBACK_MODEL])].map((model) => geminiProvider(model, process.env.GEMINI_API_KEY!))
-    : [];
-  // OpenAI can't do Google Search grounding or read HEIC photos, so it sits those calls out.
-  const openaiCan = !options.search && !(options.files ?? []).some((file) => /heic|heif/.test(file.mimeType));
-  const openai: Provider[] = process.env.OPENAI_API_KEY && openaiCan ? [openaiProvider(OPENAI_MODEL, process.env.OPENAI_API_KEY)] : [];
-  return process.env.AI_PROVIDER === "openai" ? [...openai, ...gemini] : [...gemini, ...openai];
+/** Plain and structured calls: Chat Completions. */
+async function chatCompletion(model: string, apiKey: string, prompt: string, options: CallOptions, timeoutMs: number): Promise<Attempt> {
+  const fileParts = (options.files ?? []).map((file) => (file.mimeType === "application/pdf"
+    ? { type: "file", file: { filename: file.name ?? "document.pdf", file_data: dataUrl(file) } }
+    : { type: "image_url", image_url: { url: dataUrl(file) } }));
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model,
+      messages: [{ role: "user", content: fileParts.length ? [...fileParts, { type: "text", text: prompt }] : prompt }],
+      ...(reasoningEffort(model, false) ? { reasoning_effort: reasoningEffort(model, false) } : {}),
+      ...(options.responseSchema
+        ? { response_format: { type: "json_schema", json_schema: { name: "assistant_reply", strict: false, schema: toJsonSchema(options.responseSchema) } } }
+        : {}),
+    }),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!response.ok) {
+    console.warn(`[ai] openai ${model}: HTTP ${response.status} ${(await response.text().catch(() => "")).slice(0, 300)}`);
+    return { status: response.status, text: null };
+  }
+  const payload = (await response.json()) as OpenAIPayload;
+  const text = payload.choices?.[0]?.message?.content?.trim();
+  const input = payload.usage?.prompt_tokens ?? 0;
+  const output = payload.usage?.completion_tokens ?? 0;
+  return { status: 200, text: text || null, usage: { input, output, total: payload.usage?.total_tokens ?? input + output } };
 }
 
-/** Returns the model's text, or null when no provider is configured or every attempt fails. */
+type ResponsesPayload = {
+  output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string }> }>;
+  usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number };
+};
+
+/** Answers that may need current facts: the Responses API with its web_search tool. */
+async function webSearchResponse(model: string, apiKey: string, prompt: string, options: CallOptions, timeoutMs: number): Promise<Attempt> {
+  const fileParts = (options.files ?? []).map((file) => (file.mimeType === "application/pdf"
+    ? { type: "input_file", filename: file.name ?? "document.pdf", file_data: dataUrl(file) }
+    : { type: "input_image", image_url: dataUrl(file) }));
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model,
+      input: [{ role: "user", content: [...fileParts, { type: "input_text", text: prompt }] }],
+      tools: [{ type: "web_search" }],
+      ...(reasoningEffort(model, true) ? { reasoning: { effort: reasoningEffort(model, true) } } : {}),
+    }),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!response.ok) {
+    console.warn(`[ai] openai ${model} (search): HTTP ${response.status} ${(await response.text().catch(() => "")).slice(0, 300)}`);
+    return { status: response.status, text: null };
+  }
+  const payload = (await response.json()) as ResponsesPayload;
+  const text = payload.output
+    ?.filter((item) => item.type === "message")
+    .flatMap((item) => item.content ?? [])
+    .filter((part) => part.type === "output_text")
+    .map((part) => part.text ?? "")
+    .join("")
+    .trim();
+  const input = payload.usage?.input_tokens ?? 0;
+  const output = payload.usage?.output_tokens ?? 0;
+  return { status: 200, text: text || null, usage: { input, output, total: payload.usage?.total_tokens ?? input + output } };
+}
+
+/** Returns the model's text, or null when no API key is configured or every attempt fails. */
 export async function callAI(prompt: string, options: CallOptions) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
   if (options.search && Date.now() < searchBlockedUntil) return null;
-  const providers = providersFor(options);
+  const models = [...new Set([OPENAI_MODEL, OPENAI_FALLBACK_MODEL].filter((model): model is string => Boolean(model)))];
   const deadline = Date.now() + TOTAL_BUDGET_MS;
 
-  for (let index = 0; index < providers.length; index++) {
-    const provider = providers[index];
+  for (let index = 0; index < models.length; index++) {
+    const model = models[index];
     const remaining = deadline - Date.now();
     if (remaining < 3_000) break;
-    const hasBackup = providers.slice(index + 1).some((next) => next.name !== provider.name);
-    const timeout = hasBackup ? Math.min(remaining, PER_ATTEMPT_WITH_BACKUP_MS) : remaining;
+    const timeout = index < models.length - 1 ? Math.min(remaining, PER_ATTEMPT_WITH_BACKUP_MS) : remaining;
     const started = Date.now();
     let attempt: Attempt;
     try {
-      attempt = await provider.call(prompt, options, timeout);
+      attempt = await (options.search ? webSearchResponse : chatCompletion)(model, apiKey, prompt, options, timeout);
     } catch (error) {
       const timedOut = error instanceof Error && error.name === "TimeoutError";
-      logUsage({ userId: options.userId, feature: options.feature, model: provider.model, httpStatus: null, timedOut, latencyMs: Date.now() - started });
-      console.warn(`[ai] ${provider.model} failed: ${timedOut ? "timed out" : String(error)}`);
+      logUsage({ userId: options.userId, feature: options.feature, model, httpStatus: null, timedOut, latencyMs: Date.now() - started });
+      console.warn(`[ai] ${model} failed: ${timedOut ? "timed out" : String(error)}`);
       continue;
     }
-    logUsage({ userId: options.userId, feature: options.feature, model: provider.model, httpStatus: attempt.status, latencyMs: Date.now() - started, usage: attempt.usage });
+    logUsage({ userId: options.userId, feature: options.feature, model, httpStatus: attempt.status, latencyMs: Date.now() - started, usage: attempt.usage });
     if (attempt.text) return attempt.text;
-    console.warn(`[ai] ${provider.model}${options.search ? " (search)" : ""} failed: HTTP ${attempt.status}`);
+    console.warn(`[ai] ${model}${options.search ? " (search)" : ""} failed: HTTP ${attempt.status}`);
     if (options.search && attempt.status === 429) { searchBlockedUntil = Date.now() + 30 * 60_000; return null; }
-    // A second model from the same provider only helps when the first was busy or rate-limited.
-    const next = providers[index + 1];
-    if (next?.name === provider.name && attempt.status !== 503 && attempt.status !== 429) {
-      index = providers.findIndex((candidate, position) => position > index && candidate.name !== provider.name) - 1;
-      if (index < -1) break;
-    }
+    // The fallback model only helps when the first was busy or rate-limited.
+    if (attempt.status !== 503 && attempt.status !== 429) break;
   }
   return null;
 }

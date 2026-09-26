@@ -24,7 +24,7 @@ function useSecondsSince(since: number | null) {
 }
 
 /** Floating status that tells the user whether the assistant is hearing them, working, or done. */
-export function AssistantStatus({ systemListening }: { systemListening: boolean }) {
+export function AssistantStatus() {
   const live = useAssistantStore((state) => state.live);
   const t = assistantStrings[useAssistantStore((state) => state.lang)];
   const seconds = useSecondsSince(live?.stage === "thinking" ? live.since : null);
@@ -34,7 +34,8 @@ export function AssistantStatus({ systemListening }: { systemListening: boolean 
   let detail: string | null = null;
   let tone = "text-zinc-900";
 
-  if (live?.stage === "listening" || (!live && systemListening)) {
+  // Idle listening shows only on the Voice button; the popup appears once words are heard.
+  if (live?.stage === "listening") {
     indicator = <span className="flex size-7 items-center justify-center rounded-full bg-rose-500/10 text-rose-600"><VoiceWave className="h-3.5" /></span>;
     title = t.listening;
     detail = live?.text ? `“${live.text}”` : t.listeningIdle;
