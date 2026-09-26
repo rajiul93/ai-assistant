@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Check, CircleCheck, FileText, Mic, NotebookPen, Paperclip, RefreshCcw, Sparkles, Volume2, X } from "lucide-react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowUp, Check, CircleCheck, Download, FileText, Lock, Maximize2, Mic, Minimize2, NotebookPen, Paperclip, RefreshCcw, Sparkles, Volume2, X } from "lucide-react";
+import { ChatMarkdown } from "@/components/chat-markdown";
 import { VoiceWave } from "@/components/assistant-status";
 import { sectorLabels, statusLabels } from "@/lib/applications";
 import type { AssistantStrings } from "@/lib/assistant-i18n";
@@ -11,6 +13,9 @@ import { useAssistant } from "@/lib/use-assistant";
 import { useSpeechRecognition } from "@/lib/use-speech-recognition";
 import { cn } from "@/lib/utils";
 import { speak } from "@/lib/voice";
+import { requestAiAccess } from "@/server/actions/ai-access";
+import { formatTokens, quotaExceeded, type AiQuota } from "@/lib/ai-limits";
+import type { AiAccessState } from "@/server/ai-access";
 import { useAssistantStore, type AssistantEntry } from "@/store/assistant";
 
 const priorityStyles = { LOW: "bg-zinc-100 text-zinc-600", MEDIUM: "bg-sky-50 text-sky-700", HIGH: "bg-rose-50 text-rose-700" } as const;
@@ -97,7 +102,25 @@ function ActionCard({ action, state, t, onConfirm, onCancel }: { action: Pending
   </div>;
 }
 
-export function StudyAssistant() {
+/** Shown while the user can't use the AI: what's going on, and a button to ask an admin. */
+function AiAccessCard({ state, t }: { state: Exclude<AiAccessState, "ADMIN" | "APPROVED">; t: AssistantStrings }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState("");
+  const request = () => startTransition(async () => {
+    setError("");
+    try { await requestAiAccess(); router.refresh(); } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
+  });
+  return <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+    <p className="flex items-start gap-2 leading-relaxed"><Lock className="mt-0.5 size-4 shrink-0" /> {t.aiAccess[state]}</p>
+    {state === "REQUESTED"
+      ? <p className="mt-3 inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-medium">{t.aiRequested}</p>
+      : <button type="button" onClick={request} disabled={pending} className="mt-3 rounded-xl bg-zinc-950 px-3.5 py-2 text-xs font-medium text-white transition hover:bg-zinc-800 disabled:opacity-60">{pending ? t.aiRequesting : t.aiRequest}</button>}
+    {error ? <p role="alert" className="mt-2 text-xs text-red-700">{error}</p> : null}
+  </div>;
+}
+
+export function StudyAssistant({ aiAccess, aiQuota }: { aiAccess: AiAccessState; aiQuota: AiQuota }) {
   const { entries, busy, open, setOpen, t, send, confirmAction, cancelAction } = useAssistant();
   const [question, setQuestion] = useState("");
   const [voiceError, setVoiceError] = useState("");
@@ -106,6 +129,8 @@ export function StudyAssistant() {
   const attachment = useAssistantStore((state) => state.attachment);
   const setAttachment = useAssistantStore((state) => state.setAttachment);
   const [reading, setReading] = useState(false);
+  // Wider panel for reading code (desktop/tablet; phones already use the full width).
+  const [wide, setWide] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const voice = useSpeechRecognition({
@@ -171,7 +196,10 @@ export function StudyAssistant() {
       onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); setDragging(true); } }}
       onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }}
       onDrop={(event) => { event.preventDefault(); setDragging(false); void addFile(event.dataTransfer.files[0]); }}
-      className="assistant-panel-in fixed inset-x-0 bottom-0 z-50 flex max-h-[88dvh] flex-col overflow-hidden rounded-t-3xl border border-zinc-200/80 bg-white/95 shadow-[0_24px_80px_-20px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:inset-x-auto sm:bottom-36 sm:right-4 sm:max-h-[min(40rem,calc(100dvh-12rem))] sm:w-100 sm:rounded-3xl lg:bottom-24 lg:right-6">
+      className={cn(
+        "assistant-panel-in fixed inset-x-0 bottom-0 z-50 flex max-h-[88dvh] flex-col overflow-hidden rounded-t-3xl border border-zinc-200/80 bg-white/95 shadow-[0_24px_80px_-20px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:inset-x-auto sm:bottom-36 sm:right-4 sm:max-h-[min(40rem,calc(100dvh-12rem))] sm:w-100 sm:rounded-3xl lg:bottom-24 lg:right-6",
+        wide && "sm:max-h-[calc(100dvh-10rem)] sm:w-[min(48rem,calc(100vw-2rem))] lg:max-h-[calc(100dvh-8rem)]",
+      )}>
       <header className="flex items-center gap-3 border-b border-zinc-100 px-4 py-3.5">
         <span className="relative flex size-9 shrink-0 items-center justify-center">
           {busy ? <span className="assistant-orb absolute -inset-0.75 rounded-full" /> : null}
@@ -181,10 +209,16 @@ export function StudyAssistant() {
           <p className="text-sm font-semibold text-zinc-950">{t.panelTitle}</p>
           <p className="text-xs text-zinc-500">{busy ? t.thinkingBubble : t.panelSubtitle}</p>
         </div>
+        <button type="button" onClick={() => setWide((value) => !value)} aria-label={wide ? "Smaller chat" : "Larger chat"} title={wide ? "Smaller chat" : "Larger chat"} className="hidden size-8 items-center justify-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 sm:flex">{wide ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}</button>
         <button type="button" onClick={close} aria-label="Close" className="flex size-10 items-center justify-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 sm:size-8"><X className="size-4" /></button>
       </header>
 
       <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite">
+        {aiAccess !== "ADMIN" && aiAccess !== "APPROVED"
+          ? <AiAccessCard state={aiAccess} t={t} />
+          : quotaExceeded(aiQuota)
+            ? <p className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-relaxed text-amber-900"><Lock className="mt-0.5 size-4 shrink-0" /> {t.aiQuotaUsed(formatTokens(aiQuota.used), formatTokens(aiQuota.limit ?? 0))}</p>
+            : null}
         {entries.length === 0 ? <div className="rounded-2xl bg-zinc-50 p-4 text-sm leading-relaxed text-zinc-600">{t.emptyHint}</div> : null}
         {entries.map((entry) => entry.role === "user"
           ? <div key={entry.id} className="assistant-in ml-10 flex flex-col items-end">
@@ -192,10 +226,15 @@ export function StudyAssistant() {
             {entry.attachmentName ? <p className="mb-1 flex max-w-full items-center gap-1 truncate text-[11px] font-medium text-zinc-400"><Paperclip className="size-3 shrink-0" /> {entry.attachmentName}</p> : null}
             <p className="rounded-2xl rounded-br-md bg-zinc-950 px-3.5 py-2 text-sm leading-relaxed text-white">{entry.text}</p>
           </div>
-          : <div key={entry.id} className="assistant-in mr-6">
+          : <div key={entry.id} className="assistant-in mr-2 min-w-0">
             {entry.source ? <p className={cn("mb-1 text-[11px] font-medium", entry.source === "ai" ? "text-indigo-500" : "text-amber-600")}>{entry.source === "ai" ? `✦ ${t.sourceAi}` : t.sourceFallback}</p> : null}
-            <div className="rounded-2xl rounded-bl-md bg-zinc-100/80 px-3.5 py-2 text-sm leading-relaxed text-zinc-900">
-              <p className="whitespace-pre-wrap">{entry.text}</p>
+            <div className="min-w-0 rounded-2xl rounded-bl-md bg-zinc-100/80 px-3.5 py-2 text-sm leading-relaxed text-zinc-900">
+              <ChatMarkdown text={entry.text} />
+              {entry.image ? <figure className="mt-2">
+                {/* eslint-disable-next-line @next/next/no-img-element -- a generated data URL, not an optimizable asset */}
+                <img src={entry.image} alt={entry.text} className="w-full rounded-xl border border-zinc-200 bg-white" />
+                <a href={entry.image} download="assistant-image.webp" className="mt-1.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium text-zinc-500 transition hover:bg-white hover:text-zinc-900"><Download className="size-3" /> Download</a>
+              </figure> : null}
               {entry.action ? null : <button type="button" onClick={() => speak(entry.text)} className="mt-1 -ml-1 flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium text-zinc-500 transition hover:bg-white hover:text-zinc-900"><Volume2 className="size-3" /> {t.listenAgain}</button>}
             </div>
             {entry.action ? <ActionCard action={entry.action} state={entry.draftState} t={t} onConfirm={() => void confirmAction()} onCancel={() => cancelAction()} /> : null}
@@ -224,9 +263,10 @@ export function StudyAssistant() {
         </div> : null}
         <input ref={fileInputRef} type="file" accept={ATTACHMENT_ACCEPT} className="hidden" onChange={(event) => { void addFile(event.target.files?.[0]); event.target.value = ""; }} />
         <div className="flex items-end gap-2 rounded-2xl border border-zinc-200 bg-zinc-50/80 p-1.5 transition focus-within:border-zinc-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-zinc-900/5">
+          {/* At least three lines tall; grows with the text (where the browser supports it), then scrolls. */}
           <textarea
-            rows={1}
-            className="max-h-28 min-h-9 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-zinc-400"
+            rows={3}
+            className="max-h-48 min-h-[4.75rem] flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2 text-sm leading-5 outline-none field-sizing-content placeholder:text-zinc-400"
             value={question}
             placeholder={voice.listening ? t.placeholderListening : attachment ? t.placeholderWithFile : t.placeholder}
             onChange={(event) => setQuestion(event.target.value)}

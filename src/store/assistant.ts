@@ -15,6 +15,8 @@ export type AssistantEntry = ChatMessage & {
   /** A prepared change shown as a card; it only happens once the user confirms. */
   action?: PendingAction;
   draftState?: DraftState;
+  /** A picture the assistant drew (data URL). */
+  image?: string;
 };
 
 /** What the assistant is doing right now, shown to the user as a live status bar. */

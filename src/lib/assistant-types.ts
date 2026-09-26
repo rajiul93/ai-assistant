@@ -53,7 +53,15 @@ export type AssistantReply = (
   | { type: "navigate"; reply: string; href: string }
   | { type: "confirm"; reply: string; action: PendingAction }
   | { type: "start_timer"; reply: string; timer: TimerStart }
-) & { source?: ReplySource };
+  /** A generated picture, as a data URL. */
+  | { type: "image"; reply: string; image: string }
+) & {
+  source?: ReplySource;
+  /** Read the reply aloud even if the request was typed ("read my note to me"). */
+  speak?: boolean;
+  /** The user has no AI access (not approved yet, or turned off by an admin). */
+  aiLocked?: boolean;
+};
 
 export type AssistantRequest = {
   message: string;

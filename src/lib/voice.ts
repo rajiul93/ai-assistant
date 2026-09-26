@@ -99,6 +99,8 @@ function bestVoice(lang: AssistantLang) {
 /** Markdown symbols and links read aloud sound mechanical, so strip them before speaking. */
 function toSpokenText(text: string) {
   return text
+    // Code is for reading on screen, not for listening to.
+    .replace(/```[\s\S]*?(```|$)/g, " ")
     .replace(/https?:\/\/\S+/g, "")
     .replace(/[*_#`>~|]/g, "")
     .replace(/^\s*[-•]\s+/gm, "")
@@ -178,15 +180,45 @@ function playUrl(url: string, token: number) {
   });
 }
 
+/** Longest piece sent for one clip; short replies are always a single clip. */
+const CLIP_CHARS = 1200;
+
+/** Long text (a whole note) → sentence-aligned pieces the speech API accepts. */
+function clipTexts(text: string) {
+  if (text.length <= CLIP_CHARS) return [text];
+  const sentences = text.match(/[^।!?.\n]+[।!?.\n]*/g)?.map((part) => part.trim()).filter(Boolean) ?? [text];
+  const clips: string[] = [];
+  let current = "";
+  for (const sentence of sentences) {
+    for (let start = 0; start < sentence.length; start += CLIP_CHARS) {
+      const piece = sentence.slice(start, start + CLIP_CHARS);
+      if (current && current.length + piece.length + 1 > CLIP_CHARS) { clips.push(current); current = ""; }
+      current = current ? `${current} ${piece}` : piece;
+    }
+  }
+  if (current) clips.push(current);
+  return clips;
+}
+
 /**
- * Natural-sounding server voice, fetched as one clip: splitting a reply into pieces leaves audible
- * gaps between them. Returns false if it couldn't be played.
+ * Natural-sounding server voice. A normal reply is one clip, so there are no gaps; a long text is
+ * read piece by piece, with the next piece prepared while the current one plays.
+ * Returns the text it couldn't play ("" when everything was spoken).
  */
 async function speakWithServer(text: string, lang: AssistantLang, token: number) {
-  const url = await fetchSpeech(text, lang);
-  if (!url) return false;
-  if (token !== speechToken) { URL.revokeObjectURL(url); return true; }
-  return playUrl(url, token);
+  const clips = clipTexts(text);
+  let next = fetchSpeech(clips[0], lang);
+  for (let index = 0; index < clips.length; index++) {
+    const url = await next;
+    if (!url) return clips.slice(index).join(" ");
+    next = index + 1 < clips.length ? fetchSpeech(clips[index + 1], lang) : Promise.resolve(null);
+    if (token !== speechToken) { URL.revokeObjectURL(url); void next.then((later) => { if (later) URL.revokeObjectURL(later); }); return ""; }
+    if (!(await playUrl(url, token))) {
+      void next.then((later) => { if (later) URL.revokeObjectURL(later); });
+      return token === speechToken ? clips.slice(index).join(" ") : "";
+    }
+  }
+  return "";
 }
 
 /** The device's own voice: free and instant, but often robotic in Bengali. */
@@ -232,10 +264,10 @@ export function speak(text: string, onDone?: () => void) {
   speaking = true;
   speakListeners.forEach((listener) => listener());
   if (Date.now() < serverVoiceOffUntil) { speakWithBrowser(spoken, lang, finish); return; }
-  void speakWithServer(spoken, lang, token).then((played) => {
+  void speakWithServer(spoken, lang, token).then((unspoken) => {
     if (token !== speechToken) return;
-    if (played) finish();
-    else speakWithBrowser(spoken, lang, finish);
+    if (unspoken) speakWithBrowser(unspoken, lang, finish);
+    else finish();
   });
 }
 

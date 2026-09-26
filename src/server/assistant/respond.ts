@@ -3,7 +3,8 @@ import { APP_TIMEZONE, dayjs, now } from "@/lib/dayjs";
 import { assistantPages, type AssistantPage, type AssistantReply, type AssistantRequest, type ChatMessage, type ApplicationDraft, type PendingAction, type TaskDraft } from "@/lib/assistant-types";
 import { getFlatTopics, getOpenTasks, getPendingTasks, getProgressCounts, getSubjects, getTasksToRevise } from "@/server/queries";
 import { htmlToPlainText, noteWritingRules, sanitizeNoteHtml } from "@/lib/note-html";
-import { callAI, isAIConfigured } from "@/server/assistant/ai";
+import { prisma } from "@/lib/prisma";
+import { callAI, generateImage, isAIConfigured } from "@/server/assistant/ai";
 
 type StudyContext = {
   counts: Awaited<ReturnType<typeof getProgressCounts>>;
@@ -12,10 +13,11 @@ type StudyContext = {
   subjects: Awaited<ReturnType<typeof getSubjects>>;
   openTasks: Awaited<ReturnType<typeof getOpenTasks>>;
   topics: Awaited<ReturnType<typeof getFlatTopics>>;
+  notes: Array<{ id: string; title: string }>;
 };
 
 type Lang = "bn" | "en" | undefined;
-const actions = ["navigate", "create_task", "complete_task", "start_timer", "revise_task", "add_application", "create_note", "answer", "clarify", "ignore"] as const;
+const actions = ["navigate", "create_task", "complete_task", "start_timer", "revise_task", "add_application", "create_note", "answer", "clarify", "ignore", "read_note", "create_image"] as const;
 const applicationStatuses = ["WISHLIST", "APPLIED", "EXAM", "INTERVIEW", "OFFER", "REJECTED", "WITHDRAWN"] as const;
 
 const pageKeys = Object.keys(assistantPages) as [AssistantPage, ...AssistantPage[]];
@@ -37,6 +39,15 @@ const intentSchema = z.object({
   taskTitle: z.string().nullish(),
   timer: z.object({ minutes: z.number().nullish(), subject: z.string().nullish(), topic: z.string().nullish() }).nullish(),
   note: z.object({ title: z.string().nullish(), content: z.string().nullish() }).nullish(),
+  /** create_image: a detailed English description of the picture to draw. */
+  imagePrompt: z.string().nullish(),
+  /** read_note: which saved note, and what the user wants from it. */
+  noteLookup: z.object({
+    title: z.string().nullish(),
+    search: z.array(z.string()).nullish(),
+    question: z.string().nullish(),
+    readAloud: z.boolean().nullish(),
+  }).nullish(),
   application: z.object({
     title: z.string().nullish(),
     organization: z.string().nullish(),
@@ -90,6 +101,17 @@ const intentResponseSchema = {
       properties: {
         title: { type: "STRING", nullable: true },
         content: { type: "STRING", nullable: true, description: "Simple HTML: h2, h3, p, strong, em, ul/ol+li, blockquote, code" },
+      },
+    },
+    imagePrompt: { type: "STRING", nullable: true, description: "create_image only: detailed English description of the picture" },
+    noteLookup: {
+      type: "OBJECT",
+      nullable: true,
+      properties: {
+        title: { type: "STRING", nullable: true, description: "Exact title from the user's notes list, if one matches" },
+        search: { type: "ARRAY", nullable: true, items: { type: "STRING" }, description: "Words to find the note by, in Bangla and English spellings" },
+        question: { type: "STRING", nullable: true, description: "A specific question to answer from the note; null to give the whole note" },
+        readAloud: { type: "BOOLEAN", nullable: true },
       },
     },
     application: {
@@ -149,8 +171,9 @@ function languageRule(lang?: "bn" | "en") {
 
 function styleRule(voice?: boolean) {
   return voice
-    ? "এই উত্তর মুখে পড়ে শোনানো হবে: ১–৩টি ছোট বাক্যে, কথা বলার ভঙ্গিতে বলো। কোনো list, markdown, emoji বা symbol নয়।"
-    : "উত্তর সংক্ষিপ্ত ও কাজের রাখো; দরকার হলে ছোট list ব্যবহার করতে পারো।";
+    ? "এই উত্তর মুখে পড়ে শোনানো হবে: ১–৩টি ছোট বাক্যে, কথা বলার ভঙ্গিতে বলো। কোনো list, markdown, emoji বা symbol নয়। Code চাইলে code-টা Markdown code block-এ দাও (সেটা পড়া হবে না, chat-এ দেখাবে) আর মুখে শুধু এক লাইনে বলো কী করেছ।"
+    : `উত্তর Markdown-এ ChatGPT-এর মতো গুছিয়ে দাও। সাধারণ প্রশ্নে সংক্ষিপ্ত ও কাজের উত্তর। দরকারে ## শিরোনাম, bullet/numbered list, **bold**, টেবিল ব্যবহার করো।
+Coding/programming প্রশ্নে: প্রথমে এক-দুই লাইনে মূল কথা, তারপর সম্পূর্ণ, চালানোর মতো code — সবসময় ভাষার নামসহ fenced code block-এ (\`\`\`js, \`\`\`python, \`\`\`tsx …), তারপর দরকার হলে ধাপে ধাপে ব্যাখ্যা (কেন এভাবে, গুরুত্বপূর্ণ লাইন), শেষে দরকারে উদাহরণ output বা পরের ধাপ। Error/bug দেখালে কারণ আর ঠিক করা code দুটোই দাও। Code-এর ভেতরের comment আর variable ইংরেজিতে; ব্যাখ্যা ব্যবহারকারীর ভাষায়।`;
 }
 
 function intentPrompt(request: AssistantRequest, history: ChatMessage[], context: StudyContext) {
@@ -173,6 +196,8 @@ action বেছে নাও:
 - revise_task: ব্যবহারকারী জানায় সে কোনো শেষ হওয়া task আবার revise/রিভিশন/পুনরায় পড়েছে ("physics chapter 3 revise করলাম", "I revised Newton's laws")। revision আলাদা কিছু না — task-এরই একটা গণনা। taskTitle-এ নিচের "Revision তালিকা" থেকে সবচেয়ে মিলে যাওয়া title হুবহু লেখো; না মিললে বা একাধিক সমান মিললে clarify।
 - add_application: ব্যবহারকারী কোনো চাকরিতে apply করেছে/করবে বলে জানায় ("আজ বাংলাদেশ ব্যাংকের Officer পদে apply করেছি", "I applied to BRAC Bank for MTO")। application.title = circular/job-এর নাম (না বললে organization + পদ থেকে ছোট একটা নাম বানাও); organization = প্রতিষ্ঠান; posts = যে যে পদে apply করেছে তার তালিকা (একটা circular-এ একাধিক পদ হতে পারে); location বললে; sector = সরকারি/government/ব্যাংক-বীমা-মন্ত্রণালয়-অধিদপ্তর-কর্পোরেশন-BCS ইত্যাদি হলে GOVERNMENT, প্রাইভেট/company/NGO/multinational হলে NON_GOVERNMENT (নিশ্চিত না হলে প্রতিষ্ঠানের নাম দেখে বিচার করো); status = "apply করবো/করতে চাই" হলে WISHLIST, "apply করেছি" হলে APPLIED; appliedAt = apply করার তারিখ (না বললে এবং "করেছি" বললে আজ); deadline, examDate বললে YYYY-MM-DD; reference = user ID/roll/tracking number বললে; link বললে। organization বোঝা না গেলে clarify।
 - create_note: ব্যবহারকারী Notes-এ কিছু লিখে রাখতে/note বানাতে চায় ("photosynthesis নিয়ে একটা note লেখো", "শেষ উত্তরটা notes-এ রাখো", "এটা note করে রাখো: …")। note.title ছোট শিরোনাম; note.content = note-এর লেখা। ${noteWritingRules} "আগের/শেষ উত্তরটা" বললে কথোপকথনে সহকারীর শেষ তথ্যমূলক উত্তরটা গুছিয়ে content-এ বসাও (confirmation বা প্রশ্ন নয়)। ব্যবহারকারী নিজে লেখা বলে দিলে সেটাই হুবহু গুছিয়ে রাখো। task বানানোর কথা বললে create_task, note-এর কথা বললে create_note।
+- read_note: ব্যবহারকারী তার নিজের সেভ করা note-এর লেখা পড়তে/শুনতে/জানতে চায়, বা note-এ থাকা তথ্য চায় ("আমার physics note পড়ে শোনাও", "ড্রিম ট্যুরিজম নিয়ে note-এ যা আছে দাও", "note-এ X-এর তারিখ কী লিখেছিলাম")। noteLookup.title = নিচের "Notes" তালিকার সবচেয়ে মিলে যাওয়া title হুবহু, না মিললে null; noteLookup.search = note খোঁজার মূল শব্দ, বাংলা আর ইংরেজি দুই বানানেই (যেমন ["ড্রিম ট্যুরিজম", "dream tourism"]); নির্দিষ্ট প্রশ্ন থাকলে noteLookup.question, পুরো note চাইলে null; "পড়ে শোনাও/শুনাও/read aloud" বললে readAloud true। reply খালি রাখো — note-এর লেখা server দেবে, বানিয়ে লিখবে না।
+- create_image: ব্যবহারকারী ছবি/image/picture/illustration/logo/diagram আঁকতে বা বানাতে চায় ("একটা বিড়ালের ছবি বানাও", "draw a logo for my app")। imagePrompt = যা আঁকতে হবে তার বিস্তারিত ইংরেজি বর্ণনা (বিষয়, style, রং, পটভূমি; ছবিতে লেখা থাকলে সেই লেখা হুবহু)। reply-তে এক লাইনে বলো কী আঁকছ।
 - navigate: শুধু কোনো পাতা খুলতে/দেখতে চাইলে। page: dashboard, tasks, new_task (নতুন task-এর ফাঁকা form), subjects, revisions, progress, timer, plan, jobs (job application-এর তালিকা), notes (Notes পাতা)।
 - answer: প্রশ্ন, আলাপ, পরামর্শ, মন খারাপ, সাধারণ জ্ঞান — যা কোনো app action নয়। reply-তে সরাসরি পুরো উত্তরটা দাও। পড়াশোনা নিয়ে প্রশ্নে নিচের study data ব্যবহার করে ব্যক্তিগত পরামর্শ দাও।
 - clarify: উদ্দেশ্য অস্পষ্ট, বা এমন কিছু চাইছে যা app-এ নেই (যেমন notes পাতা নেই)। reply-তে বিনয়ের সঙ্গে জানাও কী করা যায় এবং প্রশ্ন করো।
@@ -186,6 +211,8 @@ ${upcomingDays()}
 Topics (subject › topic): ${capped(context.topics, 80, (topic) => `${topic.subject.name} › ${topic.parent ? `${topic.parent.name} › ` : ""}${topic.name}`, "; ") || "কোনো topic নেই"}
 
 Revision তালিকা (শেষ হওয়া task, কতবার revise হয়েছে): ${capped(context.toRevise, 40, (task) => `“${task.title}” (${task.timesRevised}×)`, ", ") || "নেই"}
+
+Notes (শিরোনাম, নতুনটা আগে): ${capped(context.notes, 40, (note) => `“${note.title}”`, ", ") || "কোনো note নেই"}
 
 অসমাপ্ত tasks: ${capped(context.openTasks, 40, (task) => `“${task.title}”${task.subject ? ` (${task.subject.name})` : ""}`, ", ") || "নেই"}
 
@@ -371,6 +398,62 @@ function studyData(context: StudyContext) {
   };
 }
 
+async function drawImage(userId: string, intent: Intent, request: AssistantRequest): Promise<AssistantReply> {
+  const lang = request.lang;
+  const prompt = intent.imagePrompt?.trim() || request.message;
+  const image = await generateImage(prompt, { userId });
+  if (image === "unavailable") {
+    return { type: "clarify", reply: lang === "en" ? "Image generation isn't turned on yet — an admin needs to enable an image model in OpenAI." : "ছবি বানানোর সুবিধা এখনো চালু নেই — admin-কে OpenAI-তে image model চালু করতে হবে।" };
+  }
+  if (!image) return { type: "clarify", reply: lang === "en" ? "I couldn't draw that right now. Please try again in a moment." : "এই মুহূর্তে ছবিটা বানাতে পারলাম না। একটু পরে আবার চেষ্টা করো।" };
+  return { type: "image", image, reply: intent.reply.trim() || (lang === "en" ? "Here's your image." : "এই যে তোমার ছবি।") };
+}
+
+/** Longest note text sent to the AI to answer a question about it. */
+const NOTE_QUESTION_CHARS = 20_000;
+
+/**
+ * The user's own note, found by title or by words in it, read back in full or used to answer a question.
+ * The text comes straight from the database, so nothing in it is made up.
+ */
+async function readNote(userId: string, lookup: Intent["noteLookup"], notes: StudyContext["notes"], request: AssistantRequest): Promise<AssistantReply> {
+  const lang = request.lang;
+  const { match, ambiguous } = bestMatch(lookup?.title, notes, (note) => note.title);
+  if (ambiguous.length) return { type: "clarify", reply: listChoices(ambiguous.map((note) => note.title), lang) };
+
+  const search = (lookup?.search ?? []).map((word) => word.trim()).filter((word) => word.length >= 2).slice(0, 6);
+  const note = match
+    ? await prisma.note.findFirst({ where: { id: match.id, userId }, select: { title: true, plainText: true } })
+    : search.length
+      ? await prisma.note.findFirst({
+        where: { userId, OR: search.flatMap((word) => [{ title: { contains: word, mode: "insensitive" as const } }, { plainText: { contains: word, mode: "insensitive" as const } }]) },
+        orderBy: { updatedAt: "desc" },
+        select: { title: true, plainText: true },
+      })
+      // "Read my note" with nothing more to go on: the one worked on last.
+      : await prisma.note.findFirst({ where: { userId }, orderBy: { updatedAt: "desc" }, select: { title: true, plainText: true } });
+
+  if (!note) {
+    const recent = notes.slice(0, 5).map((item) => `“${item.title}”`).join(", ");
+    return {
+      type: "clarify",
+      reply: lang === "en"
+        ? `I couldn't find that in your notes.${recent ? ` Your recent notes: ${recent}. Which one?` : " You don't have any notes yet."}`
+        : `তোমার notes-এ এটা খুঁজে পেলাম না।${recent ? ` সাম্প্রতিক notes: ${recent}। কোনটা?` : " এখনো কোনো note নেই।"}`,
+    };
+  }
+  const text = note.plainText.trim();
+  const speak = Boolean(lookup?.readAloud || request.voice);
+  if (!text) return { type: "answer", speak, reply: lang === "en" ? `“${note.title}” is empty.` : `“${note.title}” note-টা এখনো ফাঁকা।` };
+
+  if (lookup?.question?.trim()) {
+    const prompt = `${persona}\n\nব্যবহারকারীর নিজের note “${note.title}”:\n"""\n${text.slice(0, NOTE_QUESTION_CHARS)}\n"""\n\nপ্রশ্ন: ${lookup.question}\n\nশুধু এই note-এর তথ্য দিয়ে উত্তর দাও; note-এ না থাকলে সেটা স্পষ্ট বলো, বানাবে না। ${languageRule(lang)} ${styleRule(request.voice)}`;
+    const reply = await callAI(prompt, { userId, feature: "answer" });
+    if (reply) return { type: "answer", speak, reply };
+  }
+  return { type: "answer", speak, reply: lang === "en" ? `From your note “${note.title}”:\n\n${text}` : `তোমার “${note.title}” note-এ লেখা আছে:\n\n${text}` };
+}
+
 async function answer(userId: string, message: string, history: ChatMessage[], context: StudyContext, voice?: boolean, lang?: "bn" | "en", attachment?: AssistantRequest["attachment"]) {
   const files = attachment ? [{ mimeType: attachment.mimeType, data: attachment.data, name: attachment.name }] : undefined;
   const basePrompt = `তুমি একজন স্বাভাবিক, বুদ্ধিমান বাংলা সহকারী। এটি একটি open-book conversation: ব্যবহারকারী পড়াশোনা ছাড়াও যেকোনো সাধারণ বা random প্রশ্ন করতে পারে। সাধারণ জ্ঞান, সাম্প্রতিক তথ্য, খবর, ব্যক্তি, জায়গা, প্রযুক্তি বা অন্য কোনো তথ্যের জন্য প্রয়োজন হলে তথ্য যাচাই করে উত্তর দাও। তুমি নিশ্চিত না হলে স্পষ্টভাবে বলবে, বানিয়ে বলবে না। ব্যবহারকারী বাংলায়, Banglish বা ইংরেজিতে লিখলেও সহজ স্বাভাবিক বাংলায় উত্তর দেবে; technical term দরকার হলে সহজ ব্যাখ্যা দেবে। কথার tone প্রসঙ্গ অনুযায়ী স্বাভাবিক, সহানুভূতিশীল, serious বা হালকা মজার হবে। আগের কথার ধারাবাহিকতা রাখবে।
@@ -427,15 +510,16 @@ export async function respond(userId: string, request: AssistantRequest): Promis
 
 async function decide(userId: string, request: AssistantRequest): Promise<AssistantReply> {
   const history = (request.history ?? []).slice(-10);
-  const [counts, tasks, toRevise, subjects, openTasks, topics] = await Promise.all([
+  const [counts, tasks, toRevise, subjects, openTasks, topics, notes] = await Promise.all([
     getProgressCounts(userId),
     getPendingTasks(userId),
     getTasksToRevise(userId, 100),
     getSubjects(userId),
     getOpenTasks(userId),
     getFlatTopics(userId),
+    prisma.note.findMany({ where: { userId }, select: { id: true, title: true }, orderBy: { updatedAt: "desc" }, take: 50 }),
   ]);
-  const context: StudyContext = { counts, tasks, toRevise, subjects, openTasks, topics };
+  const context: StudyContext = { counts, tasks, toRevise, subjects, openTasks, topics, notes };
   const lang = request.lang;
 
   const raw = await callAI(intentPrompt(request, history, context), {
@@ -453,6 +537,8 @@ async function decide(userId: string, request: AssistantRequest): Promise<Assist
 
   // Background talk the mic picked up: no reply, nothing spoken, nothing more spent on it.
   if (intent.action === "ignore" && request.voice) return { type: "ignore", reply: "" };
+  if (intent.action === "create_image") return await drawImage(userId, intent, request);
+  if (intent.action === "read_note") return await readNote(userId, intent.noteLookup, context.notes, request);
   if (intent.action === "navigate" && intent.page) {
     return { type: "navigate", href: assistantPages[intent.page], reply: intent.reply || (request.lang === "en" ? "Sure, opening it." : "ঠিক আছে, খুলছি।") };
   }

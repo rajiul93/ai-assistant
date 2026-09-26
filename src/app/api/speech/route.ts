@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
+import { checkAi } from "@/server/ai-access";
 import { logUsage } from "@/server/assistant/ai";
 
 const TTS_MODEL = process.env.OPENAI_TTS_MODEL || "gpt-4o-mini-tts-2025-12-15";
@@ -16,6 +17,8 @@ const instructions = {
 /** Turns the assistant's reply into natural-sounding speech (MP3). The browser voice is the fallback. */
 export async function POST(request: Request) {
   const user = await requireUser();
+  // Without AI access (or with the token limit used up) the page falls back to the device's own voice.
+  if (!(await checkAi(user)).allowed) return new Response(null, { status: 403 });
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return new Response(null, { status: 503 });
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));

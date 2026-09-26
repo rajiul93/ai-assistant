@@ -12,9 +12,12 @@ import {
   ListTodo,
   Menu,
   NotebookPen,
+  ShieldCheck,
   TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { AiQuota } from "@/lib/ai-limits";
+import type { AiAccessState } from "@/server/ai-access";
 import { SignOutButton } from "@/components/sign-out-button";
 import { StudyAssistant } from "@/components/study-assistant";
 import { SessionBar } from "@/components/timer/session-bar";
@@ -34,20 +37,32 @@ const links = [
   { href: "/usage", label: "AI Usage", short: "AI Usage", icon: Gauge },
 ];
 
+const adminLink = { href: "/admin/ai-access", label: "AI Access", short: "AI Access", icon: ShieldCheck };
+
 // Phones get the four daily pages in the tab bar; everything else lives under "More".
 // The study timer lives on the Tasks page and in the session bar, so it has no page of its own.
 const tabHrefs = ["/dashboard", "/tasks", "/notes", "/jobs"];
 const tabs = links.filter((link) => tabHrefs.includes(link.href));
-const moreLinks = links.filter((link) => !tabHrefs.includes(link.href));
+const baseMoreLinks = links.filter((link) => !tabHrefs.includes(link.href));
 
 export function AppShell({
   children,
   userName,
+  aiAccess,
+  aiQuota,
+  admin,
+  pendingRequests,
 }: {
   children: React.ReactNode;
   userName: string;
+  aiAccess: AiAccessState;
+  aiQuota: AiQuota;
+  admin: boolean;
+  pendingRequests: number;
 }) {
   const pathname = usePathname();
+  const sideLinks = admin ? [...links, adminLink] : links;
+  const moreLinks = admin ? [...baseMoreLinks, adminLink] : baseMoreLinks;
   const [moreOpen, setMoreOpen] = useState(false);
   const moreActive = moreLinks.some((link) => link.href === pathname);
 
@@ -59,7 +74,7 @@ export function AppShell({
           <p className="mt-1 text-sm text-zinc-500">Job preparation</p>
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto px-3">
-          {links.map((link) => {
+          {sideLinks.map((link) => {
             const Icon = link.icon;
             const active = pathname === link.href;
             return (
@@ -73,6 +88,7 @@ export function AppShell({
               >
                 <Icon className="size-4" />
                 {link.label}
+                {link === adminLink && pendingRequests > 0 ? <span className="ml-auto rounded-full bg-rose-500 px-1.5 text-[11px] font-semibold text-white">{pendingRequests}</span> : null}
               </Link>
             );
           })}
@@ -88,8 +104,8 @@ export function AppShell({
         <header className="sticky top-0 z-30 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-end border-b border-zinc-200 bg-white/90 px-4 pb-3 pt-[env(safe-area-inset-top)] backdrop-blur-xl lg:hidden">
           <p className="text-lg font-semibold tracking-tight">Prep</p>
         </header>
-        <VoiceCommandCenter />
-        <StudyAssistant />
+        <VoiceCommandCenter aiAccess={aiAccess} aiQuota={aiQuota} />
+        <StudyAssistant aiAccess={aiAccess} aiQuota={aiQuota} />
         <TimerAlarm />
         <SubjectPickerDialog />
         <SessionBar />

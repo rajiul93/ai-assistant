@@ -13,7 +13,7 @@ const TOTAL_BUDGET_MS = 40_000;
 const PER_ATTEMPT_WITH_BACKUP_MS = 25_000;
 
 /** Who is using the AI and for what — every call is logged for the AI usage page. */
-export type AiFeature = "assistant" | "file_assistant" | "answer" | "answer_search" | "note_writer" | "speech";
+export type AiFeature = "assistant" | "file_assistant" | "answer" | "answer_search" | "note_writer" | "speech" | "transcribe" | "image";
 /** Images/PDFs sent alongside the prompt (base64). */
 type InlineFile = { mimeType: string; data: string; name?: string };
 /** `responseSchema` is written in an OpenAPI style (type: "OBJECT", nullable: true) and converted to JSON Schema. */
@@ -188,4 +188,61 @@ export async function callAI(prompt: string, options: CallOptions) {
     if (attempt.status !== 503 && attempt.status !== 429) break;
   }
   return null;
+}
+
+// ---------- Images ----------
+
+// Best first; the first one the key may use is picked (OPENAI_IMAGE_MODEL overrides).
+const IMAGE_MODELS = ["gpt-image-2", "gpt-image-1.5", "gpt-image-1", "gpt-image-1-mini"];
+let imageModelCache: { model: string | null; checkedAt: number } | null = null;
+
+async function pickImageModel(apiKey: string) {
+  if (process.env.OPENAI_IMAGE_MODEL) return process.env.OPENAI_IMAGE_MODEL;
+  if (imageModelCache && Date.now() - imageModelCache.checkedAt < 10 * 60_000) return imageModelCache.model;
+  const response = await fetch("https://api.openai.com/v1/models", { headers: { Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(5_000) }).catch(() => null);
+  const ids = response?.ok ? ((await response.json()) as { data?: Array<{ id: string }> }).data?.map((item) => item.id) ?? [] : [];
+  // Access may be to a dated snapshot ("gpt-image-1-2025-…"), so match by prefix too.
+  const model = IMAGE_MODELS.find((name) => ids.some((id) => id === name || id.startsWith(`${name}-20`))) ?? null;
+  imageModelCache = { model, checkedAt: Date.now() };
+  return model;
+}
+
+type ImagePayload = { data?: Array<{ b64_json?: string }>; usage?: { input_tokens?: number; output_tokens?: number; total_tokens?: number } };
+
+/**
+ * Draws an image from a prompt. Returns a data URL, "unavailable" when no image model is enabled
+ * for the key, or null when the call failed.
+ */
+export async function generateImage(prompt: string, { userId }: { userId: string }): Promise<string | "unavailable" | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return "unavailable";
+  const model = await pickImageModel(apiKey);
+  if (!model) return "unavailable";
+  const started = Date.now();
+  try {
+    const response = await fetch("https://api.openai.com/v1/images/generations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      // Medium quality WebP keeps it quick and small enough to send straight to the chat.
+      body: JSON.stringify({ model, prompt, n: 1, size: "1024x1024", quality: "medium", output_format: "webp", output_compression: 85 }),
+      signal: AbortSignal.timeout(55_000),
+    });
+    if (!response.ok) {
+      logUsage({ userId, feature: "image", model, httpStatus: response.status, latencyMs: Date.now() - started });
+      console.warn(`[ai] image ${model}: HTTP ${response.status} ${(await response.text().catch(() => "")).slice(0, 300)}`);
+      if ([401, 403, 404].includes(response.status)) { imageModelCache = null; return "unavailable"; }
+      return null;
+    }
+    const payload = (await response.json()) as ImagePayload;
+    const input = payload.usage?.input_tokens ?? 0;
+    const output = payload.usage?.output_tokens ?? 0;
+    logUsage({ userId, feature: "image", model, httpStatus: 200, latencyMs: Date.now() - started, usage: { input, output, total: payload.usage?.total_tokens ?? input + output } });
+    const data = payload.data?.[0]?.b64_json;
+    return data ? `data:image/webp;base64,${data}` : null;
+  } catch (error) {
+    const timedOut = error instanceof Error && error.name === "TimeoutError";
+    logUsage({ userId, feature: "image", model, httpStatus: null, timedOut, latencyMs: Date.now() - started });
+    console.warn(`[ai] image ${model} failed: ${timedOut ? "timed out" : String(error)}`);
+    return null;
+  }
 }

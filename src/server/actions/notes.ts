@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { htmlToPlainText, noteWritingRules, sanitizeNoteHtml } from "@/lib/note-html";
 import { prisma } from "@/lib/prisma";
+import { checkAi } from "@/server/ai-access";
 import { callAI } from "@/server/assistant/ai";
 
 const noteSchema = z.object({
@@ -85,6 +86,9 @@ ${data.currentText.slice(0, 6000) || "(ফাঁকা)"}
 ব্যবহারকারীর নির্দেশ: ${data.instruction}
 
 শুধু note-এ বসানোর HTML দাও, আর কিছু না।`;
+  const { blocked } = await checkAi(user);
+  if (blocked === "quota") throw new Error(data.lang === "en" ? "You've used your AI token limit. Ask an admin to raise it." : "তোমার AI token limit শেষ হয়ে গেছে। Admin-কে limit বাড়াতে বলো।");
+  if (blocked) throw new Error(data.lang === "en" ? "You don't have AI access yet. Ask an admin from the assistant." : "তোমার এখনো AI ব্যবহারের অনুমতি নেই। Assistant থেকে admin-এর কাছে request পাঠাও।");
   const raw = await callAI(prompt, { userId: user.id, feature: "note_writer" });
   if (!raw) throw new Error(data.lang === "en" ? "The AI isn't responding right now. Please try again in a moment." : "AI এখন সাড়া দিচ্ছে না। একটু পরে আবার চেষ্টা করো।");
   const html = sanitizeNoteHtml(raw.replace(/^```(?:html)?\s*|\s*```$/g, ""));

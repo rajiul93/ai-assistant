@@ -239,7 +239,10 @@ export function useAssistant() {
       startTimer(result.timer, result.reply, voice);
       return;
     }
-    if (result.type === "confirm") {
+    if (result.type === "image") {
+      store.add({ role: "assistant", text: result.reply, source: result.source, image: result.image });
+      store.setOpen(true);
+    } else if (result.type === "confirm") {
       if (pending) store.update(pending.id, { draftState: "replaced" });
       store.add({ role: "assistant", text: result.reply, source: result.source, action: result.action, draftState: "pending" });
       store.setOpen(true);
@@ -249,7 +252,7 @@ export function useAssistant() {
     store.setLive(result.source === "fallback"
       ? { stage: "result", tone: "warn", text: s.fallbackStatus }
       : { stage: "result", tone: "ok", text: result.type === "confirm" ? s.draftReadyStatus : result.type === "navigate" ? s.navigatingStatus : s.answeredStatus });
-    if (voice) speak(result.reply);
+    if (voice || result.speak) speak(result.reply);
     if (result.type === "navigate") router.push(result.href);
   }
 
