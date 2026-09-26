@@ -64,8 +64,13 @@ export function isFatalVoiceError(code: string) {
   return ["not-allowed", "service-not-allowed", "audio-capture", "network", "language-not-supported", "unsupported"].includes(code);
 }
 
-let currentUtterance: SpeechSynthesisUtterance | null = null;
+let speaking = false;
 let quietUntil = 0;
+/** Bumped on every new reply or stop, so a reply that was interrupted doesn't finish later. */
+let speechToken = 0;
+let interruptAudio: (() => void) | null = null;
+// When the server voice isn't available (no TTS access, offline), use the browser's voice for a while.
+let serverVoiceOffUntil = 0;
 const speakListeners = new Set<() => void>();
 
 /** Called whenever the assistant starts talking, so an open mic can close before it hears the speaker. */
@@ -101,14 +106,96 @@ function toSpokenText(text: string) {
     .trim();
 }
 
-export function speak(text: string, onDone?: () => void) {
-  if (typeof window === "undefined" || !window.speechSynthesis) { onDone?.(); return; }
-  window.speechSynthesis.cancel();
-  const lang = useAssistantStore.getState().lang;
+let audioElement: HTMLAudioElement | null = null;
+function sharedAudio() {
+  audioElement ??= new Audio();
+  return audioElement;
+}
+
+/** A tiny silent WAV, played on the first tap so phones allow the shared audio element to play later. */
+function silentWavUrl() {
+  const bytes = new Uint8Array(46);
+  const view = new DataView(bytes.buffer);
+  const ascii = (offset: number, text: string) => [...text].forEach((char, index) => { bytes[offset + index] = char.charCodeAt(0); });
+  ascii(0, "RIFF"); view.setUint32(4, 38, true); ascii(8, "WAVE"); ascii(12, "fmt ");
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, 8000, true); view.setUint32(28, 16000, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  ascii(36, "data"); view.setUint32(40, 2, true);
+  return URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
+}
+
+if (typeof window !== "undefined") {
+  // Phones only let a page play sound it first started from a tap; unlock the shared element then.
+  const unlock = () => {
+    const audio = sharedAudio();
+    if (audio.src) return;
+    audio.src = silentWavUrl();
+    void audio.play().catch(() => {});
+  };
+  document.addEventListener("pointerdown", unlock, { once: true, capture: true });
+}
+
+// Recent clips by text, so a repeated phrase ("সেভ করেছি…", "Play" on the same reply) isn't bought twice.
+const clipCache = new Map<string, Blob>();
+const CLIP_CACHE_SIZE = 30;
+
+function fetchSpeech(text: string, lang: AssistantLang) {
+  const key = `${lang}:${text}`;
+  const cached = clipCache.get(key);
+  if (cached) return Promise.resolve(URL.createObjectURL(cached));
+  // Don't keep the mic closed for long if the server is slow; the browser voice takes over.
+  return fetch("/api/speech", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text, lang }), signal: AbortSignal.timeout(12_000) })
+    .then(async (response) => {
+      if (response.ok) {
+        const blob = await response.blob();
+        clipCache.set(key, blob);
+        if (clipCache.size > CLIP_CACHE_SIZE) clipCache.delete(clipCache.keys().next().value!);
+        return URL.createObjectURL(blob);
+      }
+      // No TTS access or no key: don't ask again for every reply.
+      serverVoiceOffUntil = Date.now() + ([401, 403, 404, 503].includes(response.status) ? 30 * 60_000 : 60_000);
+      return null;
+    })
+    .catch(() => null);
+}
+
+function playUrl(url: string, token: number) {
+  return new Promise<boolean>((resolve) => {
+    if (token !== speechToken) { resolve(false); return; }
+    const audio = sharedAudio();
+    const done = (ok: boolean) => {
+      audio.onended = null;
+      audio.onerror = null;
+      interruptAudio = null;
+      URL.revokeObjectURL(url);
+      resolve(ok);
+    };
+    interruptAudio = () => { audio.pause(); done(false); };
+    audio.onended = () => done(true);
+    audio.onerror = () => done(false);
+    audio.src = url;
+    audio.play().catch(() => done(false));
+  });
+}
+
+/**
+ * Natural-sounding server voice, fetched as one clip: splitting a reply into pieces leaves audible
+ * gaps between them. Returns false if it couldn't be played.
+ */
+async function speakWithServer(text: string, lang: AssistantLang, token: number) {
+  const url = await fetchSpeech(text, lang);
+  if (!url) return false;
+  if (token !== speechToken) { URL.revokeObjectURL(url); return true; }
+  return playUrl(url, token);
+}
+
+/** The device's own voice: free and instant, but often robotic in Bengali. */
+function speakWithBrowser(text: string, lang: AssistantLang, finish: () => void) {
+  if (!window.speechSynthesis) { finish(); return; }
   const voice = bestVoice(lang);
   // Short sentence-sized utterances sound more natural and avoid Chrome cutting off long speech.
-  const sentences = toSpokenText(text).match(/[^।!?.]+[।!?.]*/g)?.map((part) => part.trim()).filter(Boolean) ?? [];
-  if (sentences.length === 0) { onDone?.(); return; }
+  const sentences = text.match(/[^।!?.]+[।!?.]*/g)?.map((part) => part.trim()).filter(Boolean) ?? [];
+  if (sentences.length === 0) { finish(); return; }
   const utterances = sentences.map((sentence) => {
     const utterance = new SpeechSynthesisUtterance(sentence);
     if (voice) utterance.voice = voice;
@@ -117,18 +204,39 @@ export function speak(text: string, onDone?: () => void) {
     return utterance;
   });
   const last = utterances[utterances.length - 1];
-  const done = () => {
-    if (currentUtterance !== last) return;
-    currentUtterance = null;
+  last.onend = finish;
+  last.onerror = finish;
+  utterances.forEach((utterance) => window.speechSynthesis.speak(utterance));
+}
+
+function stopCurrent() {
+  speechToken++;
+  interruptAudio?.();
+  if (typeof window !== "undefined") window.speechSynthesis?.cancel();
+}
+
+export function speak(text: string, onDone?: () => void) {
+  if (typeof window === "undefined") { onDone?.(); return; }
+  stopCurrent();
+  const spoken = toSpokenText(text);
+  if (!spoken) { onDone?.(); return; }
+  const lang = useAssistantStore.getState().lang;
+  const token = speechToken;
+  const finish = () => {
+    if (token !== speechToken) return;
+    speaking = false;
     // Phone speakers echo a little after the last word; keep the mic closed a moment longer.
     quietUntil = Date.now() + (isMobileDevice() ? 900 : 500);
     onDone?.();
   };
-  last.onend = done;
-  last.onerror = done;
-  currentUtterance = last;
+  speaking = true;
   speakListeners.forEach((listener) => listener());
-  utterances.forEach((utterance) => window.speechSynthesis.speak(utterance));
+  if (Date.now() < serverVoiceOffUntil) { speakWithBrowser(spoken, lang, finish); return; }
+  void speakWithServer(spoken, lang, token).then((played) => {
+    if (token !== speechToken) return;
+    if (played) finish();
+    else speakWithBrowser(spoken, lang, finish);
+  });
 }
 
 if (typeof window !== "undefined" && window.speechSynthesis) {
@@ -137,11 +245,11 @@ if (typeof window !== "undefined" && window.speechSynthesis) {
 }
 
 export function stopSpeaking() {
-  currentUtterance = null;
-  if (typeof window !== "undefined") window.speechSynthesis?.cancel();
+  stopCurrent();
+  speaking = false;
 }
 
 /** True while the assistant is talking (plus a short tail), so the mic doesn't hear the speaker. */
 export function isAssistantSpeaking() {
-  return currentUtterance !== null || Date.now() < quietUntil;
+  return speaking || Date.now() < quietUntil;
 }

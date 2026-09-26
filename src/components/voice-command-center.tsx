@@ -7,7 +7,7 @@ import { assistantStrings, type AssistantLang } from "@/lib/assistant-i18n";
 import { useAssistant } from "@/lib/use-assistant";
 import { useSpeechRecognition } from "@/lib/use-speech-recognition";
 import { cn } from "@/lib/utils";
-import { isFatalVoiceError, speak, voiceErrorMessage, type VoiceError } from "@/lib/voice";
+import { isFatalVoiceError, speak, stopSpeaking, voiceErrorMessage, type VoiceError } from "@/lib/voice";
 import { useAssistantStore } from "@/store/assistant";
 
 const stopPhrases = ["ai বন্ধ", "বন্ধ করো", "শোনা বন্ধ", "stop listening", "ai off", "turn off voice"];
@@ -52,6 +52,8 @@ export function VoiceCommandCenter() {
   }
 
   function handleSystemCommand(raw: string, alternatives: string[]) {
+    // A backgrounded tab isn't being talked to, and a single letter is just noise.
+    if (document.hidden || raw.replace(/[^\p{L}]/gu, "").length < 2) return;
     const command = raw.toLowerCase().trim();
     if (stopPhrases.some((phrase) => command.includes(phrase))) { toggleSystem(); return; }
     void send(raw, { voice: true, alternatives });
@@ -60,14 +62,13 @@ export function VoiceCommandCenter() {
   function toggleSystem() {
     if (system.listening) {
       system.stop();
+      stopSpeaking();
       setLive({ stage: "result", tone: "ok", text: t.voiceStoppedStatus });
-      speak(t.voiceStopped);
       return;
     }
     if (!system.supported) { reportError({ code: "unsupported", message: voiceErrorMessage("unsupported") }); return; }
     if (!system.start()) return;
     setLive(null);
-    speak(t.voiceStarted);
   }
 
   return <>
@@ -101,6 +102,6 @@ export function VoiceCommandCenter() {
         <span className="hidden sm:inline">{system.listening ? t.voiceOn : t.voiceOff}</span>
       </button>
     </div>
-    <AssistantStatus systemListening={system.listening} />
+    <AssistantStatus />
   </>;
 }

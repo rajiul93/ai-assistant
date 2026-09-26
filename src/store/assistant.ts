@@ -40,6 +40,7 @@ type AssistantStore = {
   setLive: (live: LiveStatus | null) => void;
   add: (entry: Omit<AssistantEntry, "id">) => number;
   update: (id: number, patch: Partial<AssistantEntry>) => void;
+  remove: (id: number) => void;
 };
 
 const LANG_KEY = "assistant-lang";
@@ -78,6 +79,7 @@ export const useAssistantStore = create<AssistantStore>((set) => ({
     return id;
   },
   update: (id, patch) => set((state) => ({ entries: state.entries.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)) })),
+  remove: (id) => set((state) => ({ entries: state.entries.filter((entry) => entry.id !== id) })),
 }));
 
 export function findPendingAction(entries: AssistantEntry[]) {

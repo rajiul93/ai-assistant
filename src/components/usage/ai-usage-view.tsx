@@ -14,8 +14,9 @@ const featureLabels: Record<string, string> = {
   assistant: "Assistant commands",
   file_assistant: "Reading images & PDFs",
   answer: "Chat answers",
-  answer_search: "Answers with Google Search",
+  answer_search: "Answers with web search",
   note_writer: "Note writing",
+  speech: "Voice replies (spoken aloud)",
 };
 const statusLabels: Record<string, string> = {
   ok: "Succeeded",
@@ -135,7 +136,7 @@ export function AiUsageView({ usage, period, admin }: { usage: Awaited<ReturnTyp
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">AI usage</h1>
-        <p className="mt-1 text-sm text-zinc-500">{admin ? "Every user's AI usage — Gemini and OpenAI (you're an admin)." : "Your AI usage — Gemini and OpenAI."} Each call is counted, including retries on a second model or provider.</p>
+        <p className="mt-1 text-sm text-zinc-500">{admin ? "Every user's AI usage — OpenAI (you're an admin)." : "Your AI usage — OpenAI."} Each call is counted, including retries on the fallback model.</p>
       </div>
       <nav aria-label="Period" className="flex gap-1 self-start rounded-xl bg-zinc-100 p-1 sm:self-auto">
         {usagePeriods.map((item) => <Link

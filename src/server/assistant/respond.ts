@@ -15,7 +15,7 @@ type StudyContext = {
 };
 
 type Lang = "bn" | "en" | undefined;
-const actions = ["navigate", "create_task", "complete_task", "start_timer", "revise_task", "add_application", "create_note", "answer", "clarify"] as const;
+const actions = ["navigate", "create_task", "complete_task", "start_timer", "revise_task", "add_application", "create_note", "answer", "clarify", "ignore"] as const;
 const applicationStatuses = ["WISHLIST", "APPLIED", "EXAM", "INTERVIEW", "OFFER", "REJECTED", "WITHDRAWN"] as const;
 
 const pageKeys = Object.keys(assistantPages) as [AssistantPage, ...AssistantPage[]];
@@ -54,7 +54,7 @@ const intentSchema = z.object({
 });
 type Intent = z.infer<typeof intentSchema>;
 
-// Gemini's structured-output schema; mirrors intentSchema above.
+// Structured-output schema for the AI; mirrors intentSchema above.
 const intentResponseSchema = {
   type: "OBJECT",
   properties: {
@@ -114,8 +114,21 @@ const intentResponseSchema = {
   required: ["action", "reply"],
 };
 
+// Older turns only need their gist; the latest assistant reply stays whole so "save that answer" still works.
+const HISTORY_CHARS = 300;
+
 function formatHistory(history: ChatMessage[]) {
-  return history.map((item) => `${item.role === "user" ? "ব্যবহারকারী" : "সহকারী"}: ${item.text}`).join("\n") || "এটি প্রথম কথা।";
+  const lastAssistant = history.findLastIndex((item) => item.role === "assistant");
+  return history.map((item, index) => {
+    const text = index === lastAssistant || item.text.length <= HISTORY_CHARS ? item.text : `${item.text.slice(0, HISTORY_CHARS)}…`;
+    return `${item.role === "user" ? "ব্যবহারকারী" : "সহকারী"}: ${text}`;
+  }).join("\n") || "এটি প্রথম কথা।";
+}
+
+/** Lists in the prompt are capped: the AI names an item and the server matches it against the full list. */
+function capped<T>(items: T[], limit: number, format: (item: T) => string, separator: string) {
+  const shown = items.slice(0, limit).map(format).join(separator);
+  return items.length > limit ? `${shown}${separator}… (আরও ${items.length - limit}টি)` : shown;
 }
 
 function upcomingDays() {
@@ -163,18 +176,18 @@ action বেছে নাও:
 - navigate: শুধু কোনো পাতা খুলতে/দেখতে চাইলে। page: dashboard, tasks, new_task (নতুন task-এর ফাঁকা form), subjects, revisions, progress, timer, plan, jobs (job application-এর তালিকা), notes (Notes পাতা)।
 - answer: প্রশ্ন, আলাপ, পরামর্শ, মন খারাপ, সাধারণ জ্ঞান — যা কোনো app action নয়। reply-তে সরাসরি পুরো উত্তরটা দাও। পড়াশোনা নিয়ে প্রশ্নে নিচের study data ব্যবহার করে ব্যক্তিগত পরামর্শ দাও।
 - clarify: উদ্দেশ্য অস্পষ্ট, বা এমন কিছু চাইছে যা app-এ নেই (যেমন notes পাতা নেই)। reply-তে বিনয়ের সঙ্গে জানাও কী করা যায় এবং প্রশ্ন করো।
-অনুমান করে ভুল কাজ করবে না। ${languageRule(request.lang)} ${styleRule(request.voice)}
+${request.voice ? "- ignore: mic সবসময় খোলা থাকে, তাই আশেপাশের আওয়াজও আসে। কথাটা স্পষ্টতই সহকারীকে বলা না হলে — TV/ভিডিও/গানের সংলাপ, অন্য কারো সঙ্গে কথা, অর্থহীন টুকরো শব্দ — ignore দাও, reply খালি। সামান্য সন্দেহ থাকলেও ignore নয়; তখন answer বা clarify।\n" : ""}অনুমান করে ভুল কাজ করবে না। ${languageRule(request.lang)} ${styleRule(request.voice)}
 
 সামনের তারিখগুলো (${APP_TIMEZONE}):
 ${upcomingDays()}
 
 ব্যবহারকারীর subjects: ${context.subjects.map((subject) => subject.name).join(", ") || "কোনো subject নেই"}
 
-Topics (subject › topic): ${context.topics.map((topic) => `${topic.subject.name} › ${topic.parent ? `${topic.parent.name} › ` : ""}${topic.name}`).join("; ") || "কোনো topic নেই"}
+Topics (subject › topic): ${capped(context.topics, 80, (topic) => `${topic.subject.name} › ${topic.parent ? `${topic.parent.name} › ` : ""}${topic.name}`, "; ") || "কোনো topic নেই"}
 
-Revision তালিকা (শেষ হওয়া task, কতবার revise হয়েছে): ${context.toRevise.map((task) => `“${task.title}” (${task.timesRevised}×)`).join(", ") || "নেই"}
+Revision তালিকা (শেষ হওয়া task, কতবার revise হয়েছে): ${capped(context.toRevise, 40, (task) => `“${task.title}” (${task.timesRevised}×)`, ", ") || "নেই"}
 
-অসমাপ্ত tasks: ${context.openTasks.map((task) => `“${task.title}”${task.subject ? ` (${task.subject.name})` : ""}`).join(", ") || "নেই"}
+অসমাপ্ত tasks: ${capped(context.openTasks, 40, (task) => `“${task.title}”${task.subject ? ` (${task.subject.name})` : ""}`, ", ") || "নেই"}
 
 Study data: ${JSON.stringify(studyData(context))}
 
@@ -354,7 +367,7 @@ function studyData(context: StudyContext) {
   return {
     counts: context.counts,
     pendingTasks: context.tasks.map((task) => ({ title: task.title, priority: task.priority, dueDate: task.dueDate, status: task.status, subject: task.subject?.name })),
-    toRevise: context.toRevise.slice(0, 20).map((task) => ({ title: task.title, timesRevised: task.timesRevised, lastRevisedAt: task.lastRevisedAt })),
+    toRevise: context.toRevise.slice(0, 10).map((task) => ({ title: task.title, timesRevised: task.timesRevised, lastRevisedAt: task.lastRevisedAt })),
   };
 }
 
@@ -363,8 +376,8 @@ async function answer(userId: string, message: string, history: ChatMessage[], c
   const basePrompt = `তুমি একজন স্বাভাবিক, বুদ্ধিমান বাংলা সহকারী। এটি একটি open-book conversation: ব্যবহারকারী পড়াশোনা ছাড়াও যেকোনো সাধারণ বা random প্রশ্ন করতে পারে। সাধারণ জ্ঞান, সাম্প্রতিক তথ্য, খবর, ব্যক্তি, জায়গা, প্রযুক্তি বা অন্য কোনো তথ্যের জন্য প্রয়োজন হলে তথ্য যাচাই করে উত্তর দাও। তুমি নিশ্চিত না হলে স্পষ্টভাবে বলবে, বানিয়ে বলবে না। ব্যবহারকারী বাংলায়, Banglish বা ইংরেজিতে লিখলেও সহজ স্বাভাবিক বাংলায় উত্তর দেবে; technical term দরকার হলে সহজ ব্যাখ্যা দেবে। কথার tone প্রসঙ্গ অনুযায়ী স্বাভাবিক, সহানুভূতিশীল, serious বা হালকা মজার হবে। আগের কথার ধারাবাহিকতা রাখবে।
 
 আগের কথোপকথন:\n${formatHistory(history)}\n\nব্যবহারকারীর বর্তমান প্রশ্ন:\n${message}\n\nঅ্যাপের ব্যক্তিগত study data (শুধু app-related প্রশ্নে ব্যবহার করবে):\n${JSON.stringify(studyData(context))}\n\n${persona}\n${languageRule(lang)} ${styleRule(voice)}`;
-  return await callAI(`${basePrompt}\n\nপ্রয়োজন হলে Google Search ব্যবহার করে current তথ্য যাচাই করো।`, { search: true, files, userId, feature: "answer_search" })
-    ?? await callAI(`${basePrompt}\n\nGoogle Search এই মুহূর্তে unavailable হতে পারে। তোমার সাধারণ জ্ঞান ব্যবহার করে উত্তর দাও, তবে current তথ্য নিশ্চিত না হলে সেটা স্পষ্ট করে বলো।`, { files, userId, feature: "answer" });
+  return await callAI(`${basePrompt}\n\nপ্রয়োজন হলে web search ব্যবহার করে current তথ্য যাচাই করো।`, { search: true, files, userId, feature: "answer_search" })
+    ?? await callAI(`${basePrompt}\n\nWeb search এই মুহূর্তে unavailable হতে পারে। তোমার সাধারণ জ্ঞান ব্যবহার করে উত্তর দাও, তবে current তথ্য নিশ্চিত না হলে সেটা স্পষ্ট করে বলো।`, { files, userId, feature: "answer" });
 }
 
 const navigationRules: Array<{ pattern: RegExp; page: AssistantPage; reply: string }> = [
@@ -376,7 +389,7 @@ const navigationRules: Array<{ pattern: RegExp; page: AssistantPage; reply: stri
   { pattern: /(dashboard|ড্যাশবোর্ড|হোম|মূল পাত)/i, page: "dashboard", reply: "চলো, dashboard-এ ফিরি।" },
 ];
 
-/** Keyword rules used when Gemini is not configured or not responding. */
+/** Keyword rules used when the AI is not configured or not responding. */
 function fallbackReply(message: string, context: StudyContext, lang?: "bn" | "en"): AssistantReply {
   const text = message.toLowerCase();
   const navigation = /(খোলো|খুলে|নিয়ে চলো|চলো|পাতায়|page|দেখাও|যাও|যাই|যেতে|দেখতে|চাই)/i.test(text);
@@ -438,6 +451,8 @@ async function decide(userId: string, request: AssistantRequest): Promise<Assist
     return fallbackReply(request.message, context, request.lang);
   }
 
+  // Background talk the mic picked up: no reply, nothing spoken, nothing more spent on it.
+  if (intent.action === "ignore" && request.voice) return { type: "ignore", reply: "" };
   if (intent.action === "navigate" && intent.page) {
     return { type: "navigate", href: assistantPages[intent.page], reply: intent.reply || (request.lang === "en" ? "Sure, opening it." : "ঠিক আছে, খুলছি।") };
   }
@@ -485,7 +500,7 @@ async function decide(userId: string, request: AssistantRequest): Promise<Assist
   if (intent.action === "clarify") {
     return { type: "clarify", reply: intent.reply || (request.lang === "en" ? "I didn't quite get that — could you say it another way?" : "কথাটা পুরোপুরি বুঝিনি। একটু অন্যভাবে বলবে?") };
   }
-  // Normally the intent call already contains the answer; only ask again (with Google Search) if it came back empty.
+  // Normally the intent call already contains the answer; only ask again (with web search) if it came back empty.
   if (intent.reply.trim()) return { type: "answer", reply: intent.reply.trim() };
   const reply = await answer(userId, request.message, history, context, request.voice, request.lang, request.attachment);
   return reply ? { type: "answer", reply } : fallbackReply(request.message, context, request.lang);

@@ -15,11 +15,11 @@ import { useAssistantStore, type AssistantEntry } from "@/store/assistant";
 
 const priorityStyles = { LOW: "bg-zinc-100 text-zinc-600", MEDIUM: "bg-sky-50 text-sky-700", HIGH: "bg-rose-50 text-rose-700" } as const;
 
-/** The browser sometimes leaves HEIC/HEIF (and rarely PDF) types empty — fall back to the extension. */
+/** The browser sometimes leaves a file's type empty — fall back to the extension. */
 function fileType(file: File): AttachmentType | null {
   if (isAllowedType(file.type)) return file.type;
   const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
-  const byExtension: Record<string, AttachmentType> = { pdf: "application/pdf", heic: "image/heic", heif: "image/heif", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp" };
+  const byExtension: Record<string, AttachmentType> = { pdf: "application/pdf", jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp" };
   return file.type === "" ? byExtension[extension] ?? null : null;
 }
 

@@ -2,7 +2,7 @@ import { assistantPages, type AssistantPage } from "@/lib/assistant-types";
 
 export type QuickCommand =
   | { kind: "navigate"; page: AssistantPage; href: string }
-  | { kind: "refresh" | "back" };
+  | { kind: "refresh" | "back" | "thanks" | "greet" };
 
 // Speech recognition writes English words in Bengali script too ("ড্যাশবোর্ড", "রিলোড"), so list both.
 // Matching is fuzzy, so a slightly slurred "ডেসবোর্ড" or "ড্যাশ বোর্ড" still counts.
@@ -21,6 +21,9 @@ const pageKeywords: Array<{ page: AssistantPage; words: string[] }> = [
 const refreshWords = ["reload", "refresh", "রিলোড", "রিফ্রেশ", "রিলোডে"];
 // Whole words only: Bengali has no regex word boundary, and "প্ল্যান" contains "যান".
 const goWords = ["যাও", "যাই", "যান", "যাবো", "চলো", "চল", "খোলো", "খুলো", "খোল", "খুলে", "খুলুন", "ওপেন", "open", "go", "show", "navigate", "দেখাও", "দেখি", "দেখান", "পেজ", "পেইজ", "পাতা", "পাতায়", "page"];
+// Small talk said on its own ("ধন্যবাদ", "hello") gets a friendly reply without an AI call.
+const thanksWords = ["ধন্যবাদ", "থ্যাংকস", "থ্যাংক", "থ্যাঙ্কস", "থ্যাঙ্ক", "ইউ", "thanks", "thank", "you", "অনেক", "tnx", "thx", "so", "much"];
+const greetWords = ["হ্যালো", "হাই", "হেলো", "hello", "hi", "hey", "হেই", "সালাম", "আসসালামু", "আলাইকুম", "আসসালামুয়ালাইকুম", "assalamualaikum", "salam"];
 const backWords = ["পিছনে", "পেছনে", "ব্যাক", "back", "previous"];
 // Requests to create or change something need the AI, not a page jump.
 const actionWords = ["বানাও", "বানিয়ে", "বানা", "তৈরি", "যোগ", "add", "create", "make", "new", "নতুন", "লিখে", "লেখো", "সেভ", "save", "মুছে", "মুছো", "delete", "ডিলিট", "remind", "করে দাও", "কিভাবে", "কীভাবে", "কেন", "কী", "কি", "how", "why", "what"];
@@ -94,7 +97,10 @@ function matchOne(input: string): QuickCommand | null {
   const text = normalize(input);
   if (!text || text.length > 60) return null;
   if (containsKeyword(text, refreshWords)) return { kind: "refresh" };
-  const wordCount = text.split(" ").length;
+  const words = text.split(" ");
+  const wordCount = words.length;
+  if (wordCount <= 4 && words.every((word) => thanksWords.includes(word)) && words.some((word) => ["ধন্যবাদ", "থ্যাংকস", "থ্যাংক", "থ্যাঙ্কস", "থ্যাঙ্ক", "thanks", "thank", "tnx", "thx"].includes(word))) return { kind: "thanks" };
+  if (wordCount <= 3 && words.every((word) => greetWords.includes(word))) return { kind: "greet" };
   if (hasWord(text, backWords) || text.includes("আগের পাতা") || text.includes("আগের পেজ") || text.includes("go back")) return { kind: "back" };
   // Page jumps are short commands; longer sentences and questions are conversations for the AI.
   if (wordCount > 6 || hasWord(text, actionWords)) return null;

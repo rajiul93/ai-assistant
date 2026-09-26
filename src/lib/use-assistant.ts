@@ -183,7 +183,7 @@ export function useAssistant() {
       if (voice) speak(reply);
       if (quick.kind === "navigate") router.push(quick.href);
       else if (quick.kind === "refresh") router.refresh();
-      else router.back();
+      else if (quick.kind === "back") router.back();
       return;
     }
     if (store.busy) {
@@ -193,7 +193,8 @@ export function useAssistant() {
 
     const pending = findPendingAction(store.entries);
     const history = store.entries.slice(-10).map(({ role, text: entryText }) => ({ role, text: entryText }));
-    store.add({ role: "user", text: message, viaVoice: voice, attachmentName: attachment?.name });
+    const userEntry = store.add({ role: "user", text: message, viaVoice: voice, attachmentName: attachment?.name });
+    const wasOpen = store.open;
     // Spoken requests open the chat, so the user can read what was heard and what the assistant answers.
     if (voice) store.setOpen(true);
 
@@ -227,6 +228,13 @@ export function useAssistant() {
       store.setBusy(false);
     }
 
+    if (result.type === "ignore") {
+      // Background talk: leave the chat as it was and say nothing.
+      store.remove(userEntry);
+      store.setOpen(wasOpen);
+      store.setLive(null);
+      return;
+    }
     if (result.type === "start_timer") {
       startTimer(result.timer, result.reply, voice);
       return;
