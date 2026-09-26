@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Mic, Sparkles } from "lucide-react";
+import { Mic } from "lucide-react";
 import { AssistantStatus, VoiceWave } from "@/components/assistant-status";
 import { assistantStrings, type AssistantLang } from "@/lib/assistant-i18n";
 import { useAssistant } from "@/lib/use-assistant";
@@ -21,8 +21,6 @@ export function VoiceCommandCenter() {
   const lang = useAssistantStore((state) => state.lang);
   const setLang = useAssistantStore((state) => state.setLang);
   const setLive = useAssistantStore((state) => state.setLive);
-  // Set while the one-shot mic temporarily borrows the microphone from System mode.
-  const resumeSystemAfterGk = useRef(false);
 
   useEffect(() => { useAssistantStore.getState().loadLang(); }, []);
 
@@ -31,11 +29,6 @@ export function VoiceCommandCenter() {
     onInterim: (text) => setLive({ stage: "listening", text }),
     onResult: (value, alternatives) => handleSystemCommand(value, alternatives),
     onError: (error) => reportError(error),
-  });
-  const gk = useSpeechRecognition({
-    onInterim: (text) => setLive({ stage: "listening", text }),
-    onResult: (question, alternatives) => { resumeSystem(); void send(question, { voice: true, alternatives }); },
-    onError: (error) => { reportError(error); resumeSystem(); },
   });
   // start() is rebuilt when the language changes; keep the latest one for delayed restarts.
   const systemStart = useRef(system.start);
@@ -47,12 +40,6 @@ export function VoiceCommandCenter() {
     if (isFatalVoiceError(error.code)) speak(error.message);
   }
 
-  function resumeSystem() {
-    if (!resumeSystemAfterGk.current) return;
-    resumeSystemAfterGk.current = false;
-    window.setTimeout(() => systemStart.current(), 300);
-  }
-
   function chooseLanguage(value: AssistantLang) {
     if (value === lang) return;
     setLang(value);
@@ -62,14 +49,6 @@ export function VoiceCommandCenter() {
       system.stop();
       window.setTimeout(() => systemStart.current(), 300);
     }
-  }
-
-  function listenOnce() {
-    if (!gk.supported) { reportError({ code: "unsupported", message: voiceErrorMessage("unsupported") }); return; }
-    if (system.listening) { resumeSystemAfterGk.current = true; system.stop(); }
-    setLive({ stage: "listening", text: "" });
-    // Give the System recognizer a moment to release the mic before the one-shot mic takes it.
-    window.setTimeout(() => { if (!gk.start()) resumeSystem(); }, resumeSystemAfterGk.current ? 300 : 0);
   }
 
   function handleSystemCommand(raw: string, alternatives: string[]) {
@@ -120,19 +99,6 @@ export function VoiceCommandCenter() {
       >
         {system.listening ? <VoiceWave className="h-3.5 text-rose-400" /> : <Mic className="size-4" />}
         <span className="hidden sm:inline">{system.listening ? t.voiceOn : t.voiceOff}</span>
-      </button>
-      <button
-        type="button"
-        onClick={listenOnce}
-        disabled={gk.listening}
-        title={t.askHint}
-        className={cn(
-          "flex h-10 min-w-10 items-center justify-center gap-2 rounded-full px-3 text-sm font-medium text-zinc-700 transition-all duration-200 hover:bg-zinc-100 disabled:cursor-default lg:h-8",
-          gk.listening && "bg-rose-50 text-rose-600 hover:bg-rose-50",
-        )}
-      >
-        {gk.listening ? <VoiceWave className="h-3.5" /> : <Sparkles className="size-4" />}
-        <span className="hidden sm:inline">{t.ask}</span>
       </button>
     </div>
     <AssistantStatus systemListening={system.listening} />

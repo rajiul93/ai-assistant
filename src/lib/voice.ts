@@ -66,6 +66,13 @@ export function isFatalVoiceError(code: string) {
 
 let currentUtterance: SpeechSynthesisUtterance | null = null;
 let quietUntil = 0;
+const speakListeners = new Set<() => void>();
+
+/** Called whenever the assistant starts talking, so an open mic can close before it hears the speaker. */
+export function onAssistantSpeak(listener: () => void) {
+  speakListeners.add(listener);
+  return () => { speakListeners.delete(listener); };
+}
 
 /**
  * The most natural voice the device has for the language. Without an explicit voice, Chrome often
@@ -113,12 +120,14 @@ export function speak(text: string, onDone?: () => void) {
   const done = () => {
     if (currentUtterance !== last) return;
     currentUtterance = null;
-    quietUntil = Date.now() + 500;
+    // Phone speakers echo a little after the last word; keep the mic closed a moment longer.
+    quietUntil = Date.now() + (isMobileDevice() ? 900 : 500);
     onDone?.();
   };
   last.onend = done;
   last.onerror = done;
   currentUtterance = last;
+  speakListeners.forEach((listener) => listener());
   utterances.forEach((utterance) => window.speechSynthesis.speak(utterance));
 }
 
