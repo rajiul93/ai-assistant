@@ -10,7 +10,7 @@ import type { AssistantStrings } from "@/lib/assistant-i18n";
 import { ATTACHMENT_ACCEPT, formatBytes, isAllowedType, MAX_ATTACHMENT_BYTES, type AttachmentType } from "@/lib/attachments";
 import type { PendingAction } from "@/lib/assistant-types";
 import { useAssistant } from "@/lib/use-assistant";
-import { useSpeechRecognition } from "@/lib/use-speech-recognition";
+import { useBestMic } from "@/lib/use-best-mic";
 import { cn } from "@/lib/utils";
 import { speak } from "@/lib/voice";
 import { requestAiAccess } from "@/server/actions/ai-access";
@@ -133,8 +133,10 @@ export function StudyAssistant({ aiAccess, aiQuota }: { aiAccess: AiAccessState;
   const [wide, setWide] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const voice = useSpeechRecognition({
-    onInterim: (value) => { setQuestion(value); setLive({ stage: "listening", text: value }); },
+  const voice = useBestMic({
+    // The assistant's last message helps the transcriber with short replies ("হ্যাঁ", a subject name).
+    context: () => entries.findLast((entry) => entry.role === "assistant")?.text ?? "",
+    onInterim: (value) => { if (value !== "…") setQuestion(value); setLive({ stage: "listening", text: value }); },
     onResult: (value, alternatives) => { setQuestion(""); void send(value, { voice: true, alternatives }); },
     onError: (error) => { setQuestion(""); setVoiceError(error.message); setLive({ stage: "result", tone: "warn", text: error.message }); },
   });
@@ -235,11 +237,12 @@ export function StudyAssistant({ aiAccess, aiQuota }: { aiAccess: AiAccessState;
                 <img src={entry.image} alt={entry.text} className="w-full rounded-xl border border-zinc-200 bg-white" />
                 <a href={entry.image} download="assistant-image.webp" className="mt-1.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium text-zinc-500 transition hover:bg-white hover:text-zinc-900"><Download className="size-3" /> Download</a>
               </figure> : null}
-              {entry.action ? null : <button type="button" onClick={() => speak(entry.text)} className="mt-1 -ml-1 flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium text-zinc-500 transition hover:bg-white hover:text-zinc-900"><Volume2 className="size-3" /> {t.listenAgain}</button>}
+              {entry.streaming ? <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse rounded-sm bg-zinc-400 align-middle" aria-hidden /> : null}
+              {entry.action || entry.streaming ? null : <button type="button" onClick={() => speak(entry.text)} className="mt-1 -ml-1 flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium text-zinc-500 transition hover:bg-white hover:text-zinc-900"><Volume2 className="size-3" /> {t.listenAgain}</button>}
             </div>
             {entry.action ? <ActionCard action={entry.action} state={entry.draftState} t={t} onConfirm={() => void confirmAction()} onCancel={() => cancelAction()} /> : null}
           </div>)}
-        {busy ? <div className="assistant-in mr-6 flex w-fit items-center gap-2 rounded-2xl rounded-bl-md bg-zinc-100/80 px-3.5 py-2.5">
+        {busy && !entries.at(-1)?.streaming ? <div className="assistant-in mr-6 flex w-fit items-center gap-2 rounded-2xl rounded-bl-md bg-zinc-100/80 px-3.5 py-2.5">
           {[0, 0.15, 0.3].map((delay) => <span key={delay} className="voice-bar size-1.5 rounded-full bg-zinc-400" style={{ animationDelay: `${delay}s` }} />)}
         </div> : null}
       </div>

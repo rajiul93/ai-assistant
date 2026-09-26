@@ -11,17 +11,20 @@ export async function getStudyPlan(userId: string) {
   return prisma.studyPlan.findUnique({ where: { userId } });
 }
 
+// The user's own order (drag and drop on the Subjects page), then by name.
+const byPosition = [{ position: "asc" as const }, { name: "asc" as const }];
+
 export async function getSubjects(userId: string) {
   return prisma.subject.findMany({
     where: { userId },
-    orderBy: { name: "asc" },
+    orderBy: byPosition,
     include: {
       topics: {
-        orderBy: { name: "asc" },
+        orderBy: byPosition,
         include: {
           children: {
-            orderBy: { name: "asc" },
-            include: { children: { orderBy: { name: "asc" } } },
+            orderBy: byPosition,
+            include: { children: { orderBy: byPosition } },
           },
         },
       },
@@ -41,7 +44,7 @@ export async function getTasks(userId: string) {
   return prisma.task.findMany({
     where: { userId },
     include: taskInclude,
-    orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+    orderBy: [{ position: "asc" }, { dueDate: "asc" }, { createdAt: "desc" }],
   });
 }
 

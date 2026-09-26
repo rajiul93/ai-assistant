@@ -75,8 +75,11 @@ export const jobApplicationSchema = z.object({
   deadline: optionalDate,
   examDate: optionalDate,
   reference: z.string().trim().max(120).optional().or(z.literal("")),
+  roll: z.string().trim().max(60).optional().or(z.literal("")),
+  password: z.string().max(200).optional().or(z.literal("")),
   link: z.string().trim().url("Enter a full link, e.g. https://…").max(500).optional().or(z.literal("")),
-  notes: z.string().trim().max(2000).optional().or(z.literal("")),
+  /** Rich text (Quill HTML) with everything else from the applicant copy. */
+  notes: z.string().trim().max(100_000).optional().or(z.literal("")),
 });
 
 export type JobApplicationInput = z.infer<typeof jobApplicationSchema>;

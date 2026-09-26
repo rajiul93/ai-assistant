@@ -6,7 +6,8 @@ import { AssistantStatus, VoiceWave } from "@/components/assistant-status";
 import { assistantStrings, type AssistantLang } from "@/lib/assistant-i18n";
 import { useAssistant } from "@/lib/use-assistant";
 import { useSpeechRecognition } from "@/lib/use-speech-recognition";
-import { isCloudVoiceAvailable, useVoiceCapture } from "@/lib/use-voice-capture";
+import { cloudVoiceAvailability } from "@/lib/use-best-mic";
+import { useVoiceCapture } from "@/lib/use-voice-capture";
 import { cn } from "@/lib/utils";
 import { isFatalVoiceError, speak, stopSpeaking, voiceErrorMessage, type VoiceError } from "@/lib/voice";
 import { quotaExceeded, type AiQuota } from "@/lib/ai-limits";
@@ -30,8 +31,9 @@ export function VoiceCommandCenter({ aiAccess, aiQuota }: { aiAccess: AiAccessSt
   // OpenAI transcription hears accents and distant voices far better; the browser's recognizer is
   // the fallback when the key has no speech-to-text model. Checked up front so no sentence is lost.
   const [cloudAvailable, setCloudAvailable] = useState(false);
-  useEffect(() => { void isCloudVoiceAvailable().then(setCloudAvailable); }, []);
+  useEffect(() => { void cloudVoiceAvailability().then(setCloudAvailable); }, []);
   const cloud = useVoiceCapture({
+    context: () => useAssistantStore.getState().entries.findLast((entry) => entry.role === "assistant")?.text ?? "",
     onSpeechStart: () => setLive({ stage: "listening", text: "…" }),
     onText: (text) => {
       if (text) { handleSystemCommand(text, []); return; }

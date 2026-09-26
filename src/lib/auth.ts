@@ -5,7 +5,7 @@ import { getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { prisma } from "@/lib/prisma";
 import { adminAuth, isFirebaseAdminConfigured } from "@/lib/firebase/admin";
-import { SESSION_COOKIE, SESSION_MAX_AGE_MS } from "@/lib/session";
+import { loginCookieOptions, SESSION_COOKIE } from "@/lib/session";
 
 export { SESSION_COOKIE };
 
@@ -107,17 +107,12 @@ function rememberSession(token: string, user: Awaited<ReturnType<typeof upsertUs
   verifiedSessions.set(token, { user, until });
 }
 
+/**
+ * Signs a user in from a Firebase ID token. The ID token itself is the session cookie; it lasts an
+ * hour and the proxy (src/proxy.ts) swaps in a new one from the refresh-token cookie before it ends.
+ */
 export async function createSessionCookie(idToken: string) {
-  if (isFirebaseAdminConfigured()) {
-    const sessionCookie = await adminAuth().createSessionCookie(idToken, {
-      expiresIn: SESSION_MAX_AGE_MS,
-    });
-    const decoded = await adminAuth().verifyIdToken(idToken);
-    await upsertUserFromToken(decoded.uid, decoded.email, decoded.name, decoded.picture);
-    return sessionCookie;
-  }
-
-  const decoded = await lookupFirebaseUser(idToken);
+  const decoded = await verifyFirebaseIdToken(idToken);
   await upsertUserFromToken(decoded.uid, decoded.email, decoded.name, decoded.picture);
   return idToken;
 }
@@ -148,6 +143,17 @@ export async function upsertUserFromToken(
   });
 }
 
+/** An ID token, or a 5-day Firebase session cookie from before the refresh-token login. */
+async function verifySession(session: string): Promise<TokenUser> {
+  try {
+    return await verifyFirebaseIdToken(session);
+  } catch (error) {
+    if (!isFirebaseAdminConfigured()) throw error;
+    const decoded = await adminAuth().verifySessionCookie(session, true);
+    return { uid: decoded.uid, email: decoded.email, name: decoded.name as string | undefined, picture: decoded.picture };
+  }
+}
+
 /** The signed-in user, verified at most once per request (React cache) and once per 5 minutes. */
 export const getCurrentUser = cache(async () => {
   const cookieStore = await cookies();
@@ -159,9 +165,7 @@ export const getCurrentUser = cache(async () => {
   verifiedSessions.delete(session);
 
   try {
-    const decoded = isFirebaseAdminConfigured()
-      ? await adminAuth().verifySessionCookie(session, true)
-      : await verifyFirebaseIdToken(session);
+    const decoded = await verifySession(session);
     const user = await upsertUserFromToken(decoded.uid, decoded.email, decoded.name, decoded.picture);
     rememberSession(session, user);
     return user;
@@ -179,12 +183,5 @@ export async function requireUser() {
 }
 
 export function sessionCookieOptions() {
-  return {
-    name: SESSION_COOKIE,
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax" as const,
-    path: "/",
-    maxAge: isFirebaseAdminConfigured() ? SESSION_MAX_AGE_MS / 1000 : 60 * 55,
-  };
+  return { name: SESSION_COOKIE, ...loginCookieOptions() };
 }

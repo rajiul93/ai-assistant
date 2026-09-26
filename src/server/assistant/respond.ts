@@ -5,6 +5,7 @@ import { getFlatTopics, getOpenTasks, getPendingTasks, getProgressCounts, getSub
 import { htmlToPlainText, noteWritingRules, sanitizeNoteHtml } from "@/lib/note-html";
 import { prisma } from "@/lib/prisma";
 import { callAI, generateImage, isAIConfigured } from "@/server/assistant/ai";
+import { createReplyStreamer } from "@/server/assistant/reply-stream";
 
 type StudyContext = {
   counts: Awaited<ReturnType<typeof getProgressCounts>>;
@@ -501,14 +502,17 @@ function fallbackReply(message: string, context: StudyContext, lang?: "bn" | "en
   };
 }
 
-export async function respond(userId: string, request: AssistantRequest): Promise<AssistantReply> {
-  const reply = await decide(userId, request);
+/** `onReplyDelta` receives the answer's text as the model writes it (answers and questions back only). */
+export type RespondHooks = { onReplyDelta?: (text: string) => void };
+
+export async function respond(userId: string, request: AssistantRequest, hooks: RespondHooks = {}): Promise<AssistantReply> {
+  const reply = await decide(userId, request, hooks);
   reply.source ??= "ai";
   console.info(`[assistant] "${request.message.slice(0, 60)}" → ${reply.type}${reply.type === "confirm" ? `:${reply.action.kind}` : ""} [${reply.source}]`);
   return reply;
 }
 
-async function decide(userId: string, request: AssistantRequest): Promise<AssistantReply> {
+async function decide(userId: string, request: AssistantRequest, hooks: RespondHooks): Promise<AssistantReply> {
   const history = (request.history ?? []).slice(-10);
   const [counts, tasks, toRevise, subjects, openTasks, topics, notes] = await Promise.all([
     getProgressCounts(userId),
@@ -522,8 +526,10 @@ async function decide(userId: string, request: AssistantRequest): Promise<Assist
   const context: StudyContext = { counts, tasks, toRevise, subjects, openTasks, topics, notes };
   const lang = request.lang;
 
+  const streamer = hooks.onReplyDelta ? createReplyStreamer(hooks.onReplyDelta) : null;
   const raw = await callAI(intentPrompt(request, history, context), {
     responseSchema: intentResponseSchema,
+    onDelta: streamer ? (piece) => streamer.feed(piece) : undefined,
     files: request.attachment ? [{ mimeType: request.attachment.mimeType, data: request.attachment.data, name: request.attachment.name }] : undefined,
     userId,
     feature: request.attachment ? "file_assistant" : "assistant",

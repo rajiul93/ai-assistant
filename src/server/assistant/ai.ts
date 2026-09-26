@@ -17,7 +17,15 @@ export type AiFeature = "assistant" | "file_assistant" | "answer" | "answer_sear
 /** Images/PDFs sent alongside the prompt (base64). */
 type InlineFile = { mimeType: string; data: string; name?: string };
 /** `responseSchema` is written in an OpenAPI style (type: "OBJECT", nullable: true) and converted to JSON Schema. */
-type CallOptions = { search?: boolean; responseSchema?: object; files?: InlineFile[]; userId: string; feature: AiFeature };
+type CallOptions = {
+  search?: boolean;
+  responseSchema?: object;
+  files?: InlineFile[];
+  userId: string;
+  feature: AiFeature;
+  /** Streams the model's output: called with each new piece of raw text as it is generated. */
+  onDelta?: (text: string) => void;
+};
 type Usage = { input: number; output: number; total: number };
 type Attempt = { status: number | null; text: string | null; usage?: Usage };
 
@@ -94,13 +102,16 @@ const dataUrl = (file: InlineFile) => `data:${file.mimeType};base64,${file.data}
 async function chatCompletion(model: string, apiKey: string, prompt: string, options: CallOptions, timeoutMs: number): Promise<Attempt> {
   const fileParts = (options.files ?? []).map((file) => (file.mimeType === "application/pdf"
     ? { type: "file", file: { filename: file.name ?? "document.pdf", file_data: dataUrl(file) } }
-    : { type: "image_url", image_url: { url: dataUrl(file) } }));
+    // "high" reads small print (names, IDs on scanned forms) far more accurately.
+    : { type: "image_url", image_url: { url: dataUrl(file), detail: "high" } }));
+  const stream = Boolean(options.onDelta);
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model,
       messages: [{ role: "user", content: fileParts.length ? [...fileParts, { type: "text", text: prompt }] : prompt }],
+      ...(stream ? { stream: true, stream_options: { include_usage: true } } : {}),
       ...(reasoningEffort(model, false) ? { reasoning_effort: reasoningEffort(model, false) } : {}),
       ...(options.responseSchema
         ? { response_format: { type: "json_schema", json_schema: { name: "assistant_reply", strict: false, schema: toJsonSchema(options.responseSchema) } } }
@@ -112,11 +123,44 @@ async function chatCompletion(model: string, apiKey: string, prompt: string, opt
     console.warn(`[ai] openai ${model}: HTTP ${response.status} ${(await response.text().catch(() => "")).slice(0, 300)}`);
     return { status: response.status, text: null };
   }
+  if (stream && response.body) return readChatStream(response.body, options.onDelta!);
   const payload = (await response.json()) as OpenAIPayload;
   const text = payload.choices?.[0]?.message?.content?.trim();
   const input = payload.usage?.prompt_tokens ?? 0;
   const output = payload.usage?.completion_tokens ?? 0;
   return { status: 200, text: text || null, usage: { input, output, total: payload.usage?.total_tokens ?? input + output } };
+}
+
+type StreamChunk = { choices?: Array<{ delta?: { content?: string | null } }>; usage?: OpenAIPayload["usage"] };
+
+/** Reads a streamed Chat Completion (server-sent events), passing each text piece on as it arrives. */
+async function readChatStream(body: ReadableStream<Uint8Array>, onDelta: (text: string) => void): Promise<Attempt> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let pending = "";
+  let text = "";
+  let usage: Usage | undefined;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    pending += decoder.decode(value, { stream: true });
+    const lines = pending.split("\n");
+    pending = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.startsWith("data:")) continue;
+      const data = line.slice(5).trim();
+      if (!data || data === "[DONE]") continue;
+      const chunk = JSON.parse(data) as StreamChunk;
+      const piece = chunk.choices?.[0]?.delta?.content;
+      if (piece) { text += piece; onDelta(piece); }
+      if (chunk.usage) {
+        const input = chunk.usage.prompt_tokens ?? 0;
+        const output = chunk.usage.completion_tokens ?? 0;
+        usage = { input, output, total: chunk.usage.total_tokens ?? input + output };
+      }
+    }
+  }
+  return { status: 200, text: text.trim() || null, usage };
 }
 
 type ResponsesPayload = {
@@ -172,12 +216,16 @@ export async function callAI(prompt: string, options: CallOptions) {
     const timeout = index < models.length - 1 ? Math.min(remaining, PER_ATTEMPT_WITH_BACKUP_MS) : remaining;
     const started = Date.now();
     let attempt: Attempt;
+    // Once streamed text has gone out, a retry would repeat it; later attempts don't stream.
+    let streamed = false;
+    const attemptOptions = options.onDelta ? { ...options, onDelta: (piece: string) => { streamed = true; options.onDelta!(piece); } } : options;
     try {
-      attempt = await (options.search ? webSearchResponse : chatCompletion)(model, apiKey, prompt, options, timeout);
+      attempt = await (options.search ? webSearchResponse : chatCompletion)(model, apiKey, prompt, attemptOptions, timeout);
     } catch (error) {
       const timedOut = error instanceof Error && error.name === "TimeoutError";
       logUsage({ userId: options.userId, feature: options.feature, model, httpStatus: null, timedOut, latencyMs: Date.now() - started });
       console.warn(`[ai] ${model} failed: ${timedOut ? "timed out" : String(error)}`);
+      if (streamed) return null;
       continue;
     }
     logUsage({ userId: options.userId, feature: options.feature, model, httpStatus: attempt.status, latencyMs: Date.now() - started, usage: attempt.usage });

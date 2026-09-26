@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { assistantStrings } from "@/lib/assistant-i18n";
 import type { AssistantReply, PendingAction, TimerStart } from "@/lib/assistant-types";
 import { matchQuickCommand } from "@/lib/quick-commands";
-import { speak } from "@/lib/voice";
+import { createSpeechStream, speak } from "@/lib/voice";
 import { createApplication } from "@/server/actions/applications";
 import { createNote } from "@/server/actions/notes";
 import { changeTaskRevisionCount, createTask, updateTaskStatus } from "@/server/actions/tasks";
@@ -37,6 +37,29 @@ function isNo(text: string) {
 }
 
 type SendOptions = { voice?: boolean; alternatives?: string[] };
+
+type StreamLine = { type: "delta"; text: string } | { type: "final"; reply: AssistantReply };
+
+/** Reads the assistant's newline-delimited JSON stream: text pieces as they're written, then the reply. */
+async function readReplyStream(body: ReadableStream<Uint8Array>, onText: (text: string) => void) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let pending = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    pending += decoder.decode(value, { stream: true });
+    const lines = pending.split("\n");
+    pending = lines.pop() ?? "";
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const message = JSON.parse(line) as StreamLine;
+      if (message.type === "delta") onText(message.text);
+      else return message.reply;
+    }
+  }
+  throw new Error("The reply stream ended early.");
+}
 
 export function useAssistant() {
   const router = useRouter();
@@ -206,6 +229,12 @@ export function useAssistant() {
     store.setBusy(true);
     store.setLive({ stage: "thinking", text: message, since: Date.now() });
     let result: AssistantReply;
+    // The answer as it streams in: shown in one growing chat bubble and, for voice, spoken sentence by sentence.
+    const stream = { entry: null as number | null, text: "", frame: 0, speaker: null as ReturnType<typeof createSpeechStream> | null };
+    const showStreamed = () => {
+      stream.frame = 0;
+      if (stream.entry !== null) useAssistantStore.getState().update(stream.entry, { text: stream.text });
+    };
     try {
       const response = await fetch("/api/assistant", {
         method: "POST",
@@ -221,11 +250,36 @@ export function useAssistant() {
         }),
       });
       if (!response.ok) throw new Error("assistant request failed");
-      result = (await response.json()) as AssistantReply;
+      result = (response.headers.get("content-type") ?? "").includes("ndjson") && response.body
+        ? await readReplyStream(response.body, (piece) => {
+          stream.text += piece;
+          if (stream.entry === null) {
+            stream.entry = store.add({ role: "assistant", text: stream.text, source: "ai", streaming: true });
+            store.setLive({ stage: "result", tone: "ok", text: s.answeredStatus });
+            if (voice) stream.speaker = createSpeechStream();
+          } else if (!stream.frame) {
+            // At most one re-render per frame, however fast the text arrives.
+            stream.frame = requestAnimationFrame(showStreamed);
+          }
+          stream.speaker?.push(piece);
+        })
+        : (await response.json()) as AssistantReply;
     } catch {
       result = { type: "clarify", source: "fallback", reply: s.networkError };
     } finally {
       store.setBusy(false);
+      if (stream.frame) cancelAnimationFrame(stream.frame);
+      stream.speaker?.end();
+    }
+
+    if (stream.entry !== null) {
+      if (result.type === "answer" || result.type === "clarify") {
+        // Already shown and spoken while it streamed; settle the bubble on the final text.
+        store.update(stream.entry, { text: result.reply, source: result.source, streaming: false });
+        if (result.speak && !voice) speak(result.reply);
+        return;
+      }
+      store.remove(stream.entry);
     }
 
     if (result.type === "ignore") {

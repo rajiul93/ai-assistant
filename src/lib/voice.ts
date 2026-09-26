@@ -1,4 +1,5 @@
 import { speechLangs, type AssistantLang } from "@/lib/assistant-i18n";
+import { createSentenceChunker } from "@/lib/sentence-chunker";
 import { useAssistantStore } from "@/store/assistant";
 
 export type VoiceError = { code: string; message: string };
@@ -162,63 +163,39 @@ function fetchSpeech(text: string, lang: AssistantLang) {
 }
 
 function playUrl(url: string, token: number) {
+  return playSource(url, token, () => URL.revokeObjectURL(url));
+}
+
+/**
+ * Plays a clip straight from the speech stream: the <audio> element starts as soon as the first
+ * audio bytes arrive (about a second), instead of after the whole clip has been made.
+ */
+function playStreamed(text: string, lang: AssistantLang, token: number) {
+  const src = `/api/speech?${new URLSearchParams({ lang, text })}`;
+  return playSource(src, token).then((ok) => {
+    // A stream that fails before playing (no AI access, server down): use the browser voice for a while.
+    if (!ok && token === speechToken) serverVoiceOffUntil = Date.now() + 60_000;
+    return ok;
+  });
+}
+
+function playSource(src: string, token: number, cleanup?: () => void) {
   return new Promise<boolean>((resolve) => {
-    if (token !== speechToken) { resolve(false); return; }
+    if (token !== speechToken) { cleanup?.(); resolve(false); return; }
     const audio = sharedAudio();
     const done = (ok: boolean) => {
       audio.onended = null;
       audio.onerror = null;
       interruptAudio = null;
-      URL.revokeObjectURL(url);
+      cleanup?.();
       resolve(ok);
     };
     interruptAudio = () => { audio.pause(); done(false); };
     audio.onended = () => done(true);
     audio.onerror = () => done(false);
-    audio.src = url;
+    audio.src = src;
     audio.play().catch(() => done(false));
   });
-}
-
-/** Longest piece sent for one clip; short replies are always a single clip. */
-const CLIP_CHARS = 1200;
-
-/** Long text (a whole note) → sentence-aligned pieces the speech API accepts. */
-function clipTexts(text: string) {
-  if (text.length <= CLIP_CHARS) return [text];
-  const sentences = text.match(/[^।!?.\n]+[।!?.\n]*/g)?.map((part) => part.trim()).filter(Boolean) ?? [text];
-  const clips: string[] = [];
-  let current = "";
-  for (const sentence of sentences) {
-    for (let start = 0; start < sentence.length; start += CLIP_CHARS) {
-      const piece = sentence.slice(start, start + CLIP_CHARS);
-      if (current && current.length + piece.length + 1 > CLIP_CHARS) { clips.push(current); current = ""; }
-      current = current ? `${current} ${piece}` : piece;
-    }
-  }
-  if (current) clips.push(current);
-  return clips;
-}
-
-/**
- * Natural-sounding server voice. A normal reply is one clip, so there are no gaps; a long text is
- * read piece by piece, with the next piece prepared while the current one plays.
- * Returns the text it couldn't play ("" when everything was spoken).
- */
-async function speakWithServer(text: string, lang: AssistantLang, token: number) {
-  const clips = clipTexts(text);
-  let next = fetchSpeech(clips[0], lang);
-  for (let index = 0; index < clips.length; index++) {
-    const url = await next;
-    if (!url) return clips.slice(index).join(" ");
-    next = index + 1 < clips.length ? fetchSpeech(clips[index + 1], lang) : Promise.resolve(null);
-    if (token !== speechToken) { URL.revokeObjectURL(url); void next.then((later) => { if (later) URL.revokeObjectURL(later); }); return ""; }
-    if (!(await playUrl(url, token))) {
-      void next.then((later) => { if (later) URL.revokeObjectURL(later); });
-      return token === speechToken ? clips.slice(index).join(" ") : "";
-    }
-  }
-  return "";
 }
 
 /** The device's own voice: free and instant, but often robotic in Bengali. */
@@ -247,28 +224,96 @@ function stopCurrent() {
   if (typeof window !== "undefined") window.speechSynthesis?.cancel();
 }
 
+/** Says a whole text: the same sentence-by-sentence streaming path as a live answer. */
 export function speak(text: string, onDone?: () => void) {
-  if (typeof window === "undefined") { onDone?.(); return; }
+  const stream = createSpeechStream(onDone);
+  stream.push(text);
+  stream.end();
+}
+
+/** Clips fetched ahead of the one playing, so the next sentence is ready the moment one ends. */
+const STREAM_LOOKAHEAD = 3;
+
+/**
+ * Speaks an answer while it is still being written. Text goes in as it arrives (`push`); it is cut
+ * into sentence/phrase chunks, each chunk's audio is fetched right away (a few ahead), and the
+ * chunks play back to back. The first words are heard as soon as the first sentence is complete —
+ * never after the whole answer. Starting another reply (or stopSpeaking) cancels it.
+ */
+export function createSpeechStream(onDone?: () => void) {
+  if (typeof window === "undefined") return { push() {}, end() { onDone?.(); } };
   stopCurrent();
-  const spoken = toSpokenText(text);
-  if (!spoken) { onDone?.(); return; }
-  const lang = useAssistantStore.getState().lang;
   const token = speechToken;
+  const lang = useAssistantStore.getState().lang;
+  type Clip = { text: string; url: Promise<string | null> | null };
+  const cached = (text: string) => clipCache.has(`${lang}:${text}`);
+  const queue: Clip[] = [];
+  let started = false;
+  let playing = false;
+  let ended = false;
+
   const finish = () => {
     if (token !== speechToken) return;
     speaking = false;
-    // Phone speakers echo a little after the last word; keep the mic closed a moment longer.
     quietUntil = Date.now() + (isMobileDevice() ? 900 : 500);
     onDone?.();
   };
-  speaking = true;
-  speakListeners.forEach((listener) => listener());
-  if (Date.now() < serverVoiceOffUntil) { speakWithBrowser(spoken, lang, finish); return; }
-  void speakWithServer(spoken, lang, token).then((unspoken) => {
+  const prefetch = () => {
+    if (Date.now() < serverVoiceOffUntil) return;
+    for (const clip of queue.slice(0, STREAM_LOOKAHEAD)) clip.url ??= fetchSpeech(clip.text, lang);
+  };
+  const browserSays = (text: string) => new Promise<void>((resolve) => speakWithBrowser(text, lang, resolve));
+
+  async function pump() {
+    if (playing) return;
+    playing = true;
+    while (queue.length && token === speechToken) {
+      const clip = queue.shift()!;
+      // Get the clips behind this one ready while it plays.
+      prefetch();
+      const serverOn = Date.now() >= serverVoiceOffUntil;
+      if (!clip.url && serverOn && !cached(clip.text)) {
+        // Nothing fetched yet (usually the first sentence): play it as it streams in.
+        if (!(await playStreamed(clip.text, lang, token)) && token === speechToken) await browserSays(clip.text);
+        continue;
+      }
+      const url = clip.url ? await clip.url : serverOn ? await fetchSpeech(clip.text, lang) : null;
+      if (token !== speechToken) { if (url) URL.revokeObjectURL(url); break; }
+      if (!url || !(await playUrl(url, token))) {
+        if (token !== speechToken) break;
+        await browserSays(clip.text);
+      }
+    }
+    playing = false;
+    if (ended && !queue.length && token === speechToken) finish();
+  }
+
+  const chunker = createSentenceChunker((chunk) => {
     if (token !== speechToken) return;
-    if (unspoken) speakWithBrowser(unspoken, lang, finish);
-    else finish();
+    const text = toSpokenText(chunk);
+    if (!text) return;
+    if (!started) {
+      started = true;
+      // From the first sentence on, the mic treats everything it hears as the assistant's voice.
+      speaking = true;
+      speakListeners.forEach((listener) => listener());
+    }
+    queue.push({ text, url: null });
+    // pump() takes the first clip synchronously, so it streams; prefetch() then covers the rest.
+    void pump();
+    prefetch();
   });
+
+  return {
+    push(piece: string) { if (token === speechToken) chunker.push(piece); },
+    end() {
+      if (token !== speechToken) return;
+      chunker.end();
+      ended = true;
+      if (!started) onDone?.();
+      else if (!playing && !queue.length) finish();
+    },
+  };
 }
 
 if (typeof window !== "undefined" && window.speechSynthesis) {

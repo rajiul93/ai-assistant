@@ -46,7 +46,10 @@ export async function POST(request: Request) {
 
   // The user's own subject names are the words most often misheard, so they go into the hint too.
   const subjects = await prisma.subject.findMany({ where: { userId: user.id }, select: { name: true }, take: 30 });
-  const prompt = `${hints[lang]}${subjects.length ? ` ${subjects.map((subject) => subject.name).join(", ")}` : ""}`;
+  // What was said just before (the assistant's last question) helps with short answers like "হ্যাঁ" or a subject name.
+  let context = "";
+  try { context = decodeURIComponent(request.headers.get("x-speech-context") ?? "").slice(0, 300); } catch { context = ""; }
+  const prompt = `${hints[lang]}${subjects.length ? ` ${subjects.map((subject) => subject.name).join(", ")}` : ""}${context ? ` আগের কথা: ${context}` : ""}`;
 
   const form = new FormData();
   form.append("file", new Blob([audio], { type: request.headers.get("content-type") || "audio/wav" }), "speech.wav");

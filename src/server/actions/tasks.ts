@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { z } from "zod";
 import { taskSchema } from "@/lib/validations";
 
 function revalidateTasks() {
@@ -31,9 +32,12 @@ export async function createTask(input: unknown) {
   const subjectId = await assertOwnedSubject(user.id, data.subjectId || undefined);
   const topic = await assertOwnedTopic(user.id, data.topicId || undefined);
 
+  // New tasks go to the top of the user's own order.
+  const first = await prisma.task.aggregate({ where: { userId: user.id }, _min: { position: true } });
   const task = await prisma.task.create({
     data: {
       userId: user.id,
+      position: (first._min.position ?? 1) - 1,
       title: data.title,
       description: data.description || null,
       subjectId,
@@ -114,5 +118,15 @@ export async function deleteTask(taskId: string) {
   const existing = await prisma.task.findFirst({ where: { id: taskId, userId: user.id } });
   if (!existing) throw new Error("Task not found.");
   await prisma.task.delete({ where: { id: existing.id } });
+  revalidateTasks();
+}
+
+/** Saves the user's own task order after a drag: `ids` are all their tasks, top to bottom. */
+export async function reorderTasks(input: unknown) {
+  const user = await requireUser();
+  const ids = z.array(z.string().min(1)).min(1).max(2000).parse(input);
+  const owned = await prisma.task.count({ where: { userId: user.id, id: { in: ids } } });
+  if (owned !== new Set(ids).size) throw new Error("Task not found.");
+  await prisma.$transaction(ids.map((id, position) => prisma.task.update({ where: { id }, data: { position } })));
   revalidateTasks();
 }

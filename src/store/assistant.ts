@@ -17,6 +17,8 @@ export type AssistantEntry = ChatMessage & {
   draftState?: DraftState;
   /** A picture the assistant drew (data URL). */
   image?: string;
+  /** Still arriving: the answer is being written (and spoken) as it streams in. */
+  streaming?: boolean;
 };
 
 /** What the assistant is doing right now, shown to the user as a live status bar. */

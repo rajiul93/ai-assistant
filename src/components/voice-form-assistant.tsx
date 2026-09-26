@@ -3,19 +3,21 @@
 import { useState } from "react";
 import { Mic, MicOff, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useSpeechRecognition } from "@/lib/use-speech-recognition";
+import { useBestMic } from "@/lib/use-best-mic";
 import { speak, stopSpeaking } from "@/lib/voice";
 
 export type VoiceStep = { key: string; question: string; label: string };
 
-export function VoiceFormAssistant({ title = "Voice form", steps, onComplete }: { title?: string; steps: VoiceStep[]; onComplete: (answers: Record<string, string>) => void }) {
+export function VoiceFormAssistant({ title = "Voice form", steps, onComplete, compact }: { title?: string; steps: VoiceStep[]; onComplete: (answers: Record<string, string>) => void; /** Icon-only button, for tight rows. */ compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [transcript, setTranscript] = useState("");
   const [voiceError, setVoiceError] = useState("");
-  const voice = useSpeechRecognition({
-    onInterim: (value) => setTranscript(value),
+  const voice = useBestMic({
+    // The question being answered tells the transcriber what kind of answer to expect.
+    context: () => steps[stepIndex]?.question ?? "",
+    onInterim: (value) => { if (value !== "…") setTranscript(value); },
     onResult: (value) => setTranscript(value),
     onError: (error) => setVoiceError(error.message),
   });
@@ -31,7 +33,9 @@ export function VoiceFormAssistant({ title = "Voice form", steps, onComplete }: 
     setTranscript(""); setVoiceError(""); setStepIndex((value) => value + 1); speak(steps[stepIndex + 1].question);
   }
   return <>
-    <Button type="button" variant="outline" onClick={begin}><Mic /> Voice দিয়ে পূরণ করুন</Button>
+    {compact
+      ? <Button type="button" variant="outline" onClick={begin} aria-label="Voice দিয়ে পূরণ করুন" title="Voice দিয়ে পূরণ করুন" className="size-11 shrink-0 p-0"><Mic /></Button>
+      : <Button type="button" variant="outline" onClick={begin}><Mic /> Voice দিয়ে পূরণ করুন</Button>}
     {open ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"><div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
       <div className="flex items-center justify-between"><div><p className="font-semibold">{title}</p><p className="text-sm text-zinc-500">ধাপ {stepIndex + 1} / {steps.length}</p></div><Button type="button" size="icon" variant="ghost" onClick={close} aria-label="Close"><MicOff /></Button></div>
       <p className="mt-6 text-lg font-medium">{current?.question}</p>
