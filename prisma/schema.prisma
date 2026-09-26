@@ -13,6 +13,11 @@ model User {
   email       String   @unique
   name        String?
   image       String?
+  /// Whether this user may use the AI. New users start without it and ask an admin; admins always have it.
+  aiAccess      AiAccess  @default(NONE)
+  aiRequestedAt DateTime?
+  /// Most AI tokens this user may use in total; null = no limit. Admins are never limited.
+  aiTokenLimit  Int?      @default(1000000)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -76,6 +81,16 @@ model Topic {
   @@index([userId])
   @@index([subjectId])
   @@index([parentId])
+}
+
+enum AiAccess {
+  /// Never asked.
+  NONE
+  /// Asked an admin; waiting.
+  REQUESTED
+  APPROVED
+  /// Turned off by an admin.
+  DISABLED
 }
 
 enum TaskStatus {

@@ -3,6 +3,8 @@ import { z } from "zod";
 import { isAllowedType, MAX_ATTACHMENT_BYTES, sniffType } from "@/lib/attachments";
 import { requireUser } from "@/lib/auth";
 import { respond } from "@/server/assistant/respond";
+import { formatTokens } from "@/lib/ai-limits";
+import { checkAi } from "@/server/ai-access";
 
 const taskDraftSchema = z.object({
   title: z.string(),
@@ -63,6 +65,9 @@ function checkAttachment(data: string, declared: string) {
   return family(actual) === family(declared) ? null : "type";
 }
 
+// Drawing an image can take up to about a minute.
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   const user = await requireUser();
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
@@ -79,6 +84,19 @@ export async function POST(request: Request) {
         : problem === "size" ? "ফাইলটা ১০MB-এর বেশি বড়। একটু ছোট ফাইল দাও।" : "ফাইলটা আসল ছবি বা PDF না, তাই পড়তে পারছি না।";
       return NextResponse.json({ type: "clarify", source: "fallback", reply });
     }
+  }
+  const { blocked, access, quota } = await checkAi(user);
+  if (blocked) {
+    const lang = parsed.data.lang;
+    const used = `${formatTokens(quota.used)} / ${formatTokens(quota.limit ?? 0)}`;
+    const reply = blocked === "quota"
+      ? lang === "en" ? `You've used your AI token limit (${used}). Ask an admin to raise it.` : `তোমার AI token limit শেষ হয়ে গেছে (${used})। আরও ব্যবহার করতে admin-কে limit বাড়াতে বলো।`
+      : access === "REQUESTED"
+      ? lang === "en" ? "Your AI access request is waiting for an admin to approve it." : "তোমার AI ব্যবহারের request admin-এর অনুমোদনের অপেক্ষায় আছে।"
+      : access === "DISABLED"
+        ? lang === "en" ? "An admin has turned off your AI access. You can ask for it again from the assistant." : "Admin তোমার AI ব্যবহার বন্ধ রেখেছে। Assistant থেকে আবার request পাঠাতে পারো।"
+        : lang === "en" ? "To use the AI, send an access request to an admin from the assistant." : "AI ব্যবহার করতে assistant থেকে admin-এর কাছে access request পাঠাও।";
+    return NextResponse.json({ type: "clarify", source: "fallback", reply, aiLocked: true });
   }
   return NextResponse.json(await respond(user.id, parsed.data));
 }

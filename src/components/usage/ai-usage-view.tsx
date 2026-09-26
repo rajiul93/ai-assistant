@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatTokens, quotaPercent, type AiQuota } from "@/lib/ai-limits";
 import { dayjs, formatDateTime } from "@/lib/dayjs";
 import { cn } from "@/lib/utils";
 import type { AiUsageBreakdown, AiUserUsage, getAiUsage } from "@/server/queries";
@@ -17,6 +18,8 @@ const featureLabels: Record<string, string> = {
   answer_search: "Answers with web search",
   note_writer: "Note writing",
   speech: "Voice replies (spoken aloud)",
+  transcribe: "Understanding your voice",
+  image: "Image generation",
 };
 const statusLabels: Record<string, string> = {
   ok: "Succeeded",
@@ -76,11 +79,12 @@ function DailyChart({ daily }: { daily: Awaited<ReturnType<typeof getAiUsage>>["
       <span>{daily[0] ? label(daily[0].day) : ""}</span>
       <span>{daily.length > 1 ? label(daily[daily.length - 1].day) : ""}</span>
     </div>
-    <table className="sr-only">
+    {/* sr-only on a <table> doesn't shrink it (tables ignore width: 1px), which widened the page on phones; the wrapper does. */}
+    <div className="sr-only"><table>
       <caption>Requests per day</caption>
       <thead><tr><th>Day</th><th>Requests</th><th>Failed</th><th>Input tokens</th><th>Output tokens</th></tr></thead>
       <tbody>{daily.map((day) => <tr key={day.day}><td>{label(day.day)}</td><td>{day.requests}</td><td>{day.failed}</td><td>{day.inputTokens}</td><td>{day.outputTokens}</td></tr>)}</tbody>
-    </table>
+    </table></div>
   </section>;
 }
 
@@ -88,7 +92,23 @@ function UserTable({ users, showEmail }: { users: AiUserUsage[]; showEmail: bool
   const max = Math.max(...users.map((user) => user.requests), 1);
   return <section className="rounded-2xl border border-zinc-200 bg-white p-5">
     <h2 className="text-sm font-semibold">Usage by user</h2>
-    {users.length === 0 ? <p className="mt-4 text-sm text-zinc-500">No AI calls in this period.</p> : <div className="mt-4 overflow-x-auto">
+    {users.length === 0 ? <p className="mt-4 text-sm text-zinc-500">No AI calls in this period.</p> : <>
+    {/* Phones: one card per user instead of a wide table that would need sideways scrolling. */}
+    <ul className="mt-4 divide-y divide-zinc-100 sm:hidden">
+      {users.map((user) => <li key={user.userId ?? "deleted"} className="py-3 first:pt-0 last:pb-0">
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="min-w-0 truncate font-medium">{user.name}</p>
+          <p className="shrink-0 text-xs text-zinc-500">{user.lastUsedAt ? formatDateTime(user.lastUsedAt) : "—"}</p>
+        </div>
+        {showEmail && user.email ? <p className="truncate text-xs text-zinc-500">{user.email}</p> : null}
+        <dl className="mt-2 grid grid-cols-3 gap-2 text-center">
+          <div className="rounded-lg bg-zinc-50 py-1.5"><dt className="text-[11px] text-zinc-500">Requests</dt><dd className="font-semibold tabular-nums">{number(user.requests)}{user.failed ? <span className="ml-1 text-[11px] font-normal text-amber-700">({user.failed} failed)</span> : null}</dd></div>
+          <div className="rounded-lg bg-zinc-50 py-1.5"><dt className="text-[11px] text-zinc-500">Input</dt><dd className="font-semibold tabular-nums">{compact(user.inputTokens)}</dd></div>
+          <div className="rounded-lg bg-zinc-50 py-1.5"><dt className="text-[11px] text-zinc-500">Output</dt><dd className="font-semibold tabular-nums">{compact(user.outputTokens)}</dd></div>
+        </dl>
+      </li>)}
+    </ul>
+    <div className="mt-4 hidden overflow-x-auto sm:block">
       <table className="w-full min-w-[44rem] text-sm">
         <thead className="text-left text-xs text-zinc-500">
           <tr className="border-b border-zinc-100">
@@ -121,11 +141,36 @@ function UserTable({ users, showEmail }: { users: AiUserUsage[]; showEmail: bool
           </tr>)}
         </tbody>
       </table>
-    </div>}
+    </div>
+    </>}
   </section>;
 }
 
-export function AiUsageView({ usage, period, admin }: { usage: Awaited<ReturnType<typeof getAiUsage>>; period: UsagePeriod; admin: boolean }) {
+/** The signed-in user's own total against their limit (all time, not just the chosen period). */
+function QuotaCard({ quota }: { quota: AiQuota }) {
+  const percent = quotaPercent(quota);
+  const remaining = quota.limit ? Math.max(0, quota.limit - quota.used) : null;
+  return <section className="rounded-2xl border border-zinc-200 bg-white p-5">
+    <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <h2 className="text-sm font-semibold">Your token limit</h2>
+      <p className="text-xs text-zinc-500">All time, every AI feature</p>
+    </div>
+    {quota.limit ? <>
+      <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <p className="text-2xl font-semibold tabular-nums">{percent}%</p>
+        <p className="text-sm tabular-nums text-zinc-600">{number(quota.used)} of {number(quota.limit)} tokens used</p>
+      </div>
+      <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-zinc-100" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-label="Token limit used">
+        <div className={cn("h-full rounded-full transition-all", percent >= 100 ? "bg-red-500" : percent >= 80 ? "bg-amber-500" : "bg-zinc-900")} style={{ width: `${percent}%` }} />
+      </div>
+      <p className={cn("mt-2 text-xs", percent >= 100 ? "text-red-700" : "text-zinc-500")}>
+        {percent >= 100 ? "Limit reached — the AI is paused for you until an admin raises it." : `${formatTokens(remaining ?? 0)} tokens left${percent >= 80 ? " — running low; ask an admin if you need more." : "."}`}
+      </p>
+    </> : <p className="mt-3 text-sm text-zinc-600"><span className="font-semibold tabular-nums">{number(quota.used)}</span> tokens used · no limit</p>}
+  </section>;
+}
+
+export function AiUsageView({ usage, period, admin, quota }: { usage: Awaited<ReturnType<typeof getAiUsage>>; period: UsagePeriod; admin: boolean; quota: AiQuota }) {
   const { totals } = usage;
   const successRate = totals.requests ? Math.round((totals.succeeded / totals.requests) * 100) : 0;
   const tiles = [
@@ -155,8 +200,11 @@ export function AiUsageView({ usage, period, admin }: { usage: Awaited<ReturnTyp
       </nav>
     </div>
 
+    <QuotaCard quota={quota} />
+
     <section className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
-      {tiles.map((tile) => <div key={tile.label} className="rounded-xl border border-zinc-200 bg-white p-4">
+      {/* Two per row on phones; the odd last tile takes the full row instead of sitting alone. */}
+      {tiles.map((tile, index) => <div key={tile.label} className={cn("min-w-0 rounded-xl border border-zinc-200 bg-white p-4", index === tiles.length - 1 && tiles.length % 2 === 1 && "col-span-2 lg:col-span-1")}>
         <p className="text-xs text-zinc-500">{tile.label}</p>
         <p className="mt-1 text-2xl font-semibold tabular-nums">{tile.value}</p>
         <p className="mt-0.5 text-xs text-zinc-500">{tile.detail}</p>
@@ -168,11 +216,12 @@ export function AiUsageView({ usage, period, admin }: { usage: Awaited<ReturnTyp
     </p> : <>
       <DailyChart daily={usage.daily} />
       <UserTable users={usage.perUser} showEmail={admin} />
-      <div className="grid gap-4 lg:grid-cols-3">
+      {/* Which features and models cost what is for admins only. */}
+      {admin ? <div className="grid gap-4 lg:grid-cols-3">
         <Breakdown title="By feature" rows={usage.byFeature} labels={featureLabels} />
         <Breakdown title="By model" rows={usage.byModel} />
         <Breakdown title="By result" rows={usage.byStatus} labels={statusLabels} />
-      </div>
+      </div> : null}
     </>}
   </div>;
 }
