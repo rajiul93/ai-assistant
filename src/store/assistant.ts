@@ -35,9 +35,9 @@ type AssistantStore = {
   busy: boolean;
   entries: AssistantEntry[];
   live: LiveStatus | null;
-  /** The image/PDF the conversation is about; sent with every message until the user removes it. */
-  attachment: Attachment | null;
-  setAttachment: (attachment: Attachment | null) => void;
+  /** Images/PDFs the conversation is about (up to 10); sent with every message until removed. */
+  attachments: Attachment[];
+  setAttachments: (attachments: Attachment[]) => void;
   setLang: (lang: AssistantLang) => void;
   /** Restore the language the user picked last time (call once on the client). */
   loadLang: () => void;
@@ -59,8 +59,8 @@ export const useAssistantStore = create<AssistantStore>((set) => ({
   busy: false,
   entries: [],
   live: null,
-  attachment: null,
-  setAttachment: (attachment) => set({ attachment }),
+  attachments: [],
+  setAttachments: (attachments) => set({ attachments }),
   setLang: (lang) => {
     set({ lang });
     try { localStorage.setItem(LANG_KEY, lang); } catch { /* storage unavailable: keep for this visit only */ }

@@ -7,6 +7,8 @@ import { htmlToPlainText, noteWritingRules, sanitizeNoteHtml } from "@/lib/note-
 import { prisma } from "@/lib/prisma";
 import { checkAi } from "@/server/ai-access";
 import { callAI } from "@/server/assistant/ai";
+import { createTask } from "@/server/actions/tasks";
+import { noteSummarySelect } from "@/server/queries";
 
 const noteSchema = z.object({
   title: z.string().trim().max(200),
@@ -22,8 +24,12 @@ function toData(input: unknown) {
   return { title, content, plainText: plainText.slice(0, 100_000) };
 }
 
+const noteInclude = {
+  tasks: { orderBy: { createdAt: "asc" }, select: { task: { select: { id: true, title: true, status: true } } } },
+} as const;
+
 async function ownedNote(userId: string, noteId: string) {
-  const note = await prisma.note.findFirst({ where: { id: noteId, userId } });
+  const note = await prisma.note.findFirst({ where: { id: noteId, userId }, include: noteInclude });
   if (!note) throw new Error("Note not found.");
   return note;
 }
@@ -33,7 +39,7 @@ export async function listNotes() {
   const notes = await prisma.note.findMany({
     where: { userId: user.id },
     orderBy: { updatedAt: "desc" },
-    select: { id: true, title: true, plainText: true, updatedAt: true },
+    select: noteSummarySelect,
   });
   return notes.map((note) => ({ ...note, plainText: note.plainText.slice(0, 400) }));
 }
@@ -62,6 +68,78 @@ export async function deleteNote(noteId: string) {
   const note = await ownedNote(user.id, noteId);
   await prisma.note.delete({ where: { id: note.id } });
   revalidatePath("/notes");
+}
+
+function revalidateNoteLinks() {
+  revalidatePath("/notes");
+  revalidatePath("/tasks");
+}
+
+/** Files a note under a subject and (optionally) one of its topics; empty clears it. */
+export async function setNoteSubject(noteId: string, input: { subjectId?: string | null; topicId?: string | null }) {
+  const user = await requireUser();
+  const note = await ownedNote(user.id, noteId);
+  const data = z.object({ subjectId: z.string().nullish(), topicId: z.string().nullish() }).parse(input);
+  let subjectId: string | null = null;
+  let topicId: string | null = null;
+  if (data.topicId) {
+    // A topic decides its subject, so the two can never disagree.
+    const topic = await prisma.topic.findFirst({ where: { id: data.topicId, userId: user.id }, select: { id: true, subjectId: true } });
+    if (!topic) throw new Error("Topic not found.");
+    topicId = topic.id;
+    subjectId = topic.subjectId;
+  } else if (data.subjectId) {
+    const subject = await prisma.subject.findFirst({ where: { id: data.subjectId, userId: user.id }, select: { id: true } });
+    if (!subject) throw new Error("Subject not found.");
+    subjectId = subject.id;
+  }
+  await prisma.note.update({ where: { id: note.id }, data: { subjectId, topicId } });
+  revalidatePath("/notes");
+}
+
+/** The user's tasks to pick from when attaching a note, unfinished first. */
+export async function listTaskChoices() {
+  const user = await requireUser();
+  const tasks = await prisma.task.findMany({
+    where: { userId: user.id },
+    orderBy: [{ position: "asc" }, { createdAt: "desc" }],
+    select: { id: true, title: true, status: true, subject: { select: { name: true } } },
+    take: 500,
+  });
+  return [...tasks.filter((task) => task.status !== "FINISHED"), ...tasks.filter((task) => task.status === "FINISHED")];
+}
+
+export async function attachNoteToTask(noteId: string, taskId: string) {
+  const user = await requireUser();
+  const note = await ownedNote(user.id, noteId);
+  const task = await prisma.task.findFirst({ where: { id: taskId, userId: user.id }, select: { id: true } });
+  if (!task) throw new Error("Task not found.");
+  await prisma.taskNote.upsert({ where: { taskId_noteId: { taskId: task.id, noteId: note.id } }, create: { taskId: task.id, noteId: note.id }, update: {} });
+  revalidateNoteLinks();
+}
+
+export async function detachNoteFromTask(noteId: string, taskId: string) {
+  const user = await requireUser();
+  const note = await ownedNote(user.id, noteId);
+  await prisma.taskNote.deleteMany({ where: { noteId: note.id, taskId } });
+  revalidateNoteLinks();
+}
+
+/** A new task for this note: its title, subject and topic, with the note attached. */
+export async function createTaskFromNote(noteId: string) {
+  const user = await requireUser();
+  const note = await ownedNote(user.id, noteId);
+  const taskId = await createTask({
+    title: note.title.slice(0, 160) || "Untitled note",
+    subjectId: note.subjectId ?? "",
+    topicId: note.topicId ?? "",
+    estimatedMinutes: 30,
+    priority: "MEDIUM",
+    status: "NOT_STARTED",
+    noteIds: [note.id],
+  });
+  revalidatePath("/notes");
+  return taskId;
 }
 
 /**

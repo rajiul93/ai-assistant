@@ -67,7 +67,7 @@ function Details({ notes }: { notes: string }) {
     </button>
     {open ? html
       // Sanitized again on display: only text-formatting tags and safe links remain.
-      ? <div className="ql-snow border-t border-zinc-100"><div className="ql-editor application-details" dangerouslySetInnerHTML={{ __html: sanitizeNoteHtml(notes) }} /></div>
+      ? <div className="ql-snow border-t border-zinc-100"><div className="ql-editor rich-view" dangerouslySetInnerHTML={{ __html: sanitizeNoteHtml(notes) }} /></div>
       : <p className="whitespace-pre-wrap border-t border-zinc-100 px-3 py-2 text-sm text-zinc-600">{notes}</p>
       : null}
   </div>;

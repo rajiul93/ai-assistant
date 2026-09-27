@@ -11,7 +11,9 @@ export const taskPrioritySchema = z.enum(["LOW", "MEDIUM", "HIGH"]);
 
 export const taskSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(160),
-  description: z.string().trim().max(2000).optional().or(z.literal("")),
+  description: z.string().trim().max(20_000).optional().or(z.literal("")),
+  /** Notes attached to the task; left out = keep the current ones. */
+  noteIds: z.array(z.string().min(1)).max(50).optional(),
   subjectId: z.string().optional().or(z.literal("")),
   topicId: z.string().optional().or(z.literal("")),
   estimatedMinutes: z.coerce.number().int().min(1).max(24 * 60),

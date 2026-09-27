@@ -74,7 +74,8 @@ export type AssistantRequest = {
   alternatives?: string[];
   lang?: "bn" | "en";
   /** An image or PDF the user shared; the AI reads it together with the message. */
-  attachment?: { name: string; mimeType: string; data: string } | null;
+  /** Images/PDFs sent with the message, in the order the user added them. */
+  attachments?: Array<{ name: string; mimeType: string; data: string }>;
 };
 
 export const assistantPages = {

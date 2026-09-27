@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowUp, Check, CircleCheck, Download, FileText, Lock, Maximize2, Mic, Minimize2, NotebookPen, Paperclip, RefreshCcw, Sparkles, Volume2, X } from "lucide-react";
 import { ChatMarkdown } from "@/components/chat-markdown";
 import { ChatPurchase } from "@/components/billing/chat-purchase";
+import { ImageViewer } from "@/components/image-viewer";
 import { VoiceWave } from "@/components/assistant-status";
 import { sectorLabels, statusLabels } from "@/lib/applications";
 import type { AssistantStrings } from "@/lib/assistant-i18n";
-import { ATTACHMENT_ACCEPT, formatBytes, isAllowedType, MAX_ATTACHMENT_BYTES, type AttachmentType } from "@/lib/attachments";
+import { ATTACHMENT_ACCEPT, formatBytes, isAllowedType, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, MAX_TOTAL_ATTACHMENT_BYTES, type Attachment, type AttachmentType } from "@/lib/attachments";
+import { compressImage } from "@/lib/compress-image";
 import type { PendingAction } from "@/lib/assistant-types";
 import { useAssistant } from "@/lib/use-assistant";
 import { useBestMic } from "@/lib/use-best-mic";
@@ -26,7 +28,7 @@ function fileType(file: File): AttachmentType | null {
   return file.type === "" ? byExtension[extension] ?? null : null;
 }
 
-function readBase64(file: File) {
+function readBase64(file: Blob) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result).split(",", 2)[1] ?? "");
@@ -115,8 +117,12 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
   const [voiceError, setVoiceError] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
   const setLive = useAssistantStore((state) => state.setLive);
-  const attachment = useAssistantStore((state) => state.attachment);
-  const setAttachment = useAssistantStore((state) => state.setAttachment);
+  const attachments = useAssistantStore((state) => state.attachments);
+  const setAttachments = useAssistantStore((state) => state.setAttachments);
+  const attachment = attachments[0] ?? null;
+  // Tapping a thumbnail opens it full screen; the viewer pages through the selected images only.
+  const images = attachments.flatMap((file, index) => (file.mimeType.startsWith("image/") ? [{ src: `data:${file.mimeType};base64,${file.data}`, name: file.name, index }] : []));
+  const [viewing, setViewing] = useState<number | null>(null);
   const [reading, setReading] = useState(false);
   // Wider panel for reading code (desktop/tablet; phones already use the full width).
   const [wide, setWide] = useState(false);
@@ -145,15 +151,38 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
     setOpen(false);
   }
 
-  async function addFile(file: File | undefined) {
-    if (!file) return;
+  /**
+   * Adds up to 10 images/PDFs (picked, pasted or dropped). Images are shrunk in the browser so all of
+   * them fit in one message; text in them stays readable. Files over the limit are left out with a note.
+   */
+  async function addFiles(list: FileList | File[] | null | undefined) {
+    const files = Array.from(list ?? []);
+    if (!files.length) return;
     setVoiceError("");
-    const type = fileType(file);
-    if (!type) { setVoiceError(t.attachmentOnlyTypes); return; }
-    if (file.size > MAX_ATTACHMENT_BYTES) { setVoiceError(t.attachmentTooBig(formatBytes(file.size))); return; }
+    const current = useAssistantStore.getState().attachments;
+    const room = MAX_ATTACHMENTS - current.length;
+    if (room <= 0) { setVoiceError(t.attachmentTooMany(MAX_ATTACHMENTS)); return; }
+    const taken = files.slice(0, room);
+    const problems: string[] = [];
+    if (files.length > room) problems.push(t.attachmentTooMany(MAX_ATTACHMENTS));
     setReading(true);
     try {
-      setAttachment({ name: file.name, mimeType: type, size: file.size, data: await readBase64(file) });
+      const added: Attachment[] = [];
+      let used = current.reduce((total, file) => total + file.size, 0);
+      // Share what's left of the budget between the images still to add.
+      const perImage = Math.max(150_000, Math.floor((MAX_TOTAL_ATTACHMENT_BYTES - used) / Math.max(1, taken.length)));
+      for (const file of taken) {
+        const type = fileType(file);
+        if (!type) { problems.push(t.attachmentOnlyTypes); continue; }
+        if (file.size > MAX_ATTACHMENT_BYTES) { problems.push(t.attachmentTooBig(formatBytes(file.size))); continue; }
+        const shrunk = type === "application/pdf" ? { blob: file as Blob, type } : await compressImage(file, perImage);
+        if (!shrunk) { problems.push(t.attachmentOnlyTypes); continue; }
+        if (used + shrunk.blob.size > MAX_TOTAL_ATTACHMENT_BYTES) { problems.push(t.attachmentTotalTooBig); break; }
+        used += shrunk.blob.size;
+        added.push({ name: file.name, mimeType: shrunk.type, size: shrunk.blob.size, data: await readBase64(shrunk.blob) });
+      }
+      if (added.length) setAttachments([...useAssistantStore.getState().attachments, ...added].slice(0, MAX_ATTACHMENTS));
+      if (problems.length) setVoiceError([...new Set(problems)].join(" "));
     } catch {
       setVoiceError(t.attachmentOnlyTypes);
     } finally {
@@ -186,7 +215,7 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
       aria-label={t.panelTitle}
       onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) { event.preventDefault(); setDragging(true); } }}
       onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }}
-      onDrop={(event) => { event.preventDefault(); setDragging(false); void addFile(event.dataTransfer.files[0]); }}
+      onDrop={(event) => { event.preventDefault(); setDragging(false); void addFiles(event.dataTransfer.files); }}
       className={cn(
         "assistant-panel-in fixed inset-x-0 bottom-0 z-50 flex max-h-[88dvh] flex-col overflow-hidden rounded-t-3xl border border-zinc-200/80 bg-white/95 shadow-[0_24px_80px_-20px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:inset-x-auto sm:bottom-36 sm:right-4 sm:max-h-[min(40rem,calc(100dvh-12rem))] sm:w-100 sm:rounded-3xl lg:bottom-24 lg:right-6",
         wide && "sm:max-h-[calc(100dvh-10rem)] sm:w-[min(48rem,calc(100vw-2rem))] lg:max-h-[calc(100dvh-8rem)]",
@@ -240,18 +269,28 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
 
       <div className="border-t border-zinc-100 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3">
         {voiceError ? <p role="alert" className="mb-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">{voiceError}</p> : null}
-        {attachment || reading ? <div className="mb-2 flex items-center gap-2.5 rounded-xl border border-zinc-200 bg-white p-1.5 pr-2">
-          {attachment?.mimeType.startsWith("image/") && !attachment.mimeType.includes("hei")
-            // eslint-disable-next-line @next/next/no-img-element -- a local preview of the user's own upload, not an optimizable asset
-            ? <img src={`data:${attachment.mimeType};base64,${attachment.data}`} alt="" className="size-10 shrink-0 rounded-lg object-cover" />
-            : <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-600"><FileText className="size-5" /></span>}
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-medium text-zinc-900">{attachment?.name ?? t.attachmentReading}</p>
-            <p className="text-[11px] text-zinc-500">{attachment ? `${formatBytes(attachment.size)} · ${t.attachmentActive}` : t.attachmentReading}</p>
+        {attachments.length || reading ? <div className="mb-2 rounded-xl border border-zinc-200 bg-white p-1.5">
+          <div className="flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:thin]">
+            {attachments.map((file, index) => <div key={`${file.name}-${index}`} className="relative shrink-0">
+              {file.mimeType.startsWith("image/")
+                ? <button type="button" onClick={() => setViewing(images.findIndex((image) => image.index === index))} aria-label={`View ${file.name}`} className="block rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- a local preview of the user's own upload, not an optimizable asset */}
+                  <img src={`data:${file.mimeType};base64,${file.data}`} alt={file.name} title={`${file.name} · ${formatBytes(file.size)}`} className="size-14 rounded-lg object-cover ring-1 ring-zinc-200 transition hover:opacity-80" />
+                </button>
+                : <span title={file.name} className="flex size-14 flex-col items-center justify-center gap-0.5 rounded-lg bg-red-50 text-red-600 ring-1 ring-red-100"><FileText className="size-5" /><span className="text-[9px] font-semibold">PDF</span></span>}
+              <span className="absolute bottom-0.5 left-0.5 rounded bg-black/55 px-1 text-[9px] font-semibold text-white tabular-nums">{index + 1}</span>
+              <button type="button" onClick={() => setAttachments(attachments.filter((_, position) => position !== index))} aria-label={`${t.attachmentRemove}: ${file.name}`} className="absolute -right-1 -top-1 flex size-6 items-center justify-center rounded-full bg-zinc-900 text-white shadow ring-2 ring-white"><X className="size-3" /></button>
+            </div>)}
+            {reading ? <span className="flex size-14 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-[10px] text-zinc-500">{t.attachmentReading}</span> : null}
+            {attachments.length < MAX_ATTACHMENTS && !reading ? <button type="button" onClick={() => fileInputRef.current?.click()} aria-label={t.attachmentAdd} title={t.attachmentAdd} className="flex size-14 shrink-0 items-center justify-center rounded-lg border border-dashed border-zinc-300 text-xl text-zinc-400 hover:border-zinc-400 hover:text-zinc-700">+</button> : null}
           </div>
-          {attachment ? <button type="button" onClick={() => setAttachment(null)} aria-label={t.attachmentRemove} title={t.attachmentRemove} className="rounded-full p-2 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-900 sm:p-1"><X className="size-4" /></button> : null}
+          <div className="mt-1 flex items-center justify-between px-0.5 text-[11px] text-zinc-500">
+            <span className="tabular-nums">{attachments.length}/{MAX_ATTACHMENTS} · {t.attachmentActive}</span>
+            {attachments.length > 1 ? <button type="button" onClick={() => setAttachments([])} className="font-medium hover:text-zinc-900">{t.attachmentRemove}</button> : null}
+          </div>
         </div> : null}
-        <input ref={fileInputRef} type="file" accept={ATTACHMENT_ACCEPT} className="hidden" onChange={(event) => { void addFile(event.target.files?.[0]); event.target.value = ""; }} />
+        {viewing !== null && images[viewing] ? <ImageViewer images={images} index={viewing} onIndex={setViewing} onClose={() => setViewing(null)} /> : null}
+        <input ref={fileInputRef} type="file" accept={ATTACHMENT_ACCEPT} multiple className="hidden" onChange={(event) => { void addFiles(event.target.files); event.target.value = ""; }} />
         <div className="flex items-end gap-2 rounded-2xl border border-zinc-200 bg-zinc-50/80 p-1.5 transition focus-within:border-zinc-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-zinc-900/5">
           {/* At least three lines tall; grows with the text (where the browser supports it), then scrolls. */}
           <textarea
@@ -260,7 +299,7 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
             value={question}
             placeholder={voice.listening ? t.placeholderListening : attachment ? t.placeholderWithFile : t.placeholder}
             onChange={(event) => setQuestion(event.target.value)}
-            onPaste={(event) => { const file = event.clipboardData.files[0]; if (file) { event.preventDefault(); void addFile(file); } }}
+            onPaste={(event) => { if (event.clipboardData.files.length) { event.preventDefault(); void addFiles(event.clipboardData.files); } }}
             onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } }}
           />
           <button

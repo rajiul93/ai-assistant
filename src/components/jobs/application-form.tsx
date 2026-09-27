@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/select";
 import { QuillEditor } from "@/components/notes/quill-editor";
+import { toEditorHtml } from "@/lib/note-html";
 import { sectorLabels, statusOptions } from "@/lib/applications";
 import { ATTACHMENT_ACCEPT, isAllowedType, MAX_ATTACHMENT_BYTES } from "@/lib/attachments";
 import { dayjs } from "@/lib/dayjs";
@@ -19,13 +20,6 @@ import { jobApplicationSchema, type JobApplicationInput } from "@/lib/validation
 import { createApplication, updateApplication } from "@/server/actions/applications";
 
 const toDay = (date: Date | null | undefined) => (date ? dayjs(date).format("YYYY-MM-DD") : "");
-
-/** Older notes are plain text; Quill needs HTML. */
-function notesForEditor(notes: string | null | undefined) {
-  if (!notes) return "";
-  if (/<(p|h[1-6]|ul|ol|li)\b/i.test(notes)) return notes;
-  return notes.split("\n").map((line) => `<p>${line.replace(/&/g, "&amp;").replace(/</g, "&lt;") || "<br>"}</p>`).join("");
-}
 
 type Extracted = Partial<JobApplicationInput> & { sector?: JobApplicationInput["sector"] | null; status?: JobApplicationInput["status"] | null };
 
@@ -85,7 +79,7 @@ export function ApplicationForm({ application, onSuccess }: { application?: JobA
       roll: application?.roll ?? "",
       password: application?.password ?? "",
       link: application?.link ?? "",
-      notes: notesForEditor(application?.notes),
+      notes: toEditorHtml(application?.notes),
     },
   });
   // Quill reads its HTML once on mount; bumping the key loads text filled in from a file.

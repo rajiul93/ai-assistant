@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { TaskStatus } from "@prisma/client";
-import { ArrowUpDown, Check, Clock, ListTodo, MoreHorizontal, Pencil, Play, Plus, RefreshCcw, Search, Trash2 } from "lucide-react";
+import { ArrowUpDown, Check, Clock, FileText, ListTodo, MoreHorizontal, Pencil, Play, Plus, RefreshCcw, Search, Trash2 } from "lucide-react";
 import { RevisionManager } from "@/components/revisions/revision-manager";
 import { dueRevisionCount } from "@/lib/revisions";
+import { htmlToPlainText, isRichHtml, sanitizeNoteHtml, toEditorHtml } from "@/lib/note-html";
+import "quill/dist/quill.snow.css";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/select";
@@ -93,7 +96,9 @@ function TaskCard({ task, todayStart, now, timerRunning, onStart, onStatus, onEd
   onDelete: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const finished = task.status === "FINISHED";
+  const description = task.description ? (isRichHtml(task.description) ? htmlToPlainText(task.description) : task.description).trim() : "";
   const due = task.dueDate ? dueLabel(task.dueDate, todayStart, now, finished) : null;
   const status = statusOptions.find((option) => option.value === task.status)!;
   return <article className={cn("rounded-2xl border bg-white p-3 transition sm:p-4", handle && "pl-1 sm:pl-2", finished ? "border-zinc-100" : "border-zinc-200")}>
@@ -116,7 +121,15 @@ function TaskCard({ task, todayStart, now, timerRunning, onStart, onStatus, onEd
           {due ? <span className={due.tone}>{due.text}</span> : null}
         </p>
         {task.subject || task.topic ? <p className="mt-1 truncate text-xs text-zinc-500">{task.subject?.name ?? "No subject"}{task.topic ? ` › ${task.topic.name}` : ""}</p> : null}
-        {task.description ? <p className="mt-1.5 line-clamp-2 text-sm text-zinc-600">{task.description}</p> : null}
+        {description ? detailsOpen
+          ? <div className="ql-snow mt-1.5 rounded-lg bg-zinc-50"><div className="ql-editor rich-view" dangerouslySetInnerHTML={{ __html: sanitizeNoteHtml(toEditorHtml(task.description)) }} /></div>
+          : <p className="mt-1.5 line-clamp-2 text-sm text-zinc-600">{description}</p> : null}
+        {task.notes.length ? <div className="mt-1.5 flex flex-wrap gap-1.5">
+          {task.notes.map(({ note }) => <Link key={note.id} href={`/notes?id=${encodeURIComponent(note.id)}`} className="flex max-w-full items-center gap-1 rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-200">
+            <FileText className="size-3.5 shrink-0 text-zinc-500" /><span className="truncate">{note.title || "Untitled note"}</span>
+          </Link>)}
+        </div> : null}
+        {description ? <button type="button" onClick={() => setDetailsOpen((open) => !open)} aria-expanded={detailsOpen} className="mt-1 text-xs font-medium text-zinc-500 hover:text-zinc-900">{detailsOpen ? "কম দেখাও ▴" : "বিস্তারিত ▾"}</button> : null}
       </div>
 
       <div className="flex shrink-0 items-center gap-1">

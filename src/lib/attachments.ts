@@ -3,6 +3,13 @@ export const ATTACHMENT_TYPES = ["image/jpeg", "image/png", "image/webp", "appli
 export type AttachmentType = (typeof ATTACHMENT_TYPES)[number];
 export const ATTACHMENT_ACCEPT = ATTACHMENT_TYPES.join(",");
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+/** Up to this many images/PDFs in one message (e.g. pages to turn into text). */
+export const MAX_ATTACHMENTS = 10;
+/**
+ * All files of one message together, after the browser shrinks the images. A hosted function takes
+ * about 4.5MB per request; base64 adds a third, and the chat history needs room too.
+ */
+export const MAX_TOTAL_ATTACHMENT_BYTES = 3 * 1024 * 1024;
 
 export type Attachment = { name: string; mimeType: AttachmentType; size: number; /** base64, no data: prefix */ data: string };
 

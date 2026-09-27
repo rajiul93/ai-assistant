@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, FileText, Plus, Search, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { QuillEditor, type QuillHandle } from "@/components/notes/quill-editor";
+import { NoteLinks, type SubjectOption, type TopicOption } from "@/components/notes/note-links";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,7 +31,7 @@ function updatedLabel(date: Date) {
 }
 
 /** Editor for one note: title + Quill body, autosaved 0.8s after typing stops, plus AI writing. */
-function NoteEditor({ noteId, onSaved, onDeleted, onBack }: { noteId: string; onSaved: () => void; onDeleted: () => void; onBack: () => void }) {
+function NoteEditor({ noteId, subjects, topics, onSaved, onDeleted, onBack }: { noteId: string; subjects: SubjectOption[]; topics: TopicOption[]; onSaved: () => void; onDeleted: () => void; onBack: () => void }) {
   const noteQuery = useQuery({ queryKey: ["note", noteId], queryFn: () => getNote(noteId), staleTime: 0 });
   const lang = useAssistantStore((state) => state.lang);
   const editorRef = useRef<QuillHandle>(null);
@@ -65,8 +66,10 @@ function NoteEditor({ noteId, onSaved, onDeleted, onBack }: { noteId: string; on
   }
 
   // Seed the save payload once the note loads; flush a pending save when switching notes.
+  // Only the first load: refetches (after linking a task, say) must not undo unsaved typing.
+  const seeded = useRef(false);
   useEffect(() => {
-    if (note) latest.current = { title: note.title, content: note.content };
+    if (note && !seeded.current) { seeded.current = true; latest.current = { title: note.title, content: note.content }; }
   }, [note]);
   useEffect(() => () => {
     if (timer.current) { clearTimeout(timer.current); void updateNote(noteId, latest.current).then(onSaved).catch(() => {}); }
@@ -126,7 +129,16 @@ function NoteEditor({ noteId, onSaved, onDeleted, onBack }: { noteId: string; on
         onChange={(event) => { setTitle(event.target.value); scheduleSave({ title: event.target.value }); }}
         placeholder="Title"
         maxLength={200}
-        className="mb-3 w-full bg-transparent text-2xl font-semibold tracking-tight outline-none placeholder:text-zinc-300"
+        className="mb-2 w-full bg-transparent text-2xl font-semibold tracking-tight outline-none placeholder:text-zinc-300"
+      />
+      <NoteLinks
+        key={`${note.subjectId}:${note.topicId}`}
+        noteId={note.id}
+        subjectId={note.subjectId}
+        topicId={note.topicId}
+        tasks={note.tasks.map((link) => link.task)}
+        subjects={subjects}
+        topics={topics}
       />
       <QuillEditor
         key={note.id}
@@ -172,13 +184,15 @@ function setUrl(id: string | null, replace: boolean) {
   else window.history.pushState(null, "", url);
 }
 
-export function NotesWorkspace({ initialNotes }: { initialNotes: NoteSummary[] }) {
+export function NotesWorkspace({ initialNotes, subjects, topics }: { initialNotes: NoteSummary[]; subjects: SubjectOption[]; topics: TopicOption[] }) {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const isDesktop = useIsDesktop();
   const notesQuery = useQuery({ queryKey: ["notes"], queryFn: () => listNotes(), initialData: initialNotes });
   const notes = notesQuery.data;
   const [search, setSearch] = useState("");
+  // "" = every note; "none" = notes without a subject.
+  const [subjectFilter, setSubjectFilter] = useState("");
   const [creating, setCreating] = useState(false);
   // Set when this page pushed the open note onto history, so "‹ Notes" can simply go back.
   const pushedNote = useRef(false);
@@ -188,8 +202,10 @@ export function NotesWorkspace({ initialNotes }: { initialNotes: NoteSummary[] }
 
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    return needle ? notes.filter((note) => `${note.title}\n${note.plainText}`.toLowerCase().includes(needle)) : notes;
-  }, [notes, search]);
+    return notes.filter((note) =>
+      (!subjectFilter || (subjectFilter === "none" ? !note.subjectId : note.subjectId === subjectFilter)) &&
+      (!needle || `${note.title}\n${note.plainText}\n${note.subject?.name ?? ""}\n${note.topic?.name ?? ""}`.toLowerCase().includes(needle)));
+  }, [notes, search, subjectFilter]);
 
   const refreshList = () => void queryClient.invalidateQueries({ queryKey: ["notes"] });
 
@@ -232,16 +248,21 @@ export function NotesWorkspace({ initialNotes }: { initialNotes: NoteSummary[] }
     <div className="lg:grid lg:h-[calc(100dvh-13rem)] lg:min-h-[32rem] lg:grid-cols-[18rem_1fr] lg:overflow-hidden lg:rounded-2xl lg:border lg:border-zinc-200 lg:bg-white">
       {/* Phones: the list is the page; desktop: the left column. */}
       <aside className="flex min-h-0 flex-col lg:border-r lg:border-zinc-200">
-        <div className="pb-3 lg:border-b lg:border-zinc-100 lg:p-3">
+        <div className="space-y-2 pb-3 lg:border-b lg:border-zinc-100 lg:p-3">
           <label className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 lg:rounded-lg lg:border-0 lg:bg-zinc-100">
             <Search className="size-4 shrink-0 text-zinc-400" />
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search notes" aria-label="Search notes" className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none lg:h-9" />
           </label>
+          {subjects.length ? <select value={subjectFilter} onChange={(event) => setSubjectFilter(event.target.value)} aria-label="Filter by subject" className="h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-zinc-400 lg:h-9 lg:rounded-lg">
+            <option value="">All subjects</option>
+            {subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
+            <option value="none">No subject</option>
+          </select> : null}
         </div>
         <ul className="min-h-0 flex-1 space-y-2 lg:space-y-0 lg:overflow-y-auto lg:p-2">
           {visible.length === 0 ? <li className="rounded-2xl border border-dashed border-zinc-300 px-4 py-12 text-center text-sm text-zinc-500 lg:border-0">
             <FileText className="mx-auto mb-2 size-7 text-zinc-300" />
-            {notes.length === 0 ? "No notes yet. Tap “New” to write one, or ask the assistant." : "No notes match your search."}
+            {notes.length === 0 ? "No notes yet. Tap “New” to write one, or ask the assistant." : "No notes match."}
           </li> : null}
           {visible.map((note) => {
             const active = isDesktop && note.id === selectedId;
@@ -258,6 +279,7 @@ export function NotesWorkspace({ initialNotes }: { initialNotes: NoteSummary[] }
                   <span className="truncate font-semibold lg:text-sm lg:font-medium">{note.title || "Untitled note"}</span>
                   <span className={cn("shrink-0 text-xs lg:text-[11px]", active ? "text-white/60" : "text-zinc-400")}>{updatedLabel(note.updatedAt)}</span>
                 </span>
+                {note.subject ? <span className={cn("mt-1 block truncate text-xs font-medium lg:mt-0.5 lg:text-[11px]", active ? "text-white/80" : "text-indigo-600")}>{note.subject.name}{note.topic ? ` › ${note.topic.name}` : ""}</span> : null}
                 <span className={cn("mt-1 line-clamp-2 text-sm leading-snug lg:mt-0.5 lg:text-xs", active ? "text-white/70" : "text-zinc-500")}>{note.plainText.replace(/\s+/g, " ") || "Empty note"}</span>
               </button>
             </li>;
@@ -274,6 +296,8 @@ export function NotesWorkspace({ initialNotes }: { initialNotes: NoteSummary[] }
           <NoteEditor
             key={selectedId}
             noteId={selectedId}
+            subjects={subjects}
+            topics={topics}
             onSaved={refreshList}
             onDeleted={() => { closeNote(); refreshList(); }}
             onBack={closeNote}

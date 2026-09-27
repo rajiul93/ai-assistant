@@ -8,24 +8,24 @@ datasource db {
 }
 
 model User {
-  id          String   @id @default(cuid())
-  firebaseUid String   @unique
-  email       String   @unique
-  name        String?
-  image       String?
+  id            String        @id @default(cuid())
+  firebaseUid   String        @unique
+  email         String        @unique
+  name          String?
+  image         String?
   /// USER by default. Only the super admin (a fixed email, see src/server/roles.ts) can change roles.
-  role        UserRole @default(USER)
+  role          UserRole      @default(USER)
   /// BLOCKED: the super admin shut the account; the user sees only a "blocked" notice.
-  status      AccountStatus @default(ACTIVE)
+  status        AccountStatus @default(ACTIVE)
   /// The super admin paused this user's AI (the plan's days keep running); the rest of the app works.
-  aiPaused    Boolean  @default(false)
+  aiPaused      Boolean       @default(false)
   /// Whether this user may use the AI. New users start without it and ask an admin; admins always have it.
-  aiAccess      AiAccess  @default(NONE)
+  aiAccess      AiAccess      @default(NONE)
   aiRequestedAt DateTime?
   /// Most AI tokens this user may use in total; null = no limit. Admins are never limited.
-  aiTokenLimit  Int?      @default(1000000)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  aiTokenLimit  Int?          @default(1000000)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   studyPlan     StudyPlan?
   subjects      Subject[]
@@ -41,17 +41,17 @@ model User {
 }
 
 model StudyPlan {
-  id                      String   @id @default(cuid())
-  userId                  String   @unique
-  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                      String    @id @default(cuid())
+  userId                  String    @unique
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   longTermDeadline        DateTime
   preparationDeadline     DateTime
-  dailyStudyTargetMinutes Int      @default(180)
+  dailyStudyTargetMinutes Int       @default(180)
   /// Only the birth date is stored; the age-limit date (birth date + ageLimitYears) is calculated when shown.
   dateOfBirth             DateTime?
-  ageLimitYears           Int      @default(34)
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  ageLimitYears           Int       @default(34)
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 }
 
 model Subject {
@@ -66,6 +66,7 @@ model Subject {
 
   topics        Topic[]
   tasks         Task[]
+  notes         Note[]
   studySessions StudySession[]
 
   @@unique([userId, name])
@@ -88,6 +89,7 @@ model Topic {
   updatedAt DateTime @updatedAt
 
   tasks         Task[]
+  notes         Note[]
   studySessions StudySession[]
 
   @@index([userId])
@@ -151,6 +153,7 @@ model Task {
   lastRevisedAt    DateTime?
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
+  notes            TaskNote[]
 
   @@index([userId])
   @@index([userId, dueDate])
@@ -175,8 +178,6 @@ model StudySession {
   @@index([userId, startedAt])
   @@index([createdAt])
 }
-
-
 
 /// One row per day the user pressed "Start Today's Plan". Opening or refreshing the app never creates one.
 model DailyPlanStart {
@@ -239,18 +240,37 @@ model JobApplication {
 }
 
 model Note {
-  id        String   @id @default(cuid())
+  id        String     @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   title     String
   /// Rich text from the Quill editor, sanitized to an allowlist of tags on save (no images).
-  content   String   @default("")
+  content   String     @default("")
   /// Tag-free copy of `content`, for search and list previews.
-  plainText String   @default("")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  plainText String     @default("")
+  subjectId String?
+  subject   Subject?   @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  topicId   String?
+  topic     Topic?     @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  tasks     TaskNote[]
 
   @@index([userId, updatedAt])
+  @@index([subjectId])
+  @@index([topicId])
+}
+
+/// A note attached to a task (any note, any number of tasks).
+model TaskNote {
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  noteId    String
+  note      Note     @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([taskId, noteId])
+  @@index([noteId])
 }
 
 /// One row per AI API call (each model attempt), for the AI usage page.
@@ -354,18 +374,18 @@ model Payment {
 
 /// The benefit from one approved payment. Days stack after the previous period; tokens add up.
 model Entitlement {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  paymentId String   @unique
-  payment   Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  tokens    Int
-  startsAt  DateTime
-  endsAt    DateTime
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paymentId  String    @unique
+  payment    Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  tokens     Int
+  startsAt   DateTime
+  endsAt     DateTime
   /// Set when an admin cancelled the subscription: the remaining days and use were taken away then.
   canceledAt DateTime?
   canceledBy String?
-  createdAt DateTime @default(now())
+  createdAt  DateTime  @default(now())
 
   @@index([userId, endsAt])
 }
