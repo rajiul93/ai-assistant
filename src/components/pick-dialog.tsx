@@ -4,6 +4,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Check, Search } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { MathText } from "@/components/math-text";
 
 export type PickItem = { id: string; title: string; hint?: string | null; muted?: boolean };
 
@@ -51,7 +52,7 @@ export function PickDialog({ open, onOpenChange, title, items, loading, selected
             >
               <span className={cn("flex size-5 shrink-0 items-center justify-center rounded border", on ? "border-indigo-600 bg-indigo-600 text-white" : "border-zinc-300")}>{on ? <Check className="size-3.5" strokeWidth={3} /> : null}</span>
               <span className="min-w-0 flex-1">
-                <span className={cn("block truncate text-sm font-medium", item.muted && "text-zinc-400 line-through")}>{item.title}</span>
+                <span className={cn("block truncate text-sm font-medium", item.muted && "text-zinc-400 line-through")}><MathText text={item.title} /></span>
                 {item.hint ? <span className="block truncate text-xs text-zinc-500">{item.hint}</span> : null}
               </span>
             </button>

@@ -22,6 +22,7 @@ import { createSubject, createTopic, deleteSubject, deleteTopic, reorderSubjects
 import { createTask } from "@/server/actions/tasks";
 import { SortableList } from "@/components/sortable-list";
 import { VoiceFormAssistant } from "@/components/voice-form-assistant";
+import { MathText } from "@/components/math-text";
 
 type Topic = { id: string; name: string; parentId: string | null };
 type Subject = { id: string; name: string; topics: Topic[] };
@@ -112,7 +113,7 @@ function TopicRow({ topic, subject, depth, openTasks, onDelete, path, handle }: 
     <div className="flex items-center gap-1.5 rounded-xl py-1 pr-1">
       {handle}
       {depth > 0 ? <CornerDownRight className="size-3.5 shrink-0 text-zinc-300" aria-hidden /> : null}
-      <p className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-900" title={topic.name}>{topic.name}</p>
+      <p className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-900" title={topic.name}><MathText text={topic.name} /></p>
       {inTasks ? <Link href="/tasks" className="flex h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-xs font-medium text-emerald-700 hover:bg-emerald-50" title="Already in your tasks">
         <Check className="size-3.5" /> In tasks
       </Link> : null}
@@ -160,7 +161,7 @@ function SubjectCard({ subject, openTasks, onDelete, handle }: { subject: Subjec
       <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} className="flex min-w-0 flex-1 items-center gap-2 text-left">
         <ChevronDown className={cn("size-4 shrink-0 text-zinc-400 transition-transform", !open && "-rotate-90")} />
         <span className="min-w-0">
-          <span className="block truncate text-base font-semibold">{subject.name}</span>
+          <span className="block truncate text-base font-semibold"><MathText text={subject.name} /></span>
           <span className="block text-xs text-zinc-500">{subject.topics.length} topic{subject.topics.length === 1 ? "" : "s"}{inTasks ? ` · ${inTasks} in tasks` : ""}</span>
         </span>
       </button>

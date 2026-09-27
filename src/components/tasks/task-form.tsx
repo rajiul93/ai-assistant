@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/select";
 import { QuillEditor } from "@/components/notes/quill-editor";
 import { PickDialog } from "@/components/pick-dialog";
+import { MathText } from "@/components/math-text";
 import { listNotes } from "@/server/actions/notes";
 import { FileText, Plus, X } from "lucide-react";
 import { toEditorHtml } from "@/lib/note-html";
@@ -125,7 +126,7 @@ export function TaskForm({
             key={editorKey}
             initialHtml={form.getValues("description") ?? ""}
             placeholder="কী পড়বে বা করবে — list, heading, code সব লেখা যাবে"
-            onChange={(html, text) => form.setValue("description", text.trim() ? html : "", { shouldDirty: true })}
+            onChange={(html, text) => form.setValue("description", text.trim() || html.includes("ql-formula") ? html : "", { shouldDirty: true })}
           />
         </div>
         {form.formState.errors.description ? <p className="text-sm text-red-600">{form.formState.errors.description.message}</p> : null}
@@ -135,7 +136,7 @@ export function TaskForm({
         <div className="flex flex-wrap items-center gap-1.5">
           {noteIds.map((id) => <span key={id} className="flex max-w-full items-center gap-1 rounded-full bg-zinc-100 py-0.5 pl-2.5 pr-1 text-xs text-zinc-700">
             <FileText className="size-3.5 shrink-0 text-zinc-500" />
-            <span className="truncate">{noteTitles[id] ?? "Note"}</span>
+            <span className="truncate"><MathText text={noteTitles[id] ?? "Note"} /></span>
             <button type="button" onClick={() => setNoteIds(noteIds.filter((item) => item !== id))} aria-label={`Remove “${noteTitles[id] ?? "note"}”`} className="flex size-6 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-white hover:text-zinc-900"><X className="size-3.5" /></button>
           </span>)}
           <button type="button" onClick={() => setNotesOpen(true)} className="flex h-8 items-center gap-1 rounded-full border border-dashed border-zinc-300 px-3 text-xs font-medium text-zinc-600 hover:border-zinc-400 hover:bg-zinc-50">

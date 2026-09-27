@@ -19,6 +19,7 @@ const featureLabels: Record<string, string> = {
   note_writer: "Note writing",
   speech: "Voice replies (spoken aloud)",
   transcribe: "Understanding your voice",
+  voice_fix: "Fixing spelling & math in what you said",
   image: "Image generation",
 };
 const statusLabels: Record<string, string> = {

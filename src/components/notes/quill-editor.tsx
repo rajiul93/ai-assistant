@@ -2,6 +2,7 @@
 
 import { useEffect, useImperativeHandle, useRef } from "react";
 import type Quill from "quill";
+import katex from "katex";
 import "quill/dist/quill.snow.css";
 
 export type QuillHandle = {
@@ -11,13 +12,14 @@ export type QuillHandle = {
 };
 
 // Text formatting only — "image" and "video" are deliberately absent, so they can't be inserted.
-const formats = ["header", "bold", "italic", "underline", "strike", "list", "indent", "blockquote", "code-block", "code", "link"];
+// "formula" is math written in LaTeX and drawn like a book (a stacked ½, a raised x²); see lib/math.
+const formats = ["header", "bold", "italic", "underline", "strike", "list", "indent", "blockquote", "code-block", "code", "link", "formula"];
 // H2/H3 are buttons rather than a dropdown so the toolbar can scroll sideways on phones.
 const toolbar = [
   [{ header: 2 }, { header: 3 }],
   ["bold", "italic", "underline", "strike"],
   [{ list: "ordered" }, { list: "bullet" }],
-  ["blockquote", "code-block", "link"],
+  ["blockquote", "code-block", "link", "formula"],
   ["clean"],
 ];
 
@@ -55,6 +57,8 @@ export function QuillEditor({ initialHtml, placeholder, onChange, handleRef }: {
     const container = document.createElement("div");
     host.appendChild(container);
 
+    // Quill's formula format draws with the global KaTeX.
+    (window as Window & { katex?: typeof katex }).katex = katex;
     void import("quill").then(({ default: QuillClass }) => {
       if (cancelled) return;
       const Delta = QuillClass.import("delta") as typeof import("quill").Delta;

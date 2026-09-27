@@ -3,16 +3,17 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ArrowUp, Check, CircleCheck, Download, FileText, Lock, Maximize2, Mic, Minimize2, NotebookPen, Paperclip, RefreshCcw, Sparkles, Square, Volume2, X } from "lucide-react";
 import { ChatMarkdown } from "@/components/chat-markdown";
+import { MathText } from "@/components/math-text";
 import { ChatPurchase } from "@/components/billing/chat-purchase";
 import { ImageViewer } from "@/components/image-viewer";
 import { VoiceWave } from "@/components/assistant-status";
 import { sectorLabels, statusLabels } from "@/lib/applications";
-import type { AssistantStrings } from "@/lib/assistant-i18n";
+import type { AssistantLang, AssistantStrings } from "@/lib/assistant-i18n";
 import { ATTACHMENT_ACCEPT, formatBytes, isAllowedType, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, MAX_TOTAL_ATTACHMENT_BYTES, type Attachment, type AttachmentType } from "@/lib/attachments";
 import { compressImage } from "@/lib/compress-image";
 import type { PendingAction } from "@/lib/assistant-types";
 import { interruptReply, useAssistant } from "@/lib/use-assistant";
-import { useBestMic } from "@/lib/use-best-mic";
+import { useVoiceChat } from "@/lib/use-voice-chat";
 import { cn } from "@/lib/utils";
 import { isVoicePlaying, speak, subscribeVoicePlaying } from "@/lib/voice";
 import type { AiLock } from "@/lib/ai-limits";
@@ -111,12 +112,19 @@ function PlanLockCard({ lock, t }: { lock: Exclude<AiLock, null>; t: AssistantSt
   </div>;
 }
 
+const languages: Array<{ value: AssistantLang; label: string; name: string }> = [
+  { value: "bn", label: "বাং", name: "বাংলা" },
+  { value: "en", label: "EN", name: "English" },
+];
+
 export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
   const { entries, busy, open, setOpen, t, send, confirmAction, cancelAction } = useAssistant();
   const [question, setQuestion] = useState("");
   const [voiceError, setVoiceError] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
   const setLive = useAssistantStore((state) => state.setLive);
+  const lang = useAssistantStore((state) => state.lang);
+  const setLang = useAssistantStore((state) => state.setLang);
   const attachments = useAssistantStore((state) => state.attachments);
   const setAttachments = useAssistantStore((state) => state.setAttachments);
   const attachment = attachments[0] ?? null;
@@ -129,25 +137,51 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const voicePlaying = useSyncExternalStore(subscribeVoicePlaying, isVoicePlaying, () => false);
-  const voice = useBestMic({
-    // The assistant's last message helps the transcriber with short replies ("হ্যাঁ", a subject name).
-    context: () => entries.findLast((entry) => entry.role === "assistant")?.text ?? "",
-    onInterim: (value) => { if (value !== "…") setQuestion(value); setLive({ stage: "listening", text: value }); },
-    onResult: (value, alternatives) => { setQuestion(""); void send(value, { voice: true, alternatives }); },
-    onError: (error) => { setQuestion(""); setVoiceError(error.message); setLive({ stage: "result", tone: "warn", text: error.message }); },
+  // Whatever was typed before the user started talking stays in front of the spoken words.
+  const questionRef = useRef("");
+  const typedBefore = useRef<string | null>(null);
+  const setBox = (value: string) => { questionRef.current = value; setQuestion(value); };
+  const join = (before: string, spoken: string) => [before.trim(), spoken.trim()].filter(Boolean).join(" ");
+  const voice = useVoiceChat({
+    // Live typing: the box shows the words while they are being said.
+    onDraft: (text) => {
+      if (text === "…") { typedBefore.current ??= questionRef.current; return; }
+      if (!text) { if (typedBefore.current !== null) setBox(typedBefore.current); return; }
+      typedBefore.current ??= questionRef.current;
+      setBox(join(typedBefore.current, text));
+    },
+    onSentence: (text, alternatives) => {
+      const message = join(typedBefore.current ?? "", text);
+      typedBefore.current = null;
+      setBox("");
+      void send(message, { voice: true, alternatives });
+    },
+    onError: (error) => setVoiceError(error.message),
+    onStopped: () => setLive({ stage: "result", tone: "ok", text: t.voiceStoppedStatus }),
   });
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
   }, [entries, busy, open]);
 
+  /** The mic button turns hands-free voice chat on and off. */
   function toggleListening() {
     setVoiceError("");
-    if (voice.listening) { voice.stop(); return; }
+    if (voice.listening) { voice.stop(); typedBefore.current = null; return; }
+    // Without AI access the mic would only hear "not allowed".
+    if (aiLock) { setVoiceError(t.aiLockedStatus); return; }
     // Tapping the mic means "let me talk": the current answer stops, like ChatGPT.
     interruptReply();
-    if (voice.start()) setLive({ stage: "listening", text: "" });
+    void voice.start();
   }
+
+  function chooseLanguage(value: AssistantLang) {
+    if (value === lang) return;
+    setLang(value);
+    voice.languageChanged();
+  }
+
+  useEffect(() => { useAssistantStore.getState().loadLang(); }, []);
 
   function close() {
     voice.stop();
@@ -197,7 +231,8 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
     // A new message while an answer is still coming cuts it short (send() does that).
     if (!question.trim() && !attachment) return;
     const value = question;
-    setQuestion("");
+    typedBefore.current = null;
+    setBox("");
     void send(value);
   }
 
@@ -233,6 +268,17 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
           <p className="text-sm font-semibold text-zinc-950">{t.panelTitle}</p>
           <p className="text-xs text-zinc-500">{busy ? t.thinkingBubble : t.panelSubtitle}</p>
         </div>
+        <div role="radiogroup" aria-label="Language" className="flex shrink-0 rounded-full bg-zinc-100 p-0.5">
+          {languages.map((item) => <button
+            key={item.value}
+            type="button"
+            role="radio"
+            aria-checked={lang === item.value}
+            title={item.name}
+            onClick={() => chooseLanguage(item.value)}
+            className={cn("h-8 min-w-9 rounded-full px-2 text-xs font-semibold transition sm:h-7", lang === item.value ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-500 hover:text-zinc-800")}
+          >{item.label}</button>)}
+        </div>
         <button type="button" onClick={() => setWide((value) => !value)} aria-label={wide ? "Smaller chat" : "Larger chat"} title={wide ? "Smaller chat" : "Larger chat"} className="hidden size-8 items-center justify-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 sm:flex">{wide ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}</button>
         <button type="button" onClick={close} aria-label="Close" className="flex size-10 items-center justify-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 sm:size-8"><X className="size-4" /></button>
       </header>
@@ -244,7 +290,7 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
           ? <div key={entry.id} className="assistant-in ml-10 flex flex-col items-end">
             {entry.viaVoice ? <p className="mb-1 flex items-center gap-1 text-[11px] font-medium text-zinc-400"><Mic className="size-3" /> {t.youSaid}</p> : null}
             {entry.attachmentName ? <p className="mb-1 flex max-w-full items-center gap-1 truncate text-[11px] font-medium text-zinc-400"><Paperclip className="size-3 shrink-0" /> {entry.attachmentName}</p> : null}
-            <p className="rounded-2xl rounded-br-md bg-zinc-950 px-3.5 py-2 text-sm leading-relaxed text-white">{entry.text}</p>
+            <p className="rounded-2xl rounded-br-md bg-zinc-950 px-3.5 py-2 text-sm leading-relaxed text-white"><MathText text={entry.text} /></p>
           </div>
           : entry.purchase
           ? <div key={entry.id} className="assistant-in min-w-0 rounded-2xl border border-zinc-200 bg-white p-3"><ChatPurchase /></div>
@@ -303,7 +349,7 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
             className="max-h-48 min-h-[4.75rem] flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2 text-sm leading-5 outline-none field-sizing-content placeholder:text-zinc-400"
             value={question}
             placeholder={voice.listening ? t.placeholderListening : attachment ? t.placeholderWithFile : t.placeholder}
-            onChange={(event) => setQuestion(event.target.value)}
+            onChange={(event) => { typedBefore.current = null; setBox(event.target.value); }}
             onPaste={(event) => { if (event.clipboardData.files.length) { event.preventDefault(); void addFiles(event.clipboardData.files); } }}
             onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(); } }}
           />
@@ -319,8 +365,9 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
             type="button"
             onClick={toggleListening}
             disabled={!voice.supported}
-            aria-label={t.speakButton}
-            title={voice.supported ? t.speakButton : t.noVoiceSupport}
+            aria-label={voice.listening ? t.voiceStopButton : t.speakButton}
+            aria-pressed={voice.listening}
+            title={!voice.supported ? t.noVoiceSupport : voice.listening ? t.voiceStopButton : t.speakButton}
             className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl sm:size-9 transition disabled:opacity-40", voice.listening ? "bg-rose-500 text-white shadow-[0_0_0_4px_rgba(244,63,94,0.15)]" : "text-zinc-500 hover:bg-zinc-200/70 hover:text-zinc-900")}
           >{voice.listening ? <VoiceWave className="h-3.5" /> : <Mic className="size-4" />}</button>
           {/* Nothing typed while an answer is coming or being spoken: the button stops it instead. */}
@@ -338,6 +385,7 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
             className="flex size-10 shrink-0 items-center justify-center rounded-xl sm:size-9 bg-zinc-950 text-white transition hover:bg-zinc-800 active:scale-95 disabled:bg-zinc-200 disabled:text-zinc-400"
           ><ArrowUp className="size-4" /></button>}
         </div>
+        {voice.listening ? <p className="mt-2 flex items-center gap-1.5 px-1 text-[11px] text-rose-600"><VoiceWave className="h-3" /> {t.voiceChatOn}</p> : null}
         {!voice.supported ? <p className="mt-2 px-1 text-[11px] text-zinc-500">{t.noVoiceSupport}</p> : null}
       </div>
     </section> : null}

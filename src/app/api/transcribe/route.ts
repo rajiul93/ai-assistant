@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkAi } from "@/server/ai-access";
 import { logUsage } from "@/server/assistant/ai";
+import { fixVoiceText } from "@/server/assistant/voice-fix";
 
 const STT_MODEL = process.env.OPENAI_STT_MODEL || "gpt-4o-transcribe";
 const MAX_AUDIO_BYTES = 4 * 1024 * 1024;
@@ -40,7 +41,12 @@ export async function POST(request: Request) {
   if (!(await checkAi(user)).allowed) return Response.json({ error: "unavailable" }, { status: 501 });
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return Response.json({ error: "not_configured" }, { status: 501 });
-  const lang = new URL(request.url).searchParams.get("lang") === "en" ? "en" : "bn";
+  const params = new URL(request.url).searchParams;
+  const lang = params.get("lang") === "en" ? "en" : "bn";
+  // A live-typing preview of a sentence still being spoken: fast, and not cleaned up.
+  const partial = params.get("partial") === "1";
+  // The voice chat skips the clean-up: the assistant corrects the wording along with its answer.
+  const fix = !partial && params.get("fix") !== "0";
   const audio = await request.arrayBuffer();
   if (audio.byteLength === 0 || audio.byteLength > MAX_AUDIO_BYTES) return Response.json({ error: "bad_audio" }, { status: 400 });
 
@@ -79,5 +85,7 @@ export async function POST(request: Request) {
   const input = payload.usage?.input_tokens ?? 0;
   const output = payload.usage?.output_tokens ?? 0;
   logUsage({ userId: user.id, feature: "transcribe", model: STT_MODEL, httpStatus: 200, latencyMs: Date.now() - started, usage: { input, output, total: payload.usage?.total_tokens ?? input + output } });
-  return Response.json({ text: payload.text?.trim() ?? "" });
+  const heard = payload.text?.trim() ?? "";
+  // The finished sentence gets its Bangla spelling and spoken math put right (see voice-fix).
+  return Response.json({ text: !fix ? heard : await fixVoiceText(heard, { userId: user.id, lang, context }) });
 }

@@ -10,6 +10,7 @@ import { ChevronRight, Plus } from "lucide-react";
 import { APP_TIMEZONE, dayjs, formatRemaining } from "@/lib/dayjs";
 import { lastRevisedLabel, needsRevision } from "@/lib/revisions";
 import type { TaskWithRelations } from "@/server/queries";
+import { MathText } from "@/components/math-text";
 
 export function DashboardView({
   longTermDeadline,
@@ -108,7 +109,7 @@ export function DashboardView({
                     <Link href="/tasks" className="flex min-h-14 items-center gap-3 px-4 py-3 transition active:bg-zinc-50">
                       <span className={`size-2.5 shrink-0 rounded-full ${priorityDot[task.priority]}`} aria-label={`${task.priority.toLowerCase()} priority`} />
                       <div className="min-w-0 flex-1">
-                        <p className={`truncate font-medium ${task.status === "FINISHED" ? "text-zinc-400 line-through" : ""}`}>{task.title}</p>
+                        <p className={`truncate font-medium ${task.status === "FINISHED" ? "text-zinc-400 line-through" : ""}`}><MathText text={task.title} /></p>
                         <p className="truncate text-xs text-zinc-500">
                           {task.subject?.name ?? "No subject"} · {task.estimatedMinutes}m{task.dueDate ? ` · ${dayjs(task.dueDate).tz(APP_TIMEZONE).format("h:mm A")}` : ""}
                         </p>
@@ -149,7 +150,7 @@ export function DashboardView({
                   <li key={task.id}>
                     <Link href="/tasks?view=revisions" className="flex min-h-12 items-center justify-between gap-3 px-4 py-2.5 transition active:bg-zinc-50">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{task.title}</p>
+                        <p className="truncate text-sm font-medium"><MathText text={task.title} /></p>
                         <p className="text-xs text-zinc-500">{task.subject?.name ?? "No subject"}</p>
                       </div>
                       <span className={needsRevision(task, todayMs) ? "shrink-0 text-xs font-medium text-amber-700" : "shrink-0 text-xs text-zinc-500"}>

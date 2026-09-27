@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { PickDialog } from "@/components/pick-dialog";
 import { cn } from "@/lib/utils";
 import { attachNoteToTask, createTaskFromNote, detachNoteFromTask, listTaskChoices, setNoteSubject } from "@/server/actions/notes";
+import { MathText } from "@/components/math-text";
 
 export type SubjectOption = { id: string; name: string };
 export type TopicOption = { id: string; name: string; subjectId: string; parentName?: string | null };
@@ -104,7 +105,7 @@ export function NoteLinks({ noteId, subjectId, topicId, tasks, subjects, topics 
     <div className="flex flex-wrap items-center gap-1.5">
       {tasks.map((task) => <span key={task.id} className="flex max-w-full items-center gap-1 rounded-full bg-zinc-100 py-0.5 pl-2.5 pr-1 text-xs text-zinc-700">
         <ListTodo className="size-3.5 shrink-0 text-zinc-500" />
-        <Link href="/tasks" className={cn("truncate hover:underline", task.status === "FINISHED" && "line-through text-zinc-400")}>{task.title}</Link>
+        <Link href="/tasks" className={cn("truncate hover:underline", task.status === "FINISHED" && "line-through text-zinc-400")}><MathText text={task.title} /></Link>
         <button type="button" disabled={busyId === task.id} onClick={() => void toggleTask(task.id, false)} aria-label={`Remove from “${task.title}”`} className="flex size-6 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-white hover:text-zinc-900 disabled:opacity-50"><X className="size-3.5" /></button>
       </span>)}
       <button type="button" onClick={() => setPickerOpen(true)} className="flex h-8 items-center gap-1 rounded-full border border-dashed border-zinc-300 px-3 text-xs font-medium text-zinc-600 hover:border-zinc-400 hover:bg-zinc-50">

@@ -13,7 +13,7 @@ const TOTAL_BUDGET_MS = 40_000;
 const PER_ATTEMPT_WITH_BACKUP_MS = 25_000;
 
 /** Who is using the AI and for what — every call is logged for the AI usage page. */
-export type AiFeature = "assistant" | "file_assistant" | "answer" | "answer_search" | "note_writer" | "speech" | "transcribe" | "image";
+export type AiFeature = "assistant" | "file_assistant" | "answer" | "answer_search" | "note_writer" | "speech" | "transcribe" | "voice_fix" | "image";
 /** Images/PDFs sent alongside the prompt (base64). */
 type InlineFile = { mimeType: string; data: string; name?: string };
 /** `responseSchema` is written in an OpenAPI style (type: "OBJECT", nullable: true) and converted to JSON Schema. */
@@ -27,6 +27,8 @@ type CallOptions = {
   onDelta?: (text: string) => void;
   /** Aborted when the user interrupts (a new message or voice command): the model stops generating. */
   signal?: AbortSignal;
+  /** Give up sooner than the usual budget (a quick clean-up that mustn't hold the user up). */
+  timeoutMs?: number;
 };
 type Usage = { input: number; output: number; total: number };
 type Attempt = { status: number | null; text: string | null; usage?: Usage };
@@ -212,12 +214,12 @@ export async function callAI(prompt: string, options: CallOptions) {
   if (!apiKey) return null;
   if (options.search && Date.now() < searchBlockedUntil) return null;
   const models = [...new Set([OPENAI_MODEL, OPENAI_FALLBACK_MODEL].filter((model): model is string => Boolean(model)))];
-  const deadline = Date.now() + TOTAL_BUDGET_MS;
+  const deadline = Date.now() + (options.timeoutMs ?? TOTAL_BUDGET_MS);
 
   for (let index = 0; index < models.length; index++) {
     const model = models[index];
     const remaining = deadline - Date.now();
-    if (remaining < 3_000) break;
+    if (remaining < Math.min(3_000, options.timeoutMs ?? 3_000)) break;
     const timeout = index < models.length - 1 ? Math.min(remaining, PER_ATTEMPT_WITH_BACKUP_MS) : remaining;
     const started = Date.now();
     let attempt: Attempt;

@@ -25,7 +25,6 @@ import { SessionBar } from "@/components/timer/session-bar";
 import { SubjectPickerDialog } from "@/components/timer/subject-picker-dialog";
 import { TimerAlarm } from "@/components/timer/timer-alarm";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { VoiceCommandCenter } from "@/components/voice-command-center";
 
 const links = [
   { href: "/dashboard", label: "Dashboard", short: "Home", icon: LayoutDashboard },
@@ -75,7 +74,7 @@ export function AppShell({
     <div className="min-h-full bg-zinc-50">
       <aside className="fixed inset-y-0 left-0 hidden w-60 border-r border-zinc-200 bg-white lg:flex lg:flex-col">
         <div className="px-6 py-6">
-          <p className="text-lg font-semibold tracking-tight">Prep</p>
+          <Link href="/dashboard" className="text-lg font-semibold tracking-tight">Prep</Link>
           <p className="mt-1 text-sm text-zinc-500">Job preparation</p>
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto px-3">
@@ -105,11 +104,10 @@ export function AppShell({
       </aside>
 
       <div className="lg:pl-60">
-        {/* Phone header: the voice controls sit on its right (see VoiceCommandCenter). */}
+        {/* Phone header. Voice lives in the assistant's message box. */}
         <header className="sticky top-0 z-30 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-end border-b border-zinc-200 bg-white/90 px-4 pb-3 pt-[env(safe-area-inset-top)] backdrop-blur-xl lg:hidden">
-          <p className="text-lg font-semibold tracking-tight">Prep</p>
+          <Link href="/dashboard" className="text-lg font-semibold tracking-tight">Prep</Link>
         </header>
-        <VoiceCommandCenter aiLock={aiLock} />
         <StudyAssistant aiLock={aiLock} />
         <TimerAlarm />
         <SubjectPickerDialog />
