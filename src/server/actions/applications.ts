@@ -3,19 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { startOfDay } from "@/lib/dayjs";
-import { htmlToPlainText, sanitizeNoteHtml } from "@/lib/note-html";
+import { toRichHtml } from "@/lib/note-html";
 import { prisma } from "@/lib/prisma";
 import { applicationStatusSchema, jobApplicationSchema } from "@/lib/validations";
 
-/** Notes are Quill HTML; plain text (older rows, the assistant) becomes paragraphs first. */
-function notesHtml(notes?: string) {
-  if (!notes?.trim()) return null;
-  const html = /<(p|h[1-6]|ul|ol|li|strong|em|blockquote)\b/i.test(notes)
-    ? notes
-    : notes.split(/\n{2,}|\n/).map((line) => line.trim()).filter(Boolean).map((line) => `<p>${line.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</p>`).join("");
-  const clean = sanitizeNoteHtml(html);
-  return htmlToPlainText(clean).trim() ? clean : null;
-}
 
 function revalidateJobs() {
   revalidatePath("/jobs");
@@ -39,7 +30,7 @@ function toData(input: unknown) {
     reference: data.reference || null,
     roll: data.roll || null,
     link: data.link || null,
-    notes: notesHtml(data.notes),
+    notes: toRichHtml(data.notes),
     password: data.password?.trim() || null,
   };
 }

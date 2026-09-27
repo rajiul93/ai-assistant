@@ -55,5 +55,26 @@ export function htmlToPlainText(html: string) {
     .trim();
 }
 
+/** Rich text (Quill HTML) vs. plain text written before an editor was used, or by the assistant. */
+export function isRichHtml(text: string) {
+  return /<(p|h[1-6]|ul|ol|li|strong|em|blockquote)\b/i.test(text);
+}
+
+/** Anything → sanitized editor HTML (plain lines become paragraphs), or null when it has no text. */
+export function toRichHtml(text: string | null | undefined) {
+  if (!text?.trim()) return null;
+  const html = isRichHtml(text)
+    ? text
+    : text.split(/\n/).map((line) => line.trim()).filter(Boolean).map((line) => `<p>${line.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</p>`).join("");
+  const clean = sanitizeNoteHtml(html);
+  return htmlToPlainText(clean).trim() ? clean : null;
+}
+
+/** What to load into the editor: stored HTML as is, older plain text turned into paragraphs. */
+export function toEditorHtml(text: string | null | undefined) {
+  if (!text) return "";
+  return isRichHtml(text) ? text : text.split("\n").map((line) => `<p>${line.replace(/&/g, "&amp;").replace(/</g, "&lt;") || "<br>"}</p>`).join("");
+}
+
 /** Shared instructions so AI-written notes fit the editor: simple HTML, no images. */
 export const noteWritingRules = `লেখা হবে Quill editor-এ বসানোর মতো সরল HTML: শুধু <h2>, <h3>, <p>, <strong>, <em>, <ul>/<ol> + <li>, <blockquote>, <code>। কোনো ছবি, table, style, markdown (# বা **) বা \`\`\` code fence নয়। পড়ার উপযোগী, গোছানো study note — মূল ধারণা, ছোট ব্যাখ্যা, উদাহরণ, মনে রাখার পয়েন্ট। নিশ্চিত না হলে বানিয়ে লিখবে না।`;

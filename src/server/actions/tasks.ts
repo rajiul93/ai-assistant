@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { taskSchema } from "@/lib/validations";
+import { toRichHtml } from "@/lib/note-html";
 
 function revalidateTasks() {
   revalidatePath("/dashboard");
@@ -26,6 +27,17 @@ async function assertOwnedTopic(userId: string, topicId?: string) {
   return topic;
 }
 
+/** Makes the task's attached notes exactly `noteIds` (only the user's own notes). */
+async function syncTaskNotes(userId: string, taskId: string, noteIds?: string[]) {
+  if (!noteIds) return;
+  const owned = await prisma.note.findMany({ where: { userId, id: { in: noteIds } }, select: { id: true } });
+  const keep = owned.map((note) => note.id);
+  await prisma.$transaction([
+    prisma.taskNote.deleteMany({ where: { taskId, noteId: { notIn: keep } } }),
+    prisma.taskNote.createMany({ data: keep.map((noteId) => ({ taskId, noteId })), skipDuplicates: true }),
+  ]);
+}
+
 export async function createTask(input: unknown) {
   const user = await requireUser();
   const data = taskSchema.parse(input);
@@ -39,7 +51,7 @@ export async function createTask(input: unknown) {
       userId: user.id,
       position: (first._min.position ?? 1) - 1,
       title: data.title,
-      description: data.description || null,
+      description: toRichHtml(data.description),
       subjectId,
       topicId: topic?.id ?? null,
       estimatedMinutes: data.estimatedMinutes,
@@ -48,6 +60,7 @@ export async function createTask(input: unknown) {
       status: data.status,
     },
   });
+  await syncTaskNotes(user.id, task.id, data.noteIds);
 
   revalidateTasks();
   return task.id;
@@ -66,7 +79,7 @@ export async function updateTask(taskId: string, input: unknown) {
     where: { id: existing.id },
     data: {
       title: data.title,
-      description: data.description || null,
+      description: toRichHtml(data.description),
       subjectId,
       topicId: topic?.id ?? null,
       estimatedMinutes: data.estimatedMinutes,
@@ -75,6 +88,7 @@ export async function updateTask(taskId: string, input: unknown) {
       status: data.status,
     },
   });
+  await syncTaskNotes(user.id, existing.id, data.noteIds);
 
   revalidateTasks();
 }

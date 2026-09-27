@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ClockTools } from "@/components/dashboard/clock-tools";
 import { DailyTargetCard } from "@/components/dashboard/daily-target-card";
 import { DeadlineCountdown } from "@/components/dashboard/deadline-countdown";
 import { TodayPlanStarter } from "@/components/dashboard/today-plan-starter";
@@ -123,6 +124,8 @@ export function DashboardView({
         </div>
 
         <div className="space-y-5">
+          <ClockTools />
+
           <section className="grid grid-cols-3 gap-2 sm:gap-2.5" aria-label="Task counts">
             {stats.map((stat) => (
               <Link key={stat.label} href={stat.href} className="min-w-0 rounded-xl border border-zinc-200 bg-white px-1.5 py-2.5 text-center transition active:scale-[0.98] sm:px-3 sm:py-3">

@@ -1,16 +1,20 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { TaskPriority, TaskStatus } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { QuillEditor } from "@/components/notes/quill-editor";
+import { PickDialog } from "@/components/pick-dialog";
+import { listNotes } from "@/server/actions/notes";
+import { FileText, Plus, X } from "lucide-react";
+import { toEditorHtml } from "@/lib/note-html";
 import { createTask, updateTask } from "@/server/actions/tasks";
 import { taskSchema, type TaskInput } from "@/lib/validations";
 import { dayjs } from "@/lib/dayjs";
@@ -36,7 +40,8 @@ export function TaskForm({
     resolver: zodResolver(taskSchema),
     defaultValues: {
       title: task?.title ?? "",
-      description: task?.description ?? "",
+      description: toEditorHtml(task?.description),
+      noteIds: task?.notes.map((link) => link.note.id) ?? [],
       subjectId: task?.subjectId ?? "",
       topicId: task?.topicId ?? "",
       estimatedMinutes: task?.estimatedMinutes ?? 30,
@@ -45,6 +50,15 @@ export function TaskForm({
       status: (task?.status ?? "NOT_STARTED") as TaskStatus,
     },
   });
+
+  // Quill is uncontrolled: bumping the key reloads it after the voice form or a reset changes the value.
+  const [editorKey, setEditorKey] = useState(0);
+  const [notesOpen, setNotesOpen] = useState(false);
+  // Titles of attached notes, so chips show without loading every note.
+  const [noteTitles, setNoteTitles] = useState<Record<string, string>>(() => Object.fromEntries(task?.notes.map((link) => [link.note.id, link.note.title]) ?? []));
+  const noteIds = useWatch({ control: form.control, name: "noteIds" }) ?? [];
+  const notesQuery = useQuery({ queryKey: ["notes"], queryFn: () => listNotes(), enabled: notesOpen });
+  const setNoteIds = (ids: string[]) => form.setValue("noteIds", ids, { shouldDirty: true });
 
   const subjectId = useWatch({ control: form.control, name: "subjectId" });
   const filteredTopics = useMemo(
@@ -71,7 +85,8 @@ export function TaskForm({
       toast.success(task ? "Task updated" : "Task created");
       await queryClient.invalidateQueries({ queryKey: ["tasks"] });
       onSuccess?.();
-      if (!task) form.reset();
+      if (!task) { form.reset(); setEditorKey((key) => key + 1); }
+      await queryClient.invalidateQueries({ queryKey: ["task-choices"] });
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -85,7 +100,8 @@ export function TaskForm({
         { key: "priority", label: "Priority", question: "Priority বলুন: low, medium অথবা high" },
       ]} onComplete={(answers) => {
         form.setValue("title", answers.title);
-        form.setValue("description", answers.description === "skip" ? "" : answers.description);
+        form.setValue("description", answers.description === "skip" ? "" : toEditorHtml(answers.description));
+        setEditorKey((key) => key + 1);
         const minutes = Number.parseInt(answers.estimatedMinutes.replace(/\D/g, ""), 10);
         if (minutes > 0) form.setValue("estimatedMinutes", minutes);
         const priority = answers.priority.toLowerCase();
@@ -103,8 +119,43 @@ export function TaskForm({
         )}
       </div>
       <div className="space-y-2">
-        <Label htmlFor="description">Description</Label>
-        <Textarea id="description" {...form.register("description")} />
+        <Label>Description</Label>
+        <div className="task-editor">
+          <QuillEditor
+            key={editorKey}
+            initialHtml={form.getValues("description") ?? ""}
+            placeholder="কী পড়বে বা করবে — list, heading, code সব লেখা যাবে"
+            onChange={(html, text) => form.setValue("description", text.trim() ? html : "", { shouldDirty: true })}
+          />
+        </div>
+        {form.formState.errors.description ? <p className="text-sm text-red-600">{form.formState.errors.description.message}</p> : null}
+      </div>
+      <div className="space-y-2">
+        <Label>Notes</Label>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {noteIds.map((id) => <span key={id} className="flex max-w-full items-center gap-1 rounded-full bg-zinc-100 py-0.5 pl-2.5 pr-1 text-xs text-zinc-700">
+            <FileText className="size-3.5 shrink-0 text-zinc-500" />
+            <span className="truncate">{noteTitles[id] ?? "Note"}</span>
+            <button type="button" onClick={() => setNoteIds(noteIds.filter((item) => item !== id))} aria-label={`Remove “${noteTitles[id] ?? "note"}”`} className="flex size-6 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-white hover:text-zinc-900"><X className="size-3.5" /></button>
+          </span>)}
+          <button type="button" onClick={() => setNotesOpen(true)} className="flex h-8 items-center gap-1 rounded-full border border-dashed border-zinc-300 px-3 text-xs font-medium text-zinc-600 hover:border-zinc-400 hover:bg-zinc-50">
+            <Plus className="size-3.5" /> Note যোগ করো
+          </button>
+        </div>
+        <PickDialog
+          open={notesOpen}
+          onOpenChange={setNotesOpen}
+          title="এই task-এ কোন note লাগবে?"
+          placeholder="Search notes"
+          emptyText="এখনো কোনো note নেই — Notes পাতায় লিখে নাও।"
+          loading={notesQuery.isPending}
+          items={(notesQuery.data ?? []).map((note) => ({ id: note.id, title: note.title || "Untitled note", hint: note.subject ? `${note.subject.name}${note.topic ? ` › ${note.topic.name}` : ""}` : null }))}
+          selectedIds={noteIds}
+          onToggle={(item, selected) => {
+            setNoteTitles((titles) => ({ ...titles, [item.id]: item.title }));
+            setNoteIds(selected ? [...noteIds, item.id] : noteIds.filter((id) => id !== item.id));
+          }}
+        />
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">

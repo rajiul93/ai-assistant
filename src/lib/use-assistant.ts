@@ -190,9 +190,9 @@ export function useAssistant() {
   async function send(text: string, { voice, alternatives = [] }: SendOptions = {}) {
     const store = useAssistantStore.getState();
     const s = strings();
-    const attachment = store.attachment;
+    const attachments = store.attachments;
     // A file alone is a request too: "tell me what's in this".
-    const message = text.trim() || (attachment ? s.attachmentDefaultAsk : "");
+    const message = text.trim() || (attachments.length > 1 ? s.attachmentDefaultAskMany : attachments.length ? s.attachmentDefaultAsk : "");
     if (!message) return;
 
     // Page jumps, refresh and back run instantly — even while the AI is still busy with something else.
@@ -217,7 +217,7 @@ export function useAssistant() {
 
     const pending = findPendingAction(store.entries);
     const history = store.entries.slice(-10).map(({ role, text: entryText }) => ({ role, text: entryText }));
-    const userEntry = store.add({ role: "user", text: message, viaVoice: voice, attachmentName: attachment?.name });
+    const userEntry = store.add({ role: "user", text: message, viaVoice: voice, attachmentName: attachments.length > 1 ? s.attachmentsCount(attachments.length) : attachments[0]?.name });
     const wasOpen = store.open;
     // Spoken requests open the chat, so the user can read what was heard and what the assistant answers.
     if (voice) store.setOpen(true);
@@ -247,7 +247,7 @@ export function useAssistant() {
           pending: pending?.action ?? null,
           voice: Boolean(voice),
           lang: store.lang,
-          attachment: attachment ? { name: attachment.name, mimeType: attachment.mimeType, data: attachment.data } : null,
+          attachments: attachments.map((file) => ({ name: file.name, mimeType: file.mimeType, data: file.data })),
         }),
       });
       if (!response.ok) throw new Error("assistant request failed");

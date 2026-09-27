@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { isAllowedType, MAX_ATTACHMENT_BYTES, sniffType } from "@/lib/attachments";
+import { isAllowedType, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, MAX_TOTAL_ATTACHMENT_BYTES, sniffType } from "@/lib/attachments";
 import { requireUser } from "@/lib/auth";
 import { respond } from "@/server/assistant/respond";
 import { checkAi } from "@/server/ai-access";
@@ -47,11 +47,11 @@ const requestSchema = z.object({
   voice: z.boolean().optional(),
   alternatives: z.array(z.string().max(2000)).max(5).optional(),
   lang: z.enum(["bn", "en"]).optional(),
-  attachment: z.object({
+  attachments: z.array(z.object({
     name: z.string().max(255),
     mimeType: z.string().refine(isAllowedType, "Only images and PDFs are supported"),
     data: z.string().max(Math.ceil(MAX_ATTACHMENT_BYTES / 3) * 4 + 4).regex(/^[A-Za-z0-9+/]+=*$/),
-  }).nullish(),
+  })).max(MAX_ATTACHMENTS).optional(),
 });
 
 /** The file must really be an image/PDF of the declared kind, not just named like one. */
@@ -71,11 +71,15 @@ export async function POST(request: Request) {
   const user = await requireUser();
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    const fileProblem = parsed.error.issues.some((issue) => issue.path[0] === "attachment");
-    return NextResponse.json({ type: "clarify", reply: fileProblem ? "শুধু ছবি (JPG, PNG, WebP) বা PDF, ১০MB পর্যন্ত দেওয়া যাবে। / Only images or PDFs up to 10MB are supported." : "আমি কিছু শুনতে পাইনি। আবার বলবেন?" });
+    const fileProblem = parsed.error.issues.some((issue) => issue.path[0] === "attachments");
+    return NextResponse.json({ type: "clarify", reply: fileProblem ? `শুধু ছবি (JPG, PNG, WebP) বা PDF, একসাথে সর্বোচ্চ ${MAX_ATTACHMENTS}টি দেওয়া যাবে। / Only images or PDFs, up to ${MAX_ATTACHMENTS} at a time.` : "আমি কিছু শুনতে পাইনি। আবার বলবেন?" });
   }
-  const { attachment } = parsed.data;
-  if (attachment) {
+  const attachments = parsed.data.attachments ?? [];
+  const totalBytes = attachments.reduce((total, file) => total + Math.floor((file.data.length * 3) / 4), 0);
+  if (totalBytes > MAX_TOTAL_ATTACHMENT_BYTES * 1.1) {
+    return NextResponse.json({ type: "clarify", source: "fallback", reply: parsed.data.lang === "en" ? "These files are too large together — send fewer at a time." : "সব ফাইল মিলিয়ে অনেক বড় — একসাথে কয়েকটা কম পাঠাও।" });
+  }
+  for (const attachment of attachments) {
     const problem = checkAttachment(attachment.data, attachment.mimeType);
     if (problem) {
       const reply = parsed.data.lang === "en"

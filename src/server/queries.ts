@@ -5,6 +5,7 @@ import { endOfDay, startOfDay, startOfMonth, startOfWeek } from "@/lib/dayjs";
 const taskInclude = {
   subject: true,
   topic: true,
+  notes: { orderBy: { createdAt: "asc" }, select: { note: { select: { id: true, title: true } } } },
 } satisfies Prisma.TaskInclude;
 
 export async function getStudyPlan(userId: string) {
@@ -320,3 +321,15 @@ export async function getAiUsage({ userId, from }: { userId?: string; from: Date
     perUser,
   };
 }
+
+/** What a note list row needs (the note body is loaded only when it opens). */
+export const noteSummarySelect = {
+  id: true,
+  title: true,
+  plainText: true,
+  updatedAt: true,
+  subjectId: true,
+  topicId: true,
+  subject: { select: { name: true } },
+  topic: { select: { name: true } },
+} as const;

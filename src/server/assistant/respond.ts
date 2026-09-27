@@ -224,8 +224,8 @@ Study data: ${JSON.stringify(studyData(context))}
 আগের কথোপকথন:
 ${formatHistory(history)}
 
-${request.attachment ? `সংযুক্ত ফাইল: “${request.attachment.name}” (${request.attachment.mimeType === "application/pdf" ? "PDF" : "ছবি"}) — এই message-এর সাথে দেওয়া আছে। ফাইলটা মনোযোগ দিয়ে পড়ো (হাতের লেখা/বাংলা/ইংরেজি সব) এবং ব্যবহারকারী যা চায় সেটাই ফাইলের তথ্য দিয়ে করো:
-- "text বের করো / লেখাগুলো দাও" → answer, reply-তে ফাইলের লেখা হুবহু ও গুছিয়ে (অনুবাদ চাইলে অনুবাদ)।
+${request.attachments?.length ? `সংযুক্ত ${request.attachments.length}টি ফাইল (এই message-এর সাথে, এই ক্রমে): ${request.attachments.map((file, index) => `${index + 1}. “${file.name}” (${file.mimeType === "application/pdf" ? "PDF" : "ছবি"})`).join(", ")}। ফাইলটা মনোযোগ দিয়ে পড়ো (হাতের লেখা/বাংলা/ইংরেজি সব) এবং ব্যবহারকারী যা চায় সেটাই ফাইলের তথ্য দিয়ে করো:
+- "text বের করো / লেখাগুলো দাও" → answer, reply-তে ফাইলের লেখা হুবহু ও গুছিয়ে (অনুবাদ চাইলে অনুবাদ)। একাধিক ছবি হলে প্রতিটার লেখা আলাদা "## ছবি ১", "## ছবি ২" … শিরোনামে, ঠিক ওই ক্রমে; কোনো ছবি বাদ দেবে না, আর একটা পড়া না গেলে সেটা বলবে।
 - প্রশ্ন বা "বুঝিয়ে দাও / সারাংশ দাও" → answer, ফাইলের তথ্যের ভিত্তিতে।
 - চাকরির circular/বিজ্ঞপ্তি থেকে apply-এর তথ্য রাখতে চাইলে → add_application (প্রতিষ্ঠান, পদগুলো, শেষ তারিখ, পরীক্ষার তারিখ, link ফাইল থেকে নাও; apply না করে থাকলে status WISHLIST)।
 - note বানাতে চাইলে → create_note (ফাইলের বিষয়বস্তু গুছিয়ে)।
@@ -455,8 +455,8 @@ async function readNote(userId: string, lookup: Intent["noteLookup"], notes: Stu
   return { type: "answer", speak, reply: lang === "en" ? `From your note “${note.title}”:\n\n${text}` : `তোমার “${note.title}” note-এ লেখা আছে:\n\n${text}` };
 }
 
-async function answer(userId: string, message: string, history: ChatMessage[], context: StudyContext, voice?: boolean, lang?: "bn" | "en", attachment?: AssistantRequest["attachment"]) {
-  const files = attachment ? [{ mimeType: attachment.mimeType, data: attachment.data, name: attachment.name }] : undefined;
+async function answer(userId: string, message: string, history: ChatMessage[], context: StudyContext, voice?: boolean, lang?: "bn" | "en", attachments?: AssistantRequest["attachments"]) {
+  const files = attachments?.length ? attachments.map((file) => ({ mimeType: file.mimeType, data: file.data, name: file.name })) : undefined;
   const basePrompt = `তুমি একজন স্বাভাবিক, বুদ্ধিমান বাংলা সহকারী। এটি একটি open-book conversation: ব্যবহারকারী পড়াশোনা ছাড়াও যেকোনো সাধারণ বা random প্রশ্ন করতে পারে। সাধারণ জ্ঞান, সাম্প্রতিক তথ্য, খবর, ব্যক্তি, জায়গা, প্রযুক্তি বা অন্য কোনো তথ্যের জন্য প্রয়োজন হলে তথ্য যাচাই করে উত্তর দাও। তুমি নিশ্চিত না হলে স্পষ্টভাবে বলবে, বানিয়ে বলবে না। ব্যবহারকারী বাংলায়, Banglish বা ইংরেজিতে লিখলেও সহজ স্বাভাবিক বাংলায় উত্তর দেবে; technical term দরকার হলে সহজ ব্যাখ্যা দেবে। কথার tone প্রসঙ্গ অনুযায়ী স্বাভাবিক, সহানুভূতিশীল, serious বা হালকা মজার হবে। আগের কথার ধারাবাহিকতা রাখবে।
 
 আগের কথোপকথন:\n${formatHistory(history)}\n\nব্যবহারকারীর বর্তমান প্রশ্ন:\n${message}\n\nঅ্যাপের ব্যক্তিগত study data (শুধু app-related প্রশ্নে ব্যবহার করবে):\n${JSON.stringify(studyData(context))}\n\n${persona}\n${languageRule(lang)} ${styleRule(voice)}`;
@@ -530,9 +530,9 @@ async function decide(userId: string, request: AssistantRequest, hooks: RespondH
   const raw = await callAI(intentPrompt(request, history, context), {
     responseSchema: intentResponseSchema,
     onDelta: streamer ? (piece) => streamer.feed(piece) : undefined,
-    files: request.attachment ? [{ mimeType: request.attachment.mimeType, data: request.attachment.data, name: request.attachment.name }] : undefined,
+    files: request.attachments?.length ? request.attachments.map((file) => ({ mimeType: file.mimeType, data: file.data, name: file.name })) : undefined,
     userId,
-    feature: request.attachment ? "file_assistant" : "assistant",
+    feature: request.attachments?.length ? "file_assistant" : "assistant",
   });
   let intent: Intent | null = null;
   try { intent = raw ? intentSchema.parse(JSON.parse(raw)) : null; } catch { intent = null; }
@@ -594,6 +594,6 @@ async function decide(userId: string, request: AssistantRequest, hooks: RespondH
   }
   // Normally the intent call already contains the answer; only ask again (with web search) if it came back empty.
   if (intent.reply.trim()) return { type: "answer", reply: intent.reply.trim() };
-  const reply = await answer(userId, request.message, history, context, request.voice, request.lang, request.attachment);
+  const reply = await answer(userId, request.message, history, context, request.voice, request.lang, request.attachments);
   return reply ? { type: "answer", reply } : fallbackReply(request.message, context, request.lang);
 }
