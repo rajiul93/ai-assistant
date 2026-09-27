@@ -10,11 +10,15 @@ export default async function AdminBillingPage({ searchParams }: { searchParams:
   const user = await requireUser();
   if (!(await isAdminUser(user))) notFound();
   // Page and page size come from the URL, so a reload keeps them.
-  const { page, limit } = readPagination(await searchParams);
+  const params = await searchParams;
+  const { page, limit } = readPagination(params);
+  const statusParam = typeof params.status === "string" ? params.status.toUpperCase() : "";
+  // Pending is the default view: what needs an admin now.
+  const status = (["ALL", "APPROVED", "REJECTED"] as const).find((value) => value === statusParam) ?? "PENDING";
   const [payments, packages, accounts] = await Promise.all([
-    listPaymentsForAdmin({ page, limit }),
+    listPaymentsForAdmin({ page, limit, status }),
     prisma.planPackage.findMany({ orderBy: [{ planType: "asc" }, { sortOrder: "asc" }] }),
     prisma.paymentAccount.findMany(),
   ]);
-  return <AdminBilling payments={payments.rows} pendingCount={payments.pending} page={payments.page} limit={limit} total={payments.total} packages={packages} accounts={accounts} />;
+  return <AdminBilling payments={payments.rows} status={status} pendingCount={payments.pending} page={payments.page} limit={limit} total={payments.total} packages={packages} accounts={accounts} />;
 }

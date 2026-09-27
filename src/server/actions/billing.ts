@@ -83,13 +83,16 @@ export async function submitPayment(input: unknown) {
 // ---------- Admin ----------
 
 /** One page of payments, pending ones first; `pending` is the total waiting across all pages. */
-export async function listPaymentsForAdmin({ page, limit }: { page: number; limit: number }) {
+export async function listPaymentsForAdmin({ page, limit, status = "PENDING" }: { page: number; limit: number; status?: "PENDING" | "APPROVED" | "REJECTED" | "ALL" }) {
   await requireAdmin();
-  const [total, pending] = await Promise.all([prisma.payment.count(), prisma.payment.count({ where: { status: "PENDING" } })]);
+  const where = status === "ALL" ? {} : { status };
+  const [total, pending] = await Promise.all([prisma.payment.count({ where }), prisma.payment.count({ where: { status: "PENDING" } })]);
   const lastPage = Math.max(1, Math.ceil(total / limit));
   const current = Math.min(Math.max(1, page), lastPage);
   const rows = await prisma.payment.findMany({
-    orderBy: [{ status: "asc" }, { createdAt: "desc" }, { id: "asc" }],
+    where,
+    // Pending: oldest first (first come, first served); otherwise newest first.
+    orderBy: status === "PENDING" ? [{ createdAt: "asc" }, { id: "asc" }] : [{ status: "asc" }, { createdAt: "desc" }, { id: "asc" }],
     skip: (current - 1) * limit,
     take: limit,
     include: { user: { select: { name: true, email: true } } },
