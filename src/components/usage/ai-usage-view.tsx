@@ -170,6 +170,26 @@ function QuotaCard({ quota }: { quota: AiQuota }) {
   </section>;
 }
 
+/** A customer's usage page: their token limit and one all-time total, nothing more. */
+export function CustomerUsageView({ quota, requests, failed }: { quota: AiQuota; requests: number; failed: number }) {
+  return <div className="space-y-4">
+    <div>
+      <h1 className="text-2xl font-semibold tracking-tight">AI usage</h1>
+      <p className="mt-1 text-sm text-zinc-500">How much of your AI allowance you have used so far.</p>
+    </div>
+    <QuotaCard quota={quota} />
+    <section className="rounded-2xl border border-zinc-200 bg-white p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold">AI requests</h2>
+        <p className="text-xs text-zinc-500">All time</p>
+      </div>
+      <p className="mt-2 text-2xl font-semibold tabular-nums">{number(requests)}</p>
+      <p className="mt-0.5 text-xs text-zinc-500">{number(requests - failed)} succeeded · {number(failed)} failed</p>
+      <p className="mt-3 border-t border-zinc-100 pt-3 text-sm text-zinc-600"><span className="font-semibold tabular-nums text-zinc-900">{number(quota.used)}</span> tokens used in total (input + output)</p>
+    </section>
+  </div>;
+}
+
 export function AiUsageView({ usage, period, admin, quota }: { usage: Awaited<ReturnType<typeof getAiUsage>>; period: UsagePeriod; admin: boolean; quota: AiQuota }) {
   const { totals } = usage;
   const successRate = totals.requests ? Math.round((totals.succeeded / totals.requests) * 100) : 0;
