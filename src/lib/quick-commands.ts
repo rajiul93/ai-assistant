@@ -2,7 +2,7 @@ import { assistantPages, type AssistantPage } from "@/lib/assistant-types";
 
 export type QuickCommand =
   | { kind: "navigate"; page: AssistantPage; href: string }
-  | { kind: "refresh" | "back" | "thanks" | "greet" };
+  | { kind: "refresh" | "back" | "thanks" | "greet" | "buy" };
 
 // Speech recognition writes English words in Bengali script too ("ড্যাশবোর্ড", "রিলোড"), so list both.
 // Matching is fuzzy, so a slightly slurred "ডেসবোর্ড" or "ড্যাশ বোর্ড" still counts.
@@ -24,6 +24,9 @@ const goWords = ["যাও", "যাই", "যান", "যাবো", "চল�
 // Small talk said on its own ("ধন্যবাদ", "hello") gets a friendly reply without an AI call.
 const thanksWords = ["ধন্যবাদ", "থ্যাংকস", "থ্যাংক", "থ্যাঙ্কস", "থ্যাঙ্ক", "ইউ", "thanks", "thank", "you", "অনেক", "tnx", "thx", "so", "much"];
 const greetWords = ["হ্যালো", "হাই", "হেলো", "hello", "hi", "hey", "হেই", "সালাম", "আসসালামু", "আলাইকুম", "আসসালামুয়ালাইকুম", "assalamualaikum", "salam"];
+// Buying a plan must work without the AI (someone without a plan has no AI), so it is matched here.
+// "plan" alone is left out: it also means the Study plan page.
+const buyWords = ["package", "packages", "প্যাকেজ", "subscription", "subscribe", "সাবস্ক্রিপশন", "payment", "পেমেন্ট", "buy", "purchase", "কিনব", "কিনবো", "কিনতে", "কিনি", "কেনা", "কিনে", "recharge", "রিচার্জ", "bkash", "বিকাশ", "nagad", "নগদ", "premium", "প্রিমিয়াম"];
 const backWords = ["পিছনে", "পেছনে", "ব্যাক", "back", "previous"];
 // Requests to create or change something need the AI, not a page jump.
 const actionWords = ["বানাও", "বানিয়ে", "বানা", "তৈরি", "যোগ", "add", "create", "make", "new", "নতুন", "লিখে", "লেখো", "সেভ", "save", "মুছে", "মুছো", "delete", "ডিলিট", "remind", "করে দাও", "কিভাবে", "কীভাবে", "কেন", "কী", "কি", "how", "why", "what"];
@@ -97,6 +100,7 @@ function matchOne(input: string): QuickCommand | null {
   const text = normalize(input);
   if (!text || text.length > 60) return null;
   if (containsKeyword(text, refreshWords)) return { kind: "refresh" };
+  if (text.split(" ").length <= 8 && hasWord(text, buyWords)) return { kind: "buy" };
   const words = text.split(" ");
   const wordCount = words.length;
   if (wordCount <= 4 && words.every((word) => thanksWords.includes(word)) && words.some((word) => ["ধন্যবাদ", "থ্যাংকস", "থ্যাংক", "থ্যাঙ্কস", "থ্যাঙ্ক", "thanks", "thank", "tnx", "thx"].includes(word))) return { kind: "thanks" };

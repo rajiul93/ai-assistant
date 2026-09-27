@@ -1,37 +1,36 @@
-import type { AiAccess } from "@prisma/client";
-import { isAdmin } from "@/lib/admin";
-import { quotaExceeded, type AiQuota } from "@/lib/ai-limits";
+import { aiLockOf, type AiQuota } from "@/lib/ai-limits";
 import { prisma } from "@/lib/prisma";
+import { getPlanStatus } from "@/server/billing";
+import { isAdminUser } from "@/server/roles";
 
-/** ADMIN always has the AI; otherwise the user's stored state (only APPROVED may use it). */
-export type AiAccessState = AiAccess | "ADMIN";
-
-/** Read fresh from the database (not the cached session user), so an admin's change applies at once. */
-export async function getAiAccess(user: { id: string; email: string }): Promise<AiAccessState> {
-  if (isAdmin(user.email)) return "ADMIN";
-  const row = await prisma.user.findUnique({ where: { id: user.id }, select: { aiAccess: true } });
-  return row?.aiAccess ?? "NONE";
-}
-
-export function canUseAi(state: AiAccessState) {
-  return state === "ADMIN" || state === "APPROVED";
-}
-
-/** Tokens used so far (all AI calls ever) against the user's limit; admins have none. */
-export async function getAiQuota(user: { id: string; email: string }): Promise<AiQuota> {
-  const [row, usage] = await Promise.all([
-    prisma.user.findUnique({ where: { id: user.id }, select: { aiTokenLimit: true } }),
-    prisma.aiUsage.aggregate({ where: { userId: user.id }, _sum: { totalTokens: true } }),
-  ]);
-  return { used: usage._sum.totalTokens ?? 0, limit: isAdmin(user.email) ? null : row?.aiTokenLimit ?? null };
+/**
+ * Tokens against the user's allowance. Admins have no limit. Everyone else has what their plans
+ * give (all approved purchases together) until the plan's days run out; no plan means no allowance.
+ */
+export async function getAiQuota(user: { id: string; email: string }, admin?: boolean): Promise<AiQuota> {
+  if (admin ?? await isAdminUser(user)) {
+    const usage = await prisma.aiUsage.aggregate({ where: { userId: user.id }, _sum: { totalTokens: true } });
+    return { used: usage._sum.totalTokens ?? 0, limit: null };
+  }
+  const [plan, row] = await Promise.all([getPlanStatus(user.id), prisma.user.findUnique({ where: { id: user.id }, select: { aiPaused: true } })]);
+  const paused = row?.aiPaused ?? false;
+  if (!plan.hasPlan) return { used: 0, limit: 0, planEndsAt: null, paused };
+  return { used: plan.tokensUsed, limit: plan.tokensTotal, planEndsAt: plan.endsAt?.toISOString() ?? null, paused };
 }
 
 /**
- * Checked before every AI call. A call that starts just under the limit may finish slightly over it;
- * the next one is then refused.
+ * Checked before every AI call: admins always pass; others need a plan with days and tokens left.
+ * A call that starts just under the limit may finish slightly over it; the next one is then refused.
  */
 export async function checkAi(user: { id: string; email: string }) {
-  const [access, quota] = await Promise.all([getAiAccess(user), getAiQuota(user)]);
-  const blocked = !canUseAi(access) ? "access" as const : quotaExceeded(quota) ? "quota" as const : null;
-  return { allowed: blocked === null, blocked, access, quota };
+  const admin = await isAdminUser(user);
+  const quota = await getAiQuota(user, admin);
+  const blocked = aiLockOf(quota, admin, Date.now());
+  return { allowed: blocked === null, blocked, quota };
+}
+
+/** The allowance and whether the AI is off right now, for the page shell. */
+export async function getAiState(user: { id: string; email: string }, admin: boolean) {
+  const quota = await getAiQuota(user, admin);
+  return { quota, lock: aiLockOf(quota, admin, Date.now()) };
 }

@@ -204,6 +204,7 @@ export function useAssistant() {
       store.add({ role: "assistant", text: reply });
       store.setLive({ stage: "result", tone: "ok", text: reply });
       if (voice) speak(reply);
+      if (quick.kind === "buy") { store.add({ role: "assistant", text: "", purchase: true }); store.setOpen(true); }
       if (quick.kind === "navigate") router.push(quick.href);
       else if (quick.kind === "refresh") router.refresh();
       else if (quick.kind === "back") router.back();
@@ -302,6 +303,8 @@ export function useAssistant() {
       store.setOpen(true);
     } else {
       store.add({ role: "assistant", text: result.reply, source: result.source });
+      // No AI access / plan ran out: offer the plans right here.
+      if (result.aiLocked) { store.add({ role: "assistant", text: "", purchase: true }); store.setOpen(true); }
     }
     store.setLive(result.source === "fallback"
       ? { stage: "result", tone: "warn", text: s.fallbackStatus }

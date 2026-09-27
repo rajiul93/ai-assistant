@@ -6,18 +6,19 @@ import { usePathname } from "next/navigation";
 import {
   BookOpen,
   BriefcaseBusiness,
+  CreditCard,
+  Receipt,
+  UsersRound,
   CalendarClock,
   Gauge,
   LayoutDashboard,
   ListTodo,
   Menu,
   NotebookPen,
-  ShieldCheck,
   TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { AiQuota } from "@/lib/ai-limits";
-import type { AiAccessState } from "@/server/ai-access";
+import type { AiLock } from "@/lib/ai-limits";
 import { SignOutButton } from "@/components/sign-out-button";
 import { StudyAssistant } from "@/components/study-assistant";
 import { SessionBar } from "@/components/timer/session-bar";
@@ -35,9 +36,11 @@ const links = [
   { href: "/notes", label: "Notes", short: "Notes", icon: NotebookPen },
   { href: "/jobs", label: "Jobs", short: "Jobs", icon: BriefcaseBusiness },
   { href: "/usage", label: "AI Usage", short: "AI Usage", icon: Gauge },
+  { href: "/billing", label: "Plans", short: "Plans", icon: CreditCard },
 ];
 
-const adminLink = { href: "/admin/ai-access", label: "AI Access", short: "AI Access", icon: ShieldCheck };
+const billingAdminLink = { href: "/admin/billing", label: "Billing", short: "Billing", icon: Receipt };
+const rolesLink = { href: "/admin/users", label: "Users & roles", short: "Users", icon: UsersRound };
 
 // Phones get the four daily pages in the tab bar; everything else lives under "More".
 // The study timer lives on the Tasks page and in the session bar, so it has no page of its own.
@@ -48,21 +51,23 @@ const baseMoreLinks = links.filter((link) => !tabHrefs.includes(link.href));
 export function AppShell({
   children,
   userName,
-  aiAccess,
-  aiQuota,
+  aiLock,
   admin,
-  pendingRequests,
+  superAdmin,
+  pendingPayments,
 }: {
   children: React.ReactNode;
   userName: string;
-  aiAccess: AiAccessState;
-  aiQuota: AiQuota;
+  aiLock: AiLock;
   admin: boolean;
-  pendingRequests: number;
+  superAdmin: boolean;
+  pendingPayments: number;
 }) {
   const pathname = usePathname();
-  const sideLinks = admin ? [...links, adminLink] : links;
-  const moreLinks = admin ? [...baseMoreLinks, adminLink] : baseMoreLinks;
+  const adminLinks = [...(admin ? [billingAdminLink] : []), ...(superAdmin ? [rolesLink] : [])];
+  const sideLinks = [...links, ...adminLinks];
+  const moreLinks = [...baseMoreLinks, ...adminLinks];
+  const badge = (href: string) => (href === billingAdminLink.href ? pendingPayments : 0);
   const [moreOpen, setMoreOpen] = useState(false);
   const moreActive = moreLinks.some((link) => link.href === pathname);
 
@@ -88,7 +93,7 @@ export function AppShell({
               >
                 <Icon className="size-4" />
                 {link.label}
-                {link === adminLink && pendingRequests > 0 ? <span className="ml-auto rounded-full bg-rose-500 px-1.5 text-[11px] font-semibold text-white">{pendingRequests}</span> : null}
+                {badge(link.href) > 0 ? <span className="ml-auto rounded-full bg-rose-500 px-1.5 text-[11px] font-semibold text-white">{badge(link.href)}</span> : null}
               </Link>
             );
           })}
@@ -104,8 +109,8 @@ export function AppShell({
         <header className="sticky top-0 z-30 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-end border-b border-zinc-200 bg-white/90 px-4 pb-3 pt-[env(safe-area-inset-top)] backdrop-blur-xl lg:hidden">
           <p className="text-lg font-semibold tracking-tight">Prep</p>
         </header>
-        <VoiceCommandCenter aiAccess={aiAccess} aiQuota={aiQuota} />
-        <StudyAssistant aiAccess={aiAccess} aiQuota={aiQuota} />
+        <VoiceCommandCenter aiLock={aiLock} />
+        <StudyAssistant aiLock={aiLock} />
         <TimerAlarm />
         <SubjectPickerDialog />
         <SessionBar />

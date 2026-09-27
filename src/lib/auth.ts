@@ -12,6 +12,8 @@ export { SESSION_COOKIE };
 type TokenUser = {
   uid: string;
   email?: string;
+  /** Roles hang on the email, so an unverified one is never accepted. */
+  emailVerified?: boolean;
   name?: string;
   picture?: string;
 };
@@ -39,6 +41,7 @@ async function lookupFirebaseUser(idToken: string): Promise<TokenUser> {
     users?: Array<{
       localId: string;
       email?: string;
+      emailVerified?: boolean;
       displayName?: string;
       photoUrl?: string;
     }>;
@@ -51,6 +54,7 @@ async function lookupFirebaseUser(idToken: string): Promise<TokenUser> {
   return {
     uid: user.localId,
     email: user.email,
+    emailVerified: user.emailVerified,
     name: user.displayName,
     picture: user.photoUrl,
   };
@@ -75,7 +79,7 @@ async function verifyFirebaseIdToken(idToken: string): Promise<TokenUser> {
   if (!verifier) return lookupFirebaseUser(idToken);
   try {
     const decoded = await verifier.verifyIdToken(idToken);
-    return { uid: decoded.uid, email: decoded.email, name: decoded.name as string | undefined, picture: decoded.picture };
+    return { uid: decoded.uid, email: decoded.email, emailVerified: decoded.email_verified, name: decoded.name as string | undefined, picture: decoded.picture };
   } catch (error) {
     // An invalid or expired token is final; anything else (e.g. couldn't fetch the keys) falls back to Google's API.
     const code = (error as { code?: string }).code ?? "";
@@ -100,6 +104,11 @@ function tokenExpiryMs(token: string) {
   }
 }
 
+/** On sign-out: stop accepting this session token here right away instead of trusting the cache. */
+export function forgetSession(token: string) {
+  verifiedSessions.delete(token);
+}
+
 function rememberSession(token: string, user: Awaited<ReturnType<typeof upsertUserFromToken>>) {
   const expiry = tokenExpiryMs(token);
   const until = Math.min(Date.now() + SESSION_CACHE_MS, expiry ?? Date.now() + SESSION_CACHE_MS);
@@ -111,9 +120,16 @@ function rememberSession(token: string, user: Awaited<ReturnType<typeof upsertUs
  * Signs a user in from a Firebase ID token. The ID token itself is the session cookie; it lasts an
  * hour and the proxy (src/proxy.ts) swaps in a new one from the refresh-token cookie before it ends.
  */
+/** Google sign-ins are always verified; this blocks any other provider's unverified email. */
+function requireVerifiedEmail(user: TokenUser) {
+  if (user.emailVerified !== true) throw new Error("Please sign in with a verified email address.");
+  return user;
+}
+
 export async function createSessionCookie(idToken: string) {
-  const decoded = await verifyFirebaseIdToken(idToken);
-  await upsertUserFromToken(decoded.uid, decoded.email, decoded.name, decoded.picture);
+  const decoded = requireVerifiedEmail(await verifyFirebaseIdToken(idToken));
+  const user = await upsertUserFromToken(decoded.uid, decoded.email, decoded.name, decoded.picture);
+  if (user.status === "BLOCKED") throw new Error("This account has been blocked. Please contact the admin.");
   return idToken;
 }
 
@@ -150,7 +166,7 @@ async function verifySession(session: string): Promise<TokenUser> {
   } catch (error) {
     if (!isFirebaseAdminConfigured()) throw error;
     const decoded = await adminAuth().verifySessionCookie(session, true);
-    return { uid: decoded.uid, email: decoded.email, name: decoded.name as string | undefined, picture: decoded.picture };
+    return { uid: decoded.uid, email: decoded.email, emailVerified: decoded.email_verified, name: decoded.name as string | undefined, picture: decoded.picture };
   }
 }
 
@@ -165,7 +181,7 @@ export const getCurrentUser = cache(async () => {
   verifiedSessions.delete(session);
 
   try {
-    const decoded = await verifySession(session);
+    const decoded = requireVerifiedEmail(await verifySession(session));
     const user = await upsertUserFromToken(decoded.uid, decoded.email, decoded.name, decoded.picture);
     rememberSession(session, user);
     return user;
@@ -174,11 +190,15 @@ export const getCurrentUser = cache(async () => {
   }
 });
 
+/** Read fresh (not from the 5-minute session cache) once per request, so a block applies at once. */
+const isBlocked = cache(async (userId: string) => (await prisma.user.findUnique({ where: { id: userId }, select: { status: true } }))?.status === "BLOCKED");
+
 export async function requireUser() {
   const user = await getCurrentUser();
   if (!user) {
     redirect("/login");
   }
+  if (await isBlocked(user.id)) redirect("/blocked");
   return user;
 }
 

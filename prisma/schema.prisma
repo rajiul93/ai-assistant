@@ -13,6 +13,12 @@ model User {
   email       String   @unique
   name        String?
   image       String?
+  /// USER by default. Only the super admin (a fixed email, see src/server/roles.ts) can change roles.
+  role        UserRole @default(USER)
+  /// BLOCKED: the super admin shut the account; the user sees only a "blocked" notice.
+  status      AccountStatus @default(ACTIVE)
+  /// The super admin paused this user's AI (the plan's days keep running); the rest of the app works.
+  aiPaused    Boolean  @default(false)
   /// Whether this user may use the AI. New users start without it and ask an admin; admins always have it.
   aiAccess      AiAccess  @default(NONE)
   aiRequestedAt DateTime?
@@ -30,6 +36,8 @@ model User {
   applications  JobApplication[]
   notes         Note[]
   aiUsage       AiUsage[]
+  payments      Payment[]
+  entitlements  Entitlement[]
 }
 
 model StudyPlan {
@@ -87,6 +95,18 @@ model Topic {
   @@index([parentId])
 }
 
+enum AccountStatus {
+  ACTIVE
+  BLOCKED
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+/// No longer used by the app (AI access now comes from plans); kept so old data stays readable.
 enum AiAccess {
   /// Never asked.
   NONE
@@ -252,4 +272,100 @@ model AiUsage {
 
   @@index([createdAt])
   @@index([userId, createdAt])
+}
+
+// ---------- Plans & payments ----------
+
+enum PlanType {
+  STUDENT
+  PROFESSIONAL
+}
+
+enum PaymentMethod {
+  BKASH
+  NAGAD
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// A package on sale. Price, days and tokens are edited by admins; nothing is hardcoded in the app.
+model PlanPackage {
+  id           String    @id @default(cuid())
+  planType     PlanType
+  /// Shown to users, e.g. "15 Days", "1 Month", "Premium".
+  name         String
+  durationDays Int
+  tokens       Int
+  /// Current price in taka. A payment keeps its own copy, so changing this never changes old payments.
+  priceBdt     Int
+  active       Boolean   @default(true)
+  sortOrder    Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  payments     Payment[]
+
+  @@index([planType, sortOrder])
+}
+
+/// Where users send money (one number per method), set by admins.
+model PaymentAccount {
+  method      PaymentMethod @id
+  number      String
+  /// e.g. "Personal" — tells the user to use Send Money.
+  accountType String        @default("Personal")
+  enabled     Boolean       @default(true)
+  updatedAt   DateTime      @updatedAt
+}
+
+/// One purchase request. Everything about the package is copied in at submit time and never changes.
+model Payment {
+  id            String        @id @default(cuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  packageId     String?
+  package       PlanPackage?  @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  planType      PlanType
+  packageName   String
+  durationDays  Int
+  tokens        Int
+  /// The price at the moment the user submitted, kept forever.
+  amountBdt     Int
+  method        PaymentMethod
+  senderNumber  String
+  transactionId String
+  status        PaymentStatus @default(PENDING)
+  /// "page" or "chat" — where the user bought it.
+  source        String        @default("page")
+  adminNote     String?
+  reviewedAt    DateTime?
+  reviewedBy    String?
+  createdAt     DateTime      @default(now())
+  entitlement   Entitlement?
+
+  /// A transaction ID can be used only once per method.
+  @@unique([method, transactionId])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+/// The benefit from one approved payment. Days stack after the previous period; tokens add up.
+model Entitlement {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paymentId String   @unique
+  payment   Payment  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  tokens    Int
+  startsAt  DateTime
+  endsAt    DateTime
+  /// Set when an admin cancelled the subscription: the remaining days and use were taken away then.
+  canceledAt DateTime?
+  canceledBy String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, endsAt])
 }

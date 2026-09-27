@@ -3,7 +3,6 @@ import { z } from "zod";
 import { isAllowedType, MAX_ATTACHMENT_BYTES, sniffType } from "@/lib/attachments";
 import { requireUser } from "@/lib/auth";
 import { respond } from "@/server/assistant/respond";
-import { formatTokens } from "@/lib/ai-limits";
 import { checkAi } from "@/server/ai-access";
 
 const taskDraftSchema = z.object({
@@ -85,18 +84,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ type: "clarify", source: "fallback", reply });
     }
   }
-  const { blocked, access, quota } = await checkAi(user);
+  const { blocked } = await checkAi(user);
   if (blocked) {
-    const lang = parsed.data.lang;
-    const used = `${formatTokens(quota.used)} / ${formatTokens(quota.limit ?? 0)}`;
-    const reply = blocked === "quota"
-      ? lang === "en" ? `You've used your AI token limit (${used}). Ask an admin to raise it.` : `তোমার AI token limit শেষ হয়ে গেছে (${used})। আরও ব্যবহার করতে admin-কে limit বাড়াতে বলো।`
-      : access === "REQUESTED"
-      ? lang === "en" ? "Your AI access request is waiting for an admin to approve it." : "তোমার AI ব্যবহারের request admin-এর অনুমোদনের অপেক্ষায় আছে।"
-      : access === "DISABLED"
-        ? lang === "en" ? "An admin has turned off your AI access. You can ask for it again from the assistant." : "Admin তোমার AI ব্যবহার বন্ধ রেখেছে। Assistant থেকে আবার request পাঠাতে পারো।"
-        : lang === "en" ? "To use the AI, send an access request to an admin from the assistant." : "AI ব্যবহার করতে assistant থেকে admin-এর কাছে access request পাঠাও।";
-    return NextResponse.json({ type: "clarify", source: "fallback", reply, aiLocked: true });
+    const en = parsed.data.lang === "en";
+    const reply = blocked === "paused"
+      ? en ? "An admin has paused your AI for now. Contact the admin if you need it." : "Admin তোমার AI সাময়িকভাবে বন্ধ রেখেছে। দরকার হলে admin-এর সাথে যোগাযোগ করো।"
+      : blocked === "expired"
+      ? en ? "Your plan has run out. Choose a plan below to keep using the AI." : "তোমার plan-এর মেয়াদ শেষ। AI ব্যবহার চালিয়ে যেতে নিচ থেকে একটা plan বেছে নাও।"
+      : blocked === "quota"
+        ? en ? "Your plan's usage is used up. Buy another package — any days you have left carry over." : "তোমার plan-এর ব্যবহার শেষ। আরেকটা package কেনো — বাকি দিনের সাথে যোগ হবে।"
+        : en ? "To use the AI, choose a plan below." : "AI ব্যবহার করতে নিচ থেকে একটা plan বেছে নাও।";
+    // Offer plans in the chat — except when paused, which buying a plan wouldn't fix.
+    return NextResponse.json({ type: "clarify", source: "fallback", reply, aiLocked: blocked !== "paused" });
   }
   // Newline-delimited JSON: {"type":"delta","text"} while the answer is being written (so the page
   // can show and speak it sentence by sentence), then one {"type":"final","reply"}.

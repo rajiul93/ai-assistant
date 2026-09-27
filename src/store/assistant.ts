@@ -19,6 +19,8 @@ export type AssistantEntry = ChatMessage & {
   image?: string;
   /** Still arriving: the answer is being written (and spoken) as it streams in. */
   streaming?: boolean;
+  /** Shows the plan purchase flow in the chat. */
+  purchase?: boolean;
 };
 
 /** What the assistant is doing right now, shown to the user as a live status bar. */
