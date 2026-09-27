@@ -25,6 +25,8 @@ type CallOptions = {
   feature: AiFeature;
   /** Streams the model's output: called with each new piece of raw text as it is generated. */
   onDelta?: (text: string) => void;
+  /** Aborted when the user interrupts (a new message or voice command): the model stops generating. */
+  signal?: AbortSignal;
 };
 type Usage = { input: number; output: number; total: number };
 type Attempt = { status: number | null; text: string | null; usage?: Usage };
@@ -96,6 +98,9 @@ function reasoningEffort(model: string, search: boolean) {
   return null;
 }
 
+/** The attempt's timeout, plus the caller's abort (an interrupted reply) when there is one. */
+const withTimeout = (signal: AbortSignal | undefined, timeoutMs: number) => (signal ? AbortSignal.any([AbortSignal.timeout(timeoutMs), signal]) : AbortSignal.timeout(timeoutMs));
+
 const dataUrl = (file: InlineFile) => `data:${file.mimeType};base64,${file.data}`;
 
 /** Plain and structured calls: Chat Completions. */
@@ -117,7 +122,7 @@ async function chatCompletion(model: string, apiKey: string, prompt: string, opt
         ? { response_format: { type: "json_schema", json_schema: { name: "assistant_reply", strict: false, schema: toJsonSchema(options.responseSchema) } } }
         : {}),
     }),
-    signal: AbortSignal.timeout(timeoutMs),
+    signal: withTimeout(options.signal, timeoutMs),
   });
   if (!response.ok) {
     console.warn(`[ai] openai ${model}: HTTP ${response.status} ${(await response.text().catch(() => "")).slice(0, 300)}`);
@@ -182,7 +187,7 @@ async function webSearchResponse(model: string, apiKey: string, prompt: string, 
       tools: [{ type: "web_search" }],
       ...(reasoningEffort(model, true) ? { reasoning: { effort: reasoningEffort(model, true) } } : {}),
     }),
-    signal: AbortSignal.timeout(timeoutMs),
+    signal: withTimeout(options.signal, timeoutMs),
   });
   if (!response.ok) {
     console.warn(`[ai] openai ${model} (search): HTTP ${response.status} ${(await response.text().catch(() => "")).slice(0, 300)}`);
@@ -218,10 +223,20 @@ export async function callAI(prompt: string, options: CallOptions) {
     let attempt: Attempt;
     // Once streamed text has gone out, a retry would repeat it; later attempts don't stream.
     let streamed = false;
-    const attemptOptions = options.onDelta ? { ...options, onDelta: (piece: string) => { streamed = true; options.onDelta!(piece); } } : options;
+    let streamedChars = 0;
+    const attemptOptions = options.onDelta ? { ...options, onDelta: (piece: string) => { streamed = true; streamedChars += piece.length; options.onDelta!(piece); } } : options;
     try {
+      if (options.signal?.aborted) return null;
       attempt = await (options.search ? webSearchResponse : chatCompletion)(model, apiKey, prompt, attemptOptions, timeout);
     } catch (error) {
+      if (options.signal?.aborted) {
+        // Interrupted by the user: OpenAI never sends the usage of a stream cut short, so it is
+        // estimated from the text (generously, ~3 characters a token) so the plan is still charged.
+        const input = Math.ceil(prompt.length / 3);
+        const output = Math.ceil(streamedChars / 3);
+        logUsage({ userId: options.userId, feature: options.feature, model, httpStatus: 200, latencyMs: Date.now() - started, usage: { input, output, total: input + output } });
+        return null;
+      }
       const timedOut = error instanceof Error && error.name === "TimeoutError";
       logUsage({ userId: options.userId, feature: options.feature, model, httpStatus: null, timedOut, latencyMs: Date.now() - started });
       console.warn(`[ai] ${model} failed: ${timedOut ? "timed out" : String(error)}`);

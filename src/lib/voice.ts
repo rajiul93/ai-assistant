@@ -1,4 +1,5 @@
 import { speechLangs, type AssistantLang } from "@/lib/assistant-i18n";
+import { speakableBangla } from "@/lib/bangla-numbers";
 import { createSentenceChunker } from "@/lib/sentence-chunker";
 import { useAssistantStore } from "@/store/assistant";
 
@@ -66,6 +67,11 @@ export function isFatalVoiceError(code: string) {
 }
 
 let speaking = false;
+/** Held mid-sentence because the user started talking over the assistant (see pauseSpeaking). */
+let paused = false;
+let pauseTimer: ReturnType<typeof setTimeout> | undefined;
+/** What the current reply has said so far, to tell the assistant's own echo from the user. */
+let spokenText = "";
 let quietUntil = 0;
 /** Bumped on every new reply or stop, so a reply that was interrupted doesn't finish later. */
 let speechToken = 0;
@@ -73,6 +79,19 @@ let interruptAudio: (() => void) | null = null;
 // When the server voice isn't available (no TTS access, offline), use the browser's voice for a while.
 let serverVoiceOffUntil = 0;
 const speakListeners = new Set<() => void>();
+// For the chat's Stop button: told whenever the voice starts, pauses, resumes or ends.
+const playingListeners = new Set<() => void>();
+const notifyPlaying = () => playingListeners.forEach((listener) => listener());
+
+export function subscribeVoicePlaying(listener: () => void) {
+  playingListeners.add(listener);
+  return () => { playingListeners.delete(listener); };
+}
+
+/** Whether the assistant's voice is on right now (talking or held by a barge-in). */
+export function isVoicePlaying() {
+  return speaking;
+}
 
 /** Called whenever the assistant starts talking, so an open mic can close before it hears the speaker. */
 export function onAssistantSpeak(listener: () => void) {
@@ -98,8 +117,8 @@ function bestVoice(lang: AssistantLang) {
 }
 
 /** Markdown symbols and links read aloud sound mechanical, so strip them before speaking. */
-function toSpokenText(text: string) {
-  return text
+function toSpokenText(text: string, lang: AssistantLang) {
+  const spoken = text
     // Code is for reading on screen, not for listening to.
     .replace(/```[\s\S]*?(```|$)/g, " ")
     .replace(/https?:\/\/\S+/g, "")
@@ -107,6 +126,8 @@ function toSpokenText(text: string) {
     .replace(/^\s*[-•]\s+/gm, "")
     .replace(/\s+/g, " ")
     .trim();
+  // Years, dates, times, taka and other numbers as a Bangladeshi would say them.
+  return lang === "bn" ? speakableBangla(spoken) : spoken;
 }
 
 let audioElement: HTMLAudioElement | null = null;
@@ -194,7 +215,8 @@ function playSource(src: string, token: number, cleanup?: () => void) {
     audio.onended = () => done(true);
     audio.onerror = () => done(false);
     audio.src = src;
-    audio.play().catch(() => done(false));
+    // Held by a barge-in: resumeSpeaking() starts it; a new command stops it instead.
+    if (!paused) audio.play().catch(() => done(false));
   });
 }
 
@@ -220,6 +242,8 @@ function speakWithBrowser(text: string, lang: AssistantLang, finish: () => void)
 
 function stopCurrent() {
   speechToken++;
+  paused = false;
+  clearTimeout(pauseTimer);
   interruptAudio?.();
   if (typeof window !== "undefined") window.speechSynthesis?.cancel();
 }
@@ -245,6 +269,7 @@ export function createSpeechStream(onDone?: () => void) {
   stopCurrent();
   const token = speechToken;
   const lang = useAssistantStore.getState().lang;
+  spokenText = "";
   type Clip = { text: string; url: Promise<string | null> | null };
   const cached = (text: string) => clipCache.has(`${lang}:${text}`);
   const queue: Clip[] = [];
@@ -256,6 +281,7 @@ export function createSpeechStream(onDone?: () => void) {
     if (token !== speechToken) return;
     speaking = false;
     quietUntil = Date.now() + (isMobileDevice() ? 900 : 500);
+    notifyPlaying();
     onDone?.();
   };
   const prefetch = () => {
@@ -290,13 +316,15 @@ export function createSpeechStream(onDone?: () => void) {
 
   const chunker = createSentenceChunker((chunk) => {
     if (token !== speechToken) return;
-    const text = toSpokenText(chunk);
+    const text = toSpokenText(chunk, lang);
     if (!text) return;
+    spokenText += ` ${text}`;
     if (!started) {
       started = true;
       // From the first sentence on, the mic treats everything it hears as the assistant's voice.
       speaking = true;
       speakListeners.forEach((listener) => listener());
+      notifyPlaying();
     }
     queue.push({ text, url: null });
     // pump() takes the first clip synchronously, so it streams; prefetch() then covers the rest.
@@ -323,10 +351,50 @@ if (typeof window !== "undefined" && window.speechSynthesis) {
 
 export function stopSpeaking() {
   stopCurrent();
+  const was = speaking;
   speaking = false;
+  if (was) notifyPlaying();
 }
 
 /** True while the assistant is talking (plus a short tail), so the mic doesn't hear the speaker. */
 export function isAssistantSpeaking() {
-  return speaking || Date.now() < quietUntil;
+  return (speaking && !paused) || Date.now() < quietUntil;
+}
+
+/**
+ * The user started talking over the assistant: hold its voice right away (like ChatGPT) while
+ * their sentence is heard. What they said then decides: a real command stops the old reply
+ * (stopSpeaking), while a cough, background noise or the assistant's own echo resumes it.
+ */
+export function pauseSpeaking() {
+  if (!speaking || paused) return false;
+  paused = true;
+  if (interruptAudio) audioElement?.pause();
+  if (typeof window !== "undefined") window.speechSynthesis?.pause();
+  // Never stay silent for good if the sentence gets lost on the way.
+  clearTimeout(pauseTimer);
+  pauseTimer = setTimeout(resumeSpeaking, 12_000);
+  return true;
+}
+
+export function resumeSpeaking() {
+  if (!paused) return;
+  paused = false;
+  clearTimeout(pauseTimer);
+  if (interruptAudio && audioElement?.src) void audioElement.play().catch(() => interruptAudio?.());
+  if (typeof window !== "undefined") window.speechSynthesis?.resume();
+}
+
+export function isSpeechPaused() {
+  return paused;
+}
+
+const wordsOf = (text: string) => text.toLowerCase().normalize("NFC").replace(/[^\p{L}\p{M}\p{N}\s]/gu, " ").split(/\s+/).filter(Boolean);
+
+/** Whether a heard sentence is mostly the assistant's own words coming back through the speaker. */
+export function isAssistantEcho(heard: string) {
+  const words = wordsOf(heard);
+  if (!words.length || !spokenText) return false;
+  const said = new Set(wordsOf(spokenText));
+  return words.filter((word) => said.has(word)).length / words.length >= 0.7;
 }

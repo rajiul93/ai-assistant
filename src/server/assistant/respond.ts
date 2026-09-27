@@ -503,7 +503,7 @@ function fallbackReply(message: string, context: StudyContext, lang?: "bn" | "en
 }
 
 /** `onReplyDelta` receives the answer's text as the model writes it (answers and questions back only). */
-export type RespondHooks = { onReplyDelta?: (text: string) => void };
+export type RespondHooks = { onReplyDelta?: (text: string) => void; signal?: AbortSignal };
 
 export async function respond(userId: string, request: AssistantRequest, hooks: RespondHooks = {}): Promise<AssistantReply> {
   const reply = await decide(userId, request, hooks);
@@ -530,10 +530,13 @@ async function decide(userId: string, request: AssistantRequest, hooks: RespondH
   const raw = await callAI(intentPrompt(request, history, context), {
     responseSchema: intentResponseSchema,
     onDelta: streamer ? (piece) => streamer.feed(piece) : undefined,
+    signal: hooks.signal,
     files: request.attachments?.length ? request.attachments.map((file) => ({ mimeType: file.mimeType, data: file.data, name: file.name })) : undefined,
     userId,
     feature: request.attachments?.length ? "file_assistant" : "assistant",
   });
+  // The user interrupted with something new; nobody is waiting for this reply.
+  if (hooks.signal?.aborted) return { type: "ignore", reply: "" };
   let intent: Intent | null = null;
   try { intent = raw ? intentSchema.parse(JSON.parse(raw)) : null; } catch { intent = null; }
   if (!intent) {

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { assistantStrings } from "@/lib/assistant-i18n";
 import type { AssistantReply, PendingAction, TimerStart } from "@/lib/assistant-types";
 import { matchQuickCommand } from "@/lib/quick-commands";
-import { createSpeechStream, speak } from "@/lib/voice";
+import { createSpeechStream, speak, stopSpeaking } from "@/lib/voice";
 import { createApplication } from "@/server/actions/applications";
 import { createNote } from "@/server/actions/notes";
 import { changeTaskRevisionCount, createTask, updateTaskStatus } from "@/server/actions/tasks";
@@ -59,6 +59,28 @@ async function readReplyStream(body: ReadableStream<Uint8Array>, onText: (text: 
     }
   }
   throw new Error("The reply stream ended early.");
+}
+
+/** The answer being fetched right now, so a new message can cut it short. */
+let activeReply: { controller: AbortController; entry: number | null } | null = null;
+let replyRun = 0;
+
+/**
+ * Stops the current answer at once, like ChatGPT: its voice goes quiet, the request is aborted
+ * (the server stops the model too) and the half-written bubble stays as it is. Returns whether
+ * an answer was actually cut short.
+ */
+export function interruptReply() {
+  stopSpeaking();
+  const reply = activeReply;
+  if (!reply) return false;
+  activeReply = null;
+  replyRun++;
+  reply.controller.abort();
+  const store = useAssistantStore.getState();
+  if (reply.entry !== null) store.update(reply.entry, { streaming: false, interrupted: true });
+  store.setBusy(false);
+  return true;
 }
 
 export function useAssistant() {
@@ -198,6 +220,8 @@ export function useAssistant() {
     // Page jumps, refresh and back run instantly — even while the AI is still busy with something else.
     // Every way the mic heard the sentence is checked, so one misheard word doesn't break the command.
     const quick = text.trim() ? matchQuickCommand([message, ...alternatives]) : null;
+    // Something new always wins: the answer still being written or spoken stops right here.
+    interruptReply();
     if (quick) {
       const reply = quick.kind === "navigate" ? s.quick[quick.page] : s.quick[quick.kind];
       store.add({ role: "user", text: message, viaVoice: voice });
@@ -208,10 +232,6 @@ export function useAssistant() {
       if (quick.kind === "navigate") router.push(quick.href);
       else if (quick.kind === "refresh") router.refresh();
       else if (quick.kind === "back") router.back();
-      return;
-    }
-    if (store.busy) {
-      store.setLive({ stage: "result", tone: "warn", text: s.stillBusy });
       return;
     }
 
@@ -229,6 +249,10 @@ export function useAssistant() {
 
     store.setBusy(true);
     store.setLive({ stage: "thinking", text: message, since: Date.now() });
+    const run = ++replyRun;
+    const controller = new AbortController();
+    activeReply = { controller, entry: null };
+    const current = () => run === replyRun;
     let result: AssistantReply;
     // The answer as it streams in: shown in one growing chat bubble and, for voice, spoken sentence by sentence.
     const stream = { entry: null as number | null, text: "", frame: 0, speaker: null as ReturnType<typeof createSpeechStream> | null };
@@ -240,6 +264,7 @@ export function useAssistant() {
       const response = await fetch("/api/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           message,
           alternatives,
@@ -253,9 +278,11 @@ export function useAssistant() {
       if (!response.ok) throw new Error("assistant request failed");
       result = (response.headers.get("content-type") ?? "").includes("ndjson") && response.body
         ? await readReplyStream(response.body, (piece) => {
+          if (!current()) return;
           stream.text += piece;
           if (stream.entry === null) {
             stream.entry = store.add({ role: "assistant", text: stream.text, source: "ai", streaming: true });
+            if (activeReply) activeReply.entry = stream.entry;
             store.setLive({ stage: "result", tone: "ok", text: s.answeredStatus });
             if (voice) stream.speaker = createSpeechStream();
           } else if (!stream.frame) {
@@ -268,9 +295,17 @@ export function useAssistant() {
     } catch {
       result = { type: "clarify", source: "fallback", reply: s.networkError };
     } finally {
-      store.setBusy(false);
       if (stream.frame) cancelAnimationFrame(stream.frame);
-      stream.speaker?.end();
+      if (current()) {
+        store.setBusy(false);
+        activeReply = null;
+        stream.speaker?.end();
+      }
+    }
+    // Cut short by something newer: interruptReply() already settled the bubble.
+    if (!current() || controller.signal.aborted) {
+      if (stream.entry !== null) store.update(stream.entry, { text: stream.text, streaming: false, interrupted: true });
+      return;
     }
 
     if (stream.entry !== null) {

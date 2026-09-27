@@ -22,6 +22,14 @@ const START_RATIO = 2.0;
 const STAY_RATIO = 1.4;
 /** Quiet or distant speech is boosted up to this much before sending, so the model hears it clearly. */
 const MAX_BOOST = 8;
+/**
+ * Talking over the assistant (barge-in). The browser's echo cancellation removes most of the
+ * speaker, but some comes back; the user's own voice must stand this far above that leftover,
+ * for this long, to count. The first moments of each reply only measure the leftover.
+ */
+const BARGE_RATIO = 2.5;
+const BARGE_START_MS = 260;
+const ECHO_LEARN_MS = 450;
 
 type Options = {
   /** Stop after the first sentence (a push-to-talk mic) instead of listening on. */
@@ -32,6 +40,11 @@ type Options = {
   onText: (text: string) => void;
   /** Called when the user starts talking, before the words are known. */
   onSpeechStart?: () => void;
+  /**
+   * Listen while the assistant talks, and call this the moment the user starts talking over it
+   * (the caller pauses the voice). Without it the mic ignores everything during the assistant's voice.
+   */
+  onBargeIn?: () => void;
   onError: (error: VoiceError) => void;
 };
 
@@ -74,11 +87,11 @@ function encodeWav(frames: Float32Array[], sampleRate: number) {
  * browser's recognizer it boosts quiet or distant voices, filters noise, handles Bangladeshi
  * accents, and never plays a start-up chime on phones.
  */
-export function useVoiceCapture({ onText, onSpeechStart, onError, once = false, context: getContext }: Options) {
+export function useVoiceCapture({ onText, onSpeechStart, onBargeIn, onError, once = false, context: getContext }: Options) {
   const [listening, setListening] = useState(false);
   const captureRef = useRef<Capture | null>(null);
-  const handlers = useRef({ onText, onSpeechStart, onError, getContext });
-  useEffect(() => { handlers.current = { onText, onSpeechStart, onError, getContext }; });
+  const handlers = useRef({ onText, onSpeechStart, onBargeIn, onError, getContext });
+  useEffect(() => { handlers.current = { onText, onSpeechStart, onBargeIn, onError, getContext }; });
 
   const stop = useCallback(() => {
     const capture = captureRef.current;
@@ -161,28 +174,47 @@ export function useVoiceCapture({ onText, onSpeechStart, onError, once = false, 
     let loudMs = 0;
     let speechMs = 0;
     let silenceMs = 0;
+    // How loud the assistant's voice still is after echo cancellation, and for how long it has talked.
+    let echoLevel = 0;
+    let assistantMs = 0;
     const reset = () => { inSpeech = false; frames = []; loudMs = 0; speechMs = 0; silenceMs = 0; };
 
     processor.onaudioprocess = (event) => {
       const samples = new Float32Array(event.inputBuffer.getChannelData(0));
-      // The assistant's own voice isn't the user talking.
-      if (isAssistantSpeaking()) { reset(); preRoll = []; return; }
+      const assistantTalking = isAssistantSpeaking();
+      const bargeIn = Boolean(handlers.current.onBargeIn);
+      // The assistant's own voice isn't the user talking (unless barge-in is on: see below).
+      if (assistantTalking && !bargeIn) { reset(); preRoll = []; return; }
       let energy = 0;
       for (const sample of samples) energy += sample * sample;
       const level = Math.sqrt(energy / samples.length);
-      const threshold = Math.max(MIN_LEVEL, noiseFloor * START_RATIO);
 
       if (!inSpeech) {
-        // Learn the room's background level slowly, so a fan or traffic isn't mistaken for speech.
-        noiseFloor = Math.min(0.2, noiseFloor * 0.97 + level * 0.03);
+        if (assistantTalking) {
+          if (assistantMs === 0) echoLevel = noiseFloor;
+          assistantMs += frameMs;
+        } else {
+          assistantMs = 0;
+          // Learn the room's background level slowly, so a fan or traffic isn't mistaken for speech.
+          noiseFloor = Math.min(0.2, noiseFloor * 0.97 + level * 0.03);
+        }
+        const threshold = assistantTalking
+          ? Math.max(MIN_LEVEL * 2, noiseFloor * START_RATIO, echoLevel * BARGE_RATIO)
+          : Math.max(MIN_LEVEL, noiseFloor * START_RATIO);
+        // Track the leftover echo: quickly while it is below the bar, very slowly above it (so a
+        // long sentence from the user doesn't become the new "echo").
+        if (assistantTalking) echoLevel = level < threshold ? echoLevel * 0.9 + level * 0.1 : echoLevel * 0.995 + level * 0.005;
         preRoll.push(samples);
         while (preRoll.length * frameMs > PRE_ROLL_MS) preRoll.shift();
+        if (assistantTalking && assistantMs < ECHO_LEARN_MS) { loudMs = 0; return; }
         loudMs = level > threshold ? loudMs + frameMs : 0;
-        if (loudMs >= START_MS) {
+        if (loudMs >= (assistantTalking ? BARGE_START_MS : START_MS)) {
           inSpeech = true;
           frames = [...preRoll];
           speechMs = loudMs;
           preRoll = [];
+          // Hold the assistant's voice now, while the rest of the sentence is heard.
+          if (assistantTalking) handlers.current.onBargeIn?.();
           handlers.current.onSpeechStart?.();
         }
         return;

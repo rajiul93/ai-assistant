@@ -19,6 +19,8 @@ export type AssistantEntry = ChatMessage & {
   image?: string;
   /** Still arriving: the answer is being written (and spoken) as it streams in. */
   streaming?: boolean;
+  /** The user cut this answer short (a new message or voice command, or Stop). */
+  interrupted?: boolean;
   /** Shows the plan purchase flow in the chat. */
   purchase?: boolean;
 };
