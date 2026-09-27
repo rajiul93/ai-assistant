@@ -22,9 +22,10 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/select";
 import { closedStatuses, sectorLabels, statusLabels, statusOptions } from "@/lib/applications";
 import { APP_TIMEZONE, dayjs, formatDate } from "@/lib/dayjs";
-import { sanitizeNoteHtml } from "@/lib/note-html";
+import { RichHtml } from "@/components/math-text";
 import { cn } from "@/lib/utils";
 import { deleteApplication, listMyApplications, updateApplicationStatus } from "@/server/actions/applications";
+import { MathText } from "@/components/math-text";
 
 type SectorFilter = "ALL" | JobSector;
 
@@ -67,7 +68,7 @@ function Details({ notes }: { notes: string }) {
     </button>
     {open ? html
       // Sanitized again on display: only text-formatting tags and safe links remain.
-      ? <div className="ql-snow border-t border-zinc-100"><div className="ql-editor rich-view" dangerouslySetInnerHTML={{ __html: sanitizeNoteHtml(notes) }} /></div>
+      ? <RichHtml html={notes} className="border-t border-zinc-100" />
       : <p className="whitespace-pre-wrap border-t border-zinc-100 px-3 py-2 text-sm text-zinc-600">{notes}</p>
       : null}
   </div>;
@@ -192,7 +193,7 @@ export function ApplicationBoard({ initialApplications }: { initialApplications:
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="font-semibold leading-snug">{item.title}</h2>
+                  <h2 className="font-semibold leading-snug"><MathText text={item.title} /></h2>
                   <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", item.sector === "GOVERNMENT" ? "bg-emerald-50 text-emerald-700" : "bg-indigo-50 text-indigo-700")}>{sectorLabels[item.sector]}</span>
                 </div>
                 <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-600">

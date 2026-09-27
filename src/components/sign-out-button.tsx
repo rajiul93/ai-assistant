@@ -17,7 +17,7 @@ export function SignOutButton() {
     // ...then the Google sign-in kept on this device, or the login page would sign straight back in.
     if (isFirebaseClientConfigured()) await signOut(getFirebaseAuth()).catch(() => {});
     // A full page load wipes everything held in memory (query cache, chat history) with it.
-    window.location.replace("/login");
+    window.location.replace("/");
   }
 
   return (

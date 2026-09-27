@@ -30,6 +30,11 @@ const MAX_BOOST = 8;
 const BARGE_RATIO = 2.5;
 const BARGE_START_MS = 260;
 const ECHO_LEARN_MS = 450;
+/**
+ * Live typing: while a sentence is still being spoken, what has been said so far is transcribed
+ * again about this often (one request at a time), so the words appear as the user talks.
+ */
+const PARTIAL_EVERY_MS = 900;
 
 type Options = {
   /** Stop after the first sentence (a push-to-talk mic) instead of listening on. */
@@ -45,6 +50,13 @@ type Options = {
    * (the caller pauses the voice). Without it the mic ignores everything during the assistant's voice.
    */
   onBargeIn?: () => void;
+  /** The sentence so far, while it is still being spoken (live typing). */
+  onPartial?: (text: string) => void;
+  /**
+   * Have the server correct spelling and turn spoken math into LaTeX before returning the text
+   * (default). The voice chat turns it off: the assistant corrects the words in its own reply.
+   */
+  fixText?: boolean;
   onError: (error: VoiceError) => void;
 };
 
@@ -87,11 +99,11 @@ function encodeWav(frames: Float32Array[], sampleRate: number) {
  * browser's recognizer it boosts quiet or distant voices, filters noise, handles Bangladeshi
  * accents, and never plays a start-up chime on phones.
  */
-export function useVoiceCapture({ onText, onSpeechStart, onBargeIn, onError, once = false, context: getContext }: Options) {
+export function useVoiceCapture({ onText, onSpeechStart, onBargeIn, onPartial, onError, once = false, fixText = true, context: getContext }: Options) {
   const [listening, setListening] = useState(false);
   const captureRef = useRef<Capture | null>(null);
-  const handlers = useRef({ onText, onSpeechStart, onBargeIn, onError, getContext });
-  useEffect(() => { handlers.current = { onText, onSpeechStart, onBargeIn, onError, getContext }; });
+  const handlers = useRef({ onText, onSpeechStart, onBargeIn, onPartial, onError, getContext });
+  useEffect(() => { handlers.current = { onText, onSpeechStart, onBargeIn, onPartial, onError, getContext }; });
 
   const stop = useCallback(() => {
     const capture = captureRef.current;
@@ -109,16 +121,21 @@ export function useVoiceCapture({ onText, onSpeechStart, onBargeIn, onError, onc
 
   useEffect(() => stop, [stop]);
 
-  const transcribe = useCallback(async (audio: Blob) => {
+  /** Sends audio to OpenAI; `partial` marks a live-typing preview of a sentence still being spoken. */
+  const request = useCallback((audio: Blob, partial = false) => {
     const lang = useAssistantStore.getState().lang;
+    const context = handlers.current.getContext?.().replace(/\s+/g, " ").trim().slice(0, 300);
+    return fetch(`/api/transcribe?lang=${lang}${partial ? "&partial=1" : ""}${fixText ? "" : "&fix=0"}`, {
+      method: "POST",
+      // Header values must be ASCII, so the (often Bangla) context is URI-encoded.
+      headers: { "Content-Type": "audio/wav", ...(context ? { "x-speech-context": encodeURIComponent(context) } : {}) },
+      body: audio,
+    });
+  }, [fixText]);
+
+  const transcribe = useCallback(async (audio: Blob) => {
     try {
-      const context = handlers.current.getContext?.().replace(/\s+/g, " ").trim().slice(0, 300);
-      const response = await fetch(`/api/transcribe?lang=${lang}`, {
-        method: "POST",
-        // Header values must be ASCII, so the (often Bangla) context is URI-encoded.
-        headers: { "Content-Type": "audio/wav", ...(context ? { "x-speech-context": encodeURIComponent(context) } : {}) },
-        body: audio,
-      });
+      const response = await request(audio);
       if (!response.ok) { handlers.current.onText(""); return; }
       const { text } = (await response.json()) as { text?: string };
       handlers.current.onText(text?.trim() ?? "");
@@ -126,7 +143,7 @@ export function useVoiceCapture({ onText, onSpeechStart, onBargeIn, onError, onc
       // One lost sentence on a flaky connection shouldn't switch the mic off, so this isn't the fatal "network" code.
       handlers.current.onError({ code: "transcribe-failed", message: voiceErrorMessage("network") });
     }
-  }, []);
+  }, [request]);
 
   const start = useCallback(async () => {
     if (captureRef.current) return true;
@@ -177,7 +194,23 @@ export function useVoiceCapture({ onText, onSpeechStart, onBargeIn, onError, onc
     // How loud the assistant's voice still is after echo cancellation, and for how long it has talked.
     let echoLevel = 0;
     let assistantMs = 0;
-    const reset = () => { inSpeech = false; frames = []; loudMs = 0; speechMs = 0; silenceMs = 0; };
+    // Live typing: which sentence a preview belongs to, when the last one was asked for, and whether one is on its way.
+    let utterance = 0;
+    let partialAtMs = 0;
+    let partialBusy = false;
+    const reset = () => { inSpeech = false; frames = []; loudMs = 0; speechMs = 0; silenceMs = 0; partialAtMs = 0; };
+    const preview = () => {
+      const heardMs = frames.length * frameMs;
+      if (!handlers.current.onPartial || partialBusy || heardMs - partialAtMs < PARTIAL_EVERY_MS) return;
+      partialAtMs = heardMs;
+      partialBusy = true;
+      const id = utterance;
+      void request(encodeWav(frames, context.sampleRate), true)
+        .then(async (response) => (response.ok ? ((await response.json()) as { text?: string }).text?.trim() ?? "" : ""))
+        .catch(() => "")
+        // A preview that comes back after the sentence ended (or a new one began) is dropped.
+        .then((text) => { partialBusy = false; if (text && id === utterance && inSpeech) handlers.current.onPartial?.(text); });
+    };
 
     processor.onaudioprocess = (event) => {
       const samples = new Float32Array(event.inputBuffer.getChannelData(0));
@@ -215,6 +248,7 @@ export function useVoiceCapture({ onText, onSpeechStart, onBargeIn, onError, onc
           preRoll = [];
           // Hold the assistant's voice now, while the rest of the sentence is heard.
           if (assistantTalking) handlers.current.onBargeIn?.();
+          utterance++;
           handlers.current.onSpeechStart?.();
         }
         return;
@@ -224,15 +258,18 @@ export function useVoiceCapture({ onText, onSpeechStart, onBargeIn, onError, onc
       // A slightly lower bar to stay "in speech" than to enter it, so soft word endings aren't cut.
       if (level > Math.max(MIN_LEVEL, noiseFloor * STAY_RATIO)) { silenceMs = 0; speechMs += frameMs; } else silenceMs += frameMs;
       if (silenceMs >= END_SILENCE_MS || frames.length * frameMs >= MAX_UTTERANCE_MS) {
-        const utterance = frames;
+        const spoken = frames;
         const spokeFor = speechMs;
         reset();
+        utterance++;
         if (spokeFor < MIN_SPEECH_MS) { handlers.current.onText(""); return; }
-        const audio = encodeWav(utterance, context.sampleRate);
+        const audio = encodeWav(spoken, context.sampleRate);
         // Push-to-talk: the sentence is complete, so free the mic before the text comes back.
         if (once) stop();
         void transcribe(audio);
       }
+      // Only while words are coming in: a long pause at the end needs no new preview.
+      else if (silenceMs === 0 && speechMs >= MIN_SPEECH_MS) preview();
     };
     source.connect(highpass);
     highpass.connect(lowpass);
@@ -242,7 +279,7 @@ export function useVoiceCapture({ onText, onSpeechStart, onBargeIn, onError, onc
     captureRef.current = { stream, context, source, nodes: [highpass, lowpass], processor };
     setListening(true);
     return true;
-  }, [transcribe, once, stop]);
+  }, [transcribe, request, once, stop]);
 
   return { listening, start, stop };
 }

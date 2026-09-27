@@ -9,7 +9,8 @@ import type { TaskStatus } from "@prisma/client";
 import { ArrowUpDown, Check, Clock, FileText, ListTodo, MoreHorizontal, Pencil, Play, Plus, RefreshCcw, Search, Trash2 } from "lucide-react";
 import { RevisionManager } from "@/components/revisions/revision-manager";
 import { dueRevisionCount } from "@/lib/revisions";
-import { htmlToPlainText, isRichHtml, sanitizeNoteHtml, toEditorHtml } from "@/lib/note-html";
+import { htmlToPlainText, isRichHtml, toEditorHtml } from "@/lib/note-html";
+import { MathText, RichHtml } from "@/components/math-text";
 import "quill/dist/quill.snow.css";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -113,7 +114,7 @@ function TaskCard({ task, todayStart, now, timerRunning, onStart, onStatus, onEd
       ><Check className="size-4" strokeWidth={3} /></button>
 
       <div className="min-w-0 flex-1">
-        <h2 className={cn("line-clamp-2 text-[15px] font-semibold leading-snug", finished && "text-zinc-400 line-through")}>{task.title}</h2>
+        <h2 className={cn("line-clamp-2 text-[15px] font-semibold leading-snug", finished && "text-zinc-400 line-through")}><MathText text={task.title} /></h2>
         <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-zinc-500">
           <span className="flex items-center gap-1"><span className={cn("size-2 rounded-full", statusDot[task.status])} aria-hidden />{status.label}</span>
           <span className={cn("rounded-full px-1.5 py-px text-[11px] font-medium ring-1", priorityStyle[task.priority])}>{task.priority.charAt(0) + task.priority.slice(1).toLowerCase()}</span>
@@ -122,11 +123,11 @@ function TaskCard({ task, todayStart, now, timerRunning, onStart, onStatus, onEd
         </p>
         {task.subject || task.topic ? <p className="mt-1 truncate text-xs text-zinc-500">{task.subject?.name ?? "No subject"}{task.topic ? ` › ${task.topic.name}` : ""}</p> : null}
         {description ? detailsOpen
-          ? <div className="ql-snow mt-1.5 rounded-lg bg-zinc-50"><div className="ql-editor rich-view" dangerouslySetInnerHTML={{ __html: sanitizeNoteHtml(toEditorHtml(task.description)) }} /></div>
-          : <p className="mt-1.5 line-clamp-2 text-sm text-zinc-600">{description}</p> : null}
+          ? <RichHtml html={toEditorHtml(task.description)} className="mt-1.5 rounded-lg bg-zinc-50" />
+          : <p className="mt-1.5 line-clamp-2 text-sm text-zinc-600"><MathText text={description} /></p> : null}
         {task.notes.length ? <div className="mt-1.5 flex flex-wrap gap-1.5">
           {task.notes.map(({ note }) => <Link key={note.id} href={`/notes?id=${encodeURIComponent(note.id)}`} className="flex max-w-full items-center gap-1 rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-200">
-            <FileText className="size-3.5 shrink-0 text-zinc-500" /><span className="truncate">{note.title || "Untitled note"}</span>
+            <FileText className="size-3.5 shrink-0 text-zinc-500" /><span className="truncate"><MathText text={note.title || "Untitled note"} /></span>
           </Link>)}
         </div> : null}
         {description ? <button type="button" onClick={() => setDetailsOpen((open) => !open)} aria-expanded={detailsOpen} className="mt-1 text-xs font-medium text-zinc-500 hover:text-zinc-900">{detailsOpen ? "কম দেখাও ▴" : "বিস্তারিত ▾"}</button> : null}

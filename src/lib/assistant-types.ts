@@ -61,6 +61,8 @@ export type AssistantReply = (
   speak?: boolean;
   /** The user has no AI access (not approved yet, or turned off by an admin). */
   aiLocked?: boolean;
+  /** Voice: the user's words with spelling and math corrected, to replace what the mic typed. */
+  heard?: string;
 };
 
 export type AssistantRequest = {

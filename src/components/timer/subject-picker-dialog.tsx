@@ -14,6 +14,7 @@ import { createSubject } from "@/server/actions/subjects";
 import { useAssistantStore } from "@/store/assistant";
 import { useTimerStore } from "@/store/timer";
 import { useTimerStartStore, type TimerStartRequest } from "@/store/timer-start";
+import { MathText } from "@/components/math-text";
 
 /** Mounted once in the app shell; every study timer start asks "Which subject?" here first. */
 export function SubjectPickerDialog() {
@@ -102,7 +103,7 @@ function PickerBody({ request, onDone }: { request: TimerStartRequest; onDone: (
           )}
         >
           <span className="min-w-0">
-            <span className="block truncate font-medium">{subject.name}</span>
+            <span className="block truncate font-medium"><MathText text={subject.name} /></span>
             <span className={cn("block text-xs", active ? "text-white/60" : "text-zinc-500")}>{t.pickerThisMonth(formatDurationFromSeconds(subject.monthSeconds))}</span>
           </span>
           {active ? <Check className="size-4 shrink-0" /> : null}

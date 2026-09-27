@@ -231,7 +231,7 @@ export function ApplicationForm({ application, onSuccess }: { application?: JobA
         key={editorKey}
         initialHtml={form.getValues("notes") ?? ""}
         placeholder="Everything else: personal info, education, fee payment steps, documents…"
-        onChange={(html, text) => form.setValue("notes", text.trim() ? html : "", { shouldDirty: true })}
+        onChange={(html, text) => form.setValue("notes", text.trim() || html.includes("ql-formula") ? html : "", { shouldDirty: true })}
       />
     </div>
     <div className="flex justify-end">

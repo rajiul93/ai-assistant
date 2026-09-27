@@ -21,6 +21,7 @@ import { APP_TIMEZONE, dayjs } from "@/lib/dayjs";
 import { cn } from "@/lib/utils";
 import { createNote, deleteNote, generateNoteContent, getNote, listNotes, updateNote } from "@/server/actions/notes";
 import { useAssistantStore } from "@/store/assistant";
+import { MathText } from "@/components/math-text";
 
 type NoteSummary = Awaited<ReturnType<typeof listNotes>>[number];
 type SaveState = "saved" | "saving" | "unsaved" | "error";
@@ -276,11 +277,11 @@ export function NotesWorkspace({ initialNotes, subjects, topics }: { initialNote
                 )}
               >
                 <span className="flex items-baseline justify-between gap-3">
-                  <span className="truncate font-semibold lg:text-sm lg:font-medium">{note.title || "Untitled note"}</span>
+                  <span className="truncate font-semibold lg:text-sm lg:font-medium"><MathText text={note.title || "Untitled note"} /></span>
                   <span className={cn("shrink-0 text-xs lg:text-[11px]", active ? "text-white/60" : "text-zinc-400")}>{updatedLabel(note.updatedAt)}</span>
                 </span>
                 {note.subject ? <span className={cn("mt-1 block truncate text-xs font-medium lg:mt-0.5 lg:text-[11px]", active ? "text-white/80" : "text-indigo-600")}>{note.subject.name}{note.topic ? ` › ${note.topic.name}` : ""}</span> : null}
-                <span className={cn("mt-1 line-clamp-2 text-sm leading-snug lg:mt-0.5 lg:text-xs", active ? "text-white/70" : "text-zinc-500")}>{note.plainText.replace(/\s+/g, " ") || "Empty note"}</span>
+                <span className={cn("mt-1 line-clamp-2 text-sm leading-snug lg:mt-0.5 lg:text-xs", active ? "text-white/70" : "text-zinc-500")}>{note.plainText ? <MathText text={note.plainText.replace(/\s+/g, " ")} /> : "Empty note"}</span>
               </button>
             </li>;
           })}

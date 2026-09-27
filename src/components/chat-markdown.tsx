@@ -3,7 +3,9 @@
 import { isValidElement, useState, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
+import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import { Check, Copy } from "lucide-react";
 import "highlight.js/styles/github-dark.min.css";
 
@@ -61,10 +63,11 @@ const components: Components = {
 
 /**
  * Assistant replies rendered like ChatGPT: headings, lists, tables and highlighted code with a copy
- * button. Raw HTML in the text is not rendered, so a reply can't inject markup.
+ * button, and `$…$` math as book-style notation (KaTeX). Raw HTML in the text is not rendered, so a
+ * reply can't inject markup.
  */
 export function ChatMarkdown({ text }: { text: string }) {
   return <div className="min-w-0 wrap-break-word">
-    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]} components={components}>{text}</ReactMarkdown>
+    <ReactMarkdown remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: true }]]} rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: "ignore" }], [rehypeHighlight, { detect: true, ignoreMissing: true }]]} components={components}>{text}</ReactMarkdown>
   </div>;
 }

@@ -1,3 +1,5 @@
+import { formulaSpan, hasMath, replaceFormulaSpans, textToFormulaHtml } from "@/lib/math";
+
 /**
  * Note content comes from the Quill editor or from the AI, so it is untrusted HTML. Before it is
  * saved, everything outside a small allowlist of text-formatting tags is removed — no images,
@@ -16,8 +18,22 @@ function attribute(attrs: string, name: string) {
 
 const escapeAttr = (value: string) => value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
+/**
+ * `$…$` typed or written by the AI inside the text of stored HTML → Quill formula elements, so
+ * math always ends up in the one stored form (see lib/math).
+ */
+function dollarsToFormulas(html: string) {
+  return html.split(/(<[^>]+>)/).map((part) => {
+    if (part.startsWith("<") || !part.includes("$")) return part;
+    const text = part.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+    return hasMath(text) ? textToFormulaHtml(text) : part;
+  }).join("");
+}
+
 export function sanitizeNoteHtml(html: string) {
-  return html
+  // Math keeps only its LaTeX (the drawn KaTeX markup inside is rebuilt whenever it is shown).
+  const withFormulas = dollarsToFormulas(replaceFormulaSpans(html, (latex) => (latex.trim() ? formulaSpan(latex.trim().slice(0, 2000)) : "")));
+  return withFormulas
     .replace(/<!--[\s\S]*?-->/g, "")
     .replace(droppedBlocks, "")
     .replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>/g, (tag, rawName: string, attrs: string) => {
@@ -30,6 +46,11 @@ export function sanitizeNoteHtml(html: string) {
       // Quill 2 marks bullet vs numbered items with data-list on <li>.
       const list = name === "li" ? attribute(attrs, "data-list") : null;
       if (list && /^(bullet|ordered|checked|unchecked)$/.test(list)) kept.push(`data-list="${list}"`);
+      // A formula's LaTeX (lib/math) — only ever drawn by KaTeX, never inserted as HTML.
+      if (name === "span" && cls?.trim() === "ql-formula") {
+        const latex = attribute(attrs, "data-value");
+        if (latex) kept.push(`data-value="${escapeAttr(latex)}"`);
+      }
       if (name === "a") {
         const href = attribute(attrs, "href")?.trim() ?? "";
         if (/^(https?:|mailto:)/i.test(href)) kept.push(`href="${escapeAttr(href)}"`, 'rel="noopener noreferrer"', 'target="_blank"');
@@ -42,7 +63,8 @@ export function sanitizeNoteHtml(html: string) {
 
 /** Readable plain text for search and list previews. */
 export function htmlToPlainText(html: string) {
-  return html
+  // Formulas read back as `$…$`, the plain-text form of math.
+  return replaceFormulaSpans(html, (latex) => (latex ? `$${latex}$` : ""))
     .replace(/<(br|\/p|\/h[1-3]|\/li|\/blockquote|\/pre|\/div)\s*\/?>/gi, "\n")
     .replace(/<[^>]+>/g, "")
     .replace(/&nbsp;/g, " ")
@@ -65,7 +87,7 @@ export function toRichHtml(text: string | null | undefined) {
   if (!text?.trim()) return null;
   const html = isRichHtml(text)
     ? text
-    : text.split(/\n/).map((line) => line.trim()).filter(Boolean).map((line) => `<p>${line.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</p>`).join("");
+    : text.split(/\n/).map((line) => line.trim()).filter(Boolean).map((line) => `<p>${textToFormulaHtml(line)}</p>`).join("");
   const clean = sanitizeNoteHtml(html);
   return htmlToPlainText(clean).trim() ? clean : null;
 }
@@ -73,8 +95,8 @@ export function toRichHtml(text: string | null | undefined) {
 /** What to load into the editor: stored HTML as is, older plain text turned into paragraphs. */
 export function toEditorHtml(text: string | null | undefined) {
   if (!text) return "";
-  return isRichHtml(text) ? text : text.split("\n").map((line) => `<p>${line.replace(/&/g, "&amp;").replace(/</g, "&lt;") || "<br>"}</p>`).join("");
+  return isRichHtml(text) ? text : text.split("\n").map((line) => `<p>${textToFormulaHtml(line) || "<br>"}</p>`).join("");
 }
 
 /** Shared instructions so AI-written notes fit the editor: simple HTML, no images. */
-export const noteWritingRules = `লেখা হবে Quill editor-এ বসানোর মতো সরল HTML: শুধু <h2>, <h3>, <p>, <strong>, <em>, <ul>/<ol> + <li>, <blockquote>, <code>। কোনো ছবি, table, style, markdown (# বা **) বা \`\`\` code fence নয়। পড়ার উপযোগী, গোছানো study note — মূল ধারণা, ছোট ব্যাখ্যা, উদাহরণ, মনে রাখার পয়েন্ট। নিশ্চিত না হলে বানিয়ে লিখবে না।`;
+export const noteWritingRules = `লেখা হবে Quill editor-এ বসানোর মতো সরল HTML: শুধু <h2>, <h3>, <p>, <strong>, <em>, <ul>/<ol> + <li>, <blockquote>, <code>। গণিতের প্রতিটি রাশি বইয়ের মতো দেখাতে LaTeX দিয়ে <span class="ql-formula" data-value="\\frac{1}{2}"></span> আকারে লিখবে (যেমন x² → data-value="x^{2}", √2 → "\\sqrt{2}"); কখনো 1/2 বা x^2 সরাসরি লেখায় নয়। কোনো ছবি, table, style, markdown (# বা **) বা \`\`\` code fence নয়। পড়ার উপযোগী, গোছানো study note — মূল ধারণা, ছোট ব্যাখ্যা, উদাহরণ, মনে রাখার পয়েন্ট। নিশ্চিত না হলে বানিয়ে লিখবে না।`;

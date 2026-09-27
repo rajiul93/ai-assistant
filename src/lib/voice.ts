@@ -1,5 +1,6 @@
 import { speechLangs, type AssistantLang } from "@/lib/assistant-i18n";
 import { speakableBangla } from "@/lib/bangla-numbers";
+import { speakMath } from "@/lib/math";
 import { createSentenceChunker } from "@/lib/sentence-chunker";
 import { useAssistantStore } from "@/store/assistant";
 
@@ -118,7 +119,8 @@ function bestVoice(lang: AssistantLang) {
 
 /** Markdown symbols and links read aloud sound mechanical, so strip them before speaking. */
 function toSpokenText(text: string, lang: AssistantLang) {
-  const spoken = text
+  // Math is said the way a teacher reads it ("দুই ভাগের এক", "x-এর বর্গ"), not symbol by symbol.
+  const spoken = speakMath(text, lang)
     // Code is for reading on screen, not for listening to.
     .replace(/```[\s\S]*?(```|$)/g, " ")
     .replace(/https?:\/\/\S+/g, "")

@@ -4,6 +4,8 @@ import { loginCookieOptions, REFRESH_COOKIE, refreshIdToken, SESSION_COOKIE, tok
 
 // The manifest and app icons are fetched by the browser without cookies, so they must stay public.
 const PUBLIC_PATHS = ["/login", "/manifest.webmanifest", "/icon", "/apple-icon"];
+/** Pages only for signed-out visitors: the landing page and the login page. */
+const SIGNED_OUT_ONLY = ["/", "/login"];
 /** Refresh this long before the ID token (1 hour) expires, so a request never arrives with a dead one. */
 const REFRESH_BEFORE_MS = 5 * 60 * 1000;
 
@@ -26,7 +28,8 @@ function refreshOnce(refreshToken: string) {
  */
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const isPublic = PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+  // "/" (the landing page) is public by exact match only; everything under it stays guarded.
+  const isPublic = pathname === "/" || PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
   let session = request.cookies.get(SESSION_COOKIE)?.value;
   const refreshToken = request.cookies.get(REFRESH_COOKIE)?.value;
   const expiresAt = tokenExpiry(session);
@@ -54,7 +57,7 @@ export async function proxy(request: NextRequest) {
     url.pathname = "/login";
     url.search = "";
     response = NextResponse.redirect(url);
-  } else if (signedIn && pathname === "/login") {
+  } else if (signedIn && SIGNED_OUT_ONLY.includes(pathname)) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     url.search = "";

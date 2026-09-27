@@ -308,6 +308,9 @@ export function useAssistant() {
       return;
     }
 
+    // Voice: show the user's words as they should read (Bangla spelling, math as notation).
+    if (voice && result.heard) store.update(userEntry, { text: result.heard });
+
     if (stream.entry !== null) {
       if (result.type === "answer" || result.type === "clarify") {
         // Already shown and spoken while it streamed; settle the bubble on the final text.

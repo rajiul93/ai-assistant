@@ -12,6 +12,7 @@ import { changeTaskRevisionCount, updateTaskStatus } from "@/server/actions/task
 import type { TaskWithRelations } from "@/server/queries";
 import { useTimerStore } from "@/store/timer";
 import { useTimerStartStore } from "@/store/timer-start";
+import { MathText } from "@/components/math-text";
 
 type RevisionFilter = "NEEDS" | "REVISED" | "ALL";
 
@@ -126,7 +127,7 @@ export function RevisionManager({ tasks, todayMs }: { tasks: TaskWithRelations[]
         {visible.map((task) => <li key={task.id} className="rounded-lg border border-zinc-200 bg-white p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <p className="font-medium">{task.title}</p>
+              <p className="font-medium"><MathText text={task.title} /></p>
               <p className="mt-0.5 text-sm text-zinc-500">
                 {task.subject?.name ?? "No subject"}{task.topic ? ` · ${task.topic.name}` : ""}{task.status === "REVISION" ? " · marked for revision" : ""}
               </p>
