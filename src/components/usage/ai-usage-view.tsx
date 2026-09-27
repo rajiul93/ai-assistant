@@ -155,7 +155,7 @@ function QuotaCard({ quota }: { quota: AiQuota }) {
       <h2 className="text-sm font-semibold">Your token limit</h2>
       <p className="text-xs text-zinc-500">All time, every AI feature</p>
     </div>
-    {quota.limit ? <>
+    {quota.planEndsAt === null ? <p className="mt-3 text-sm text-zinc-600">এখনো কোনো plan নেই। <Link href="/billing" className="font-medium text-zinc-950 underline underline-offset-4">Plan নাও</Link> — তারপর এখানে token-এর হিসাব দেখাবে।</p> : quota.limit ? <>
       <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <p className="text-2xl font-semibold tabular-nums">{percent}%</p>
         <p className="text-sm tabular-nums text-zinc-600">{number(quota.used)} of {number(quota.limit)} tokens used</p>
@@ -170,22 +170,73 @@ function QuotaCard({ quota }: { quota: AiQuota }) {
   </section>;
 }
 
-/** A customer's usage page: their token limit and one all-time total, nothing more. */
-export function CustomerUsageView({ quota, requests, failed }: { quota: AiQuota; requests: number; failed: number }) {
+/** A customer's allowance as a share only — token counts are for admins. */
+function CustomerQuotaCard({ quota }: { quota: AiQuota }) {
+  const percent = quotaPercent(quota);
+  return <section className="rounded-2xl border border-zinc-200 bg-white p-5">
+    <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <h2 className="text-sm font-semibold">মোট খরচ</h2>
+      <p className="text-xs text-zinc-500">সব plan মিলিয়ে</p>
+    </div>
+    {quota.planEndsAt === null ? <p className="mt-3 text-sm text-zinc-600">এখনো কোনো plan নেই। <Link href="/billing" className="font-medium text-zinc-950 underline underline-offset-4">Plan নাও</Link> — তারপর এখানে ব্যবহারের হিসাব দেখাবে।</p> : <>
+      <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <p className="text-2xl font-semibold tabular-nums">{percent}%</p>
+        <p className="text-sm text-zinc-600">ব্যবহার হয়েছে · {Math.max(0, Math.round((100 - percent) * 10) / 10)}% বাকি</p>
+      </div>
+      <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-zinc-100" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-label="Plan used">
+        <div className={cn("h-full rounded-full transition-all", percent >= 100 ? "bg-red-500" : percent >= 80 ? "bg-amber-500" : "bg-zinc-900")} style={{ width: `${percent}%` }} />
+      </div>
+      <p className={cn("mt-2 text-xs", percent >= 100 ? "text-red-700" : "text-zinc-500")}>
+        {percent >= 100 ? <>ব্যবহার শেষ — <Link href="/billing" className="font-medium underline underline-offset-4">আরেকটা package নাও</Link>, বাকি দিনের সাথে যোগ হবে।</> : percent >= 80 ? <>প্রায় শেষ — দরকার হলে <Link href="/billing" className="font-medium underline underline-offset-4">আরেকটা package</Link> নিতে পারো।</> : "নতুন package নিলে বাকি ব্যবহারের সাথে যোগ হয়।"}
+      </p>
+    </>}
+  </section>;
+}
+
+type TodayShare = {
+  todayPercent: number;
+  dailySharePercent: number;
+  /** Only present in development (the server leaves it out in production). */
+  dev?: { todayTokens: number; dailyShareTokens: number; planTokens: number; planUsedTokens: number };
+};
+
+/** Today's use, big, as a share of today's allowance (the plan spread evenly over its days) — nothing else. */
+function TodayUsageCard({ today }: { today: TodayShare }) {
+  const ofShare = today.dailySharePercent ? Math.round((today.todayPercent / today.dailySharePercent) * 100) : 0;
+  const tone = ofShare > 100 ? "bg-red-500" : ofShare >= 80 ? "bg-amber-500" : "bg-emerald-600";
+  return <section className="rounded-2xl border border-zinc-200 bg-white p-5">
+    <h2 className="text-sm font-semibold">আজকের ব্যবহার</h2>
+    <p className={cn("mt-1 text-5xl font-bold tabular-nums tracking-tight", ofShare > 100 ? "text-red-600" : "text-zinc-950")}>{ofShare}%</p>
+    <div className="mt-3 h-3 overflow-hidden rounded-full bg-zinc-100" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.min(100, ofShare)} aria-label="Today's use">
+      <div className={cn("h-full rounded-full transition-all", tone)} style={{ width: `${Math.min(100, ofShare)}%` }} />
+    </div>
+    {ofShare > 100 ? <p className="mt-2 text-xs text-red-700">আজকের ভাগের বেশি খরচ হয়েছে।</p> : null}
+    {today.dev ? <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 rounded-lg border border-dashed border-violet-300 bg-violet-50 p-2.5 font-mono text-[11px] text-violet-900">
+      <dt className="col-span-2 font-sans text-[10px] font-semibold uppercase tracking-wide text-violet-500">Dev only · tokens</dt>
+      <dt>today</dt><dd className="text-right tabular-nums">{number(today.dev.todayTokens)}</dd>
+      <dt>daily share</dt><dd className="text-right tabular-nums">{number(today.dev.dailyShareTokens)}</dd>
+      <dt>plan used</dt><dd className="text-right tabular-nums">{number(today.dev.planUsedTokens)}</dd>
+      <dt>plan total</dt><dd className="text-right tabular-nums">{number(today.dev.planTokens)}</dd>
+    </dl> : null}
+  </section>;
+}
+
+/** A customer's usage page: today's use and the total spent, both as progress bars; no history, no token counts. */
+export function CustomerUsageView({ quota, requests, failed, today }: { quota: AiQuota; requests: number; failed: number; today: TodayShare | null }) {
   return <div className="space-y-4">
     <div>
       <h1 className="text-2xl font-semibold tracking-tight">AI usage</h1>
-      <p className="mt-1 text-sm text-zinc-500">How much of your AI allowance you have used so far.</p>
+      <p className="mt-1 text-sm text-zinc-500">আজ কতটা AI ব্যবহার হলো, আর তোমার plan-এর মোট কতটা খরচ হয়েছে।</p>
     </div>
-    <QuotaCard quota={quota} />
+    {today ? <TodayUsageCard today={today} /> : null}
+    <CustomerQuotaCard quota={quota} />
     <section className="rounded-2xl border border-zinc-200 bg-white p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-sm font-semibold">AI requests</h2>
-        <p className="text-xs text-zinc-500">All time</p>
+        <p className="text-xs text-zinc-500">এই plan-এ</p>
       </div>
       <p className="mt-2 text-2xl font-semibold tabular-nums">{number(requests)}</p>
       <p className="mt-0.5 text-xs text-zinc-500">{number(requests - failed)} succeeded · {number(failed)} failed</p>
-      <p className="mt-3 border-t border-zinc-100 pt-3 text-sm text-zinc-600"><span className="font-semibold tabular-nums text-zinc-900">{number(quota.used)}</span> tokens used in total (input + output)</p>
     </section>
   </div>;
 }

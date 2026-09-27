@@ -2,8 +2,11 @@ export const SESSION_COOKIE = "prep_session";
 /** Firebase refresh token: lets the server get a new ID token when the old one (1 hour) runs out. */
 export const REFRESH_COOKIE = "prep_refresh";
 export const SESSION_MAX_AGE_MS = 60 * 60 * 24 * 5 * 1000;
-/** Both cookies live this long; each refresh extends it, so an active user never gets signed out. */
-export const LOGIN_MAX_AGE_S = 60 * 60 * 24 * 90;
+/**
+ * Both cookies live this long — the most browsers allow (Chrome caps cookies at 400 days) — and
+ * every token refresh extends it, so in practice a login lasts until the user signs out.
+ */
+export const LOGIN_MAX_AGE_S = 60 * 60 * 24 * 400;
 
 /** Reads a JWT's expiry (seconds) without verifying it — only to decide when to refresh. */
 export function tokenExpiry(token: string | undefined) {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { createSessionCookie } from "@/lib/auth";
+import { createSessionCookie, forgetSession, getCurrentUser } from "@/lib/auth";
+import { adminAuth, isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import { loginCookieOptions, REFRESH_COOKIE, SESSION_COOKIE } from "@/lib/session";
 import { isFirebaseClientConfigured } from "@/lib/firebase/config";
 
@@ -30,8 +31,19 @@ export async function POST(request: Request) {
   }
 }
 
+/**
+ * Sign out: both cookies go, this server stops trusting the token at once, and — where the
+ * Firebase service account is configured — every refresh token of the user is revoked, so a copied
+ * cookie can't mint new sessions either.
+ */
 export async function DELETE() {
   const cookieStore = await cookies();
+  const session = cookieStore.get(SESSION_COOKIE)?.value;
+  if (session) {
+    const user = await getCurrentUser().catch(() => null);
+    forgetSession(session);
+    if (user && isFirebaseAdminConfigured()) await adminAuth().revokeRefreshTokens(user.firebaseUid).catch((error: unknown) => console.warn("[auth] couldn't revoke refresh tokens:", error));
+  }
   cookieStore.delete(SESSION_COOKIE);
   cookieStore.delete(REFRESH_COOKIE);
   return NextResponse.json({ ok: true });

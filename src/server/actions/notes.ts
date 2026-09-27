@@ -87,7 +87,8 @@ ${data.currentText.slice(0, 6000) || "(ফাঁকা)"}
 
 শুধু note-এ বসানোর HTML দাও, আর কিছু না।`;
   const { blocked } = await checkAi(user);
-  if (blocked === "quota") throw new Error(data.lang === "en" ? "You've used your AI token limit. Ask an admin to raise it." : "তোমার AI token limit শেষ হয়ে গেছে। Admin-কে limit বাড়াতে বলো।");
+  if (blocked === "quota" || blocked === "expired") throw new Error(data.lang === "en" ? "Your AI plan has run out. Choose a plan on the Plans page." : "তোমার AI plan শেষ। Plans পাতা থেকে একটা plan বেছে নাও।");
+  if (blocked === "paused") throw new Error(data.lang === "en" ? "An admin has paused your AI for now." : "Admin তোমার AI সাময়িকভাবে বন্ধ রেখেছে।");
   if (blocked) throw new Error(data.lang === "en" ? "You don't have AI access yet. Ask an admin from the assistant." : "তোমার এখনো AI ব্যবহারের অনুমতি নেই। Assistant থেকে admin-এর কাছে request পাঠাও।");
   const raw = await callAI(prompt, { userId: user.id, feature: "note_writer" });
   if (!raw) throw new Error(data.lang === "en" ? "The AI isn't responding right now. Please try again in a moment." : "AI এখন সাড়া দিচ্ছে না। একটু পরে আবার চেষ্টা করো।");

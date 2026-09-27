@@ -10,8 +10,7 @@ import { cloudVoiceAvailability } from "@/lib/use-best-mic";
 import { useVoiceCapture } from "@/lib/use-voice-capture";
 import { cn } from "@/lib/utils";
 import { isFatalVoiceError, speak, stopSpeaking, voiceErrorMessage, type VoiceError } from "@/lib/voice";
-import { quotaExceeded, type AiQuota } from "@/lib/ai-limits";
-import type { AiAccessState } from "@/server/ai-access";
+import type { AiLock } from "@/lib/ai-limits";
 import { useAssistantStore } from "@/store/assistant";
 
 const stopPhrases = ["ai বন্ধ", "বন্ধ করো", "শোনা বন্ধ", "stop listening", "ai off", "turn off voice"];
@@ -20,7 +19,7 @@ const languages: Array<{ value: AssistantLang; label: string; name: string }> = 
   { value: "en", label: "EN", name: "English" },
 ];
 
-export function VoiceCommandCenter({ aiAccess, aiQuota }: { aiAccess: AiAccessState; aiQuota: AiQuota }) {
+export function VoiceCommandCenter({ aiLock }: { aiLock: AiLock }) {
   const { send, t } = useAssistant();
   const lang = useAssistantStore((state) => state.lang);
   const setLang = useAssistantStore((state) => state.setLang);
@@ -88,7 +87,7 @@ export function VoiceCommandCenter({ aiAccess, aiQuota }: { aiAccess: AiAccessSt
       return;
     }
     // Without AI access the mic would only hear "not allowed"; show why and where to ask instead.
-    if ((aiAccess !== "ADMIN" && aiAccess !== "APPROVED") || quotaExceeded(aiQuota)) {
+    if (aiLock) {
       setLive({ stage: "result", tone: "warn", text: t.aiLockedStatus });
       useAssistantStore.getState().setOpen(true);
       return;

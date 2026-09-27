@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { ArrowUp, Check, CircleCheck, Download, FileText, Lock, Maximize2, Mic, Minimize2, NotebookPen, Paperclip, RefreshCcw, Sparkles, Volume2, X } from "lucide-react";
 import { ChatMarkdown } from "@/components/chat-markdown";
+import { ChatPurchase } from "@/components/billing/chat-purchase";
 import { VoiceWave } from "@/components/assistant-status";
 import { sectorLabels, statusLabels } from "@/lib/applications";
 import type { AssistantStrings } from "@/lib/assistant-i18n";
@@ -13,9 +13,7 @@ import { useAssistant } from "@/lib/use-assistant";
 import { useBestMic } from "@/lib/use-best-mic";
 import { cn } from "@/lib/utils";
 import { speak } from "@/lib/voice";
-import { requestAiAccess } from "@/server/actions/ai-access";
-import { formatTokens, quotaExceeded, type AiQuota } from "@/lib/ai-limits";
-import type { AiAccessState } from "@/server/ai-access";
+import type { AiLock } from "@/lib/ai-limits";
 import { useAssistantStore, type AssistantEntry } from "@/store/assistant";
 
 const priorityStyles = { LOW: "bg-zinc-100 text-zinc-600", MEDIUM: "bg-sky-50 text-sky-700", HIGH: "bg-rose-50 text-rose-700" } as const;
@@ -102,25 +100,16 @@ function ActionCard({ action, state, t, onConfirm, onCancel }: { action: Pending
   </div>;
 }
 
-/** Shown while the user can't use the AI: what's going on, and a button to ask an admin. */
-function AiAccessCard({ state, t }: { state: Exclude<AiAccessState, "ADMIN" | "APPROVED">; t: AssistantStrings }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState("");
-  const request = () => startTransition(async () => {
-    setError("");
-    try { await requestAiAccess(); router.refresh(); } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); }
-  });
+/** Shown while the AI is off for this user: why (no plan, plan ended, tokens used up) and a way to buy one. */
+function PlanLockCard({ lock, t }: { lock: Exclude<AiLock, null>; t: AssistantStrings }) {
+  const message = t.aiLock[lock];
   return <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-    <p className="flex items-start gap-2 leading-relaxed"><Lock className="mt-0.5 size-4 shrink-0" /> {t.aiAccess[state]}</p>
-    {state === "REQUESTED"
-      ? <p className="mt-3 inline-flex rounded-full bg-amber-100 px-3 py-1 text-xs font-medium">{t.aiRequested}</p>
-      : <button type="button" onClick={request} disabled={pending} className="mt-3 rounded-xl bg-zinc-950 px-3.5 py-2 text-xs font-medium text-white transition hover:bg-zinc-800 disabled:opacity-60">{pending ? t.aiRequesting : t.aiRequest}</button>}
-    {error ? <p role="alert" className="mt-2 text-xs text-red-700">{error}</p> : null}
+    <p className="flex items-start gap-2 leading-relaxed"><Lock className="mt-0.5 size-4 shrink-0" /> {message}</p>
+    {lock === "paused" ? null : <button type="button" onClick={() => useAssistantStore.getState().add({ role: "assistant", text: "", purchase: true })} className="mt-3 rounded-xl bg-zinc-950 px-3.5 py-2 text-xs font-medium text-white transition hover:bg-zinc-800">{t.choosePlan}</button>}
   </div>;
 }
 
-export function StudyAssistant({ aiAccess, aiQuota }: { aiAccess: AiAccessState; aiQuota: AiQuota }) {
+export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
   const { entries, busy, open, setOpen, t, send, confirmAction, cancelAction } = useAssistant();
   const [question, setQuestion] = useState("");
   const [voiceError, setVoiceError] = useState("");
@@ -216,11 +205,7 @@ export function StudyAssistant({ aiAccess, aiQuota }: { aiAccess: AiAccessState;
       </header>
 
       <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite">
-        {aiAccess !== "ADMIN" && aiAccess !== "APPROVED"
-          ? <AiAccessCard state={aiAccess} t={t} />
-          : quotaExceeded(aiQuota)
-            ? <p className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-relaxed text-amber-900"><Lock className="mt-0.5 size-4 shrink-0" /> {t.aiQuotaUsed(formatTokens(aiQuota.used), formatTokens(aiQuota.limit ?? 0))}</p>
-            : null}
+        {aiLock ? <PlanLockCard lock={aiLock} t={t} /> : null}
         {entries.length === 0 ? <div className="rounded-2xl bg-zinc-50 p-4 text-sm leading-relaxed text-zinc-600">{t.emptyHint}</div> : null}
         {entries.map((entry) => entry.role === "user"
           ? <div key={entry.id} className="assistant-in ml-10 flex flex-col items-end">
@@ -228,6 +213,8 @@ export function StudyAssistant({ aiAccess, aiQuota }: { aiAccess: AiAccessState;
             {entry.attachmentName ? <p className="mb-1 flex max-w-full items-center gap-1 truncate text-[11px] font-medium text-zinc-400"><Paperclip className="size-3 shrink-0" /> {entry.attachmentName}</p> : null}
             <p className="rounded-2xl rounded-br-md bg-zinc-950 px-3.5 py-2 text-sm leading-relaxed text-white">{entry.text}</p>
           </div>
+          : entry.purchase
+          ? <div key={entry.id} className="assistant-in min-w-0 rounded-2xl border border-zinc-200 bg-white p-3"><ChatPurchase /></div>
           : <div key={entry.id} className="assistant-in mr-2 min-w-0">
             {entry.source ? <p className={cn("mb-1 text-[11px] font-medium", entry.source === "ai" ? "text-indigo-500" : "text-amber-600")}>{entry.source === "ai" ? `✦ ${t.sourceAi}` : t.sourceFallback}</p> : null}
             <div className="min-w-0 rounded-2xl rounded-bl-md bg-zinc-100/80 px-3.5 py-2 text-sm leading-relaxed text-zinc-900">

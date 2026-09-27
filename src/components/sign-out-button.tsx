@@ -1,26 +1,28 @@
 "use client";
 
 import { signOut } from "firebase/auth";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { getFirebaseAuth, isFirebaseClientConfigured } from "@/lib/firebase/client";
+import { stopSpeaking } from "@/lib/voice";
 
 export function SignOutButton() {
-  const router = useRouter();
+  const [busy, setBusy] = useState(false);
 
   async function onSignOut() {
-    await fetch("/api/auth/session", { method: "DELETE" });
-    // Also forget the Google sign-in on this device, or the login page would sign straight back in.
+    setBusy(true);
+    stopSpeaking();
+    // Server session first (cookies, token cache, refresh tokens)...
+    await fetch("/api/auth/session", { method: "DELETE" }).catch(() => {});
+    // ...then the Google sign-in kept on this device, or the login page would sign straight back in.
     if (isFirebaseClientConfigured()) await signOut(getFirebaseAuth()).catch(() => {});
-    toast.success("Signed out");
-    router.replace("/login");
-    router.refresh();
+    // A full page load wipes everything held in memory (query cache, chat history) with it.
+    window.location.replace("/login");
   }
 
   return (
-    <Button variant="outline" size="sm" onClick={onSignOut}>
-      Sign out
+    <Button variant="outline" size="sm" onClick={() => void onSignOut()} disabled={busy}>
+      {busy ? "Signing out…" : "Sign out"}
     </Button>
   );
 }
