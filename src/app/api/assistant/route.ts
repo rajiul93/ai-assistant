@@ -105,18 +105,25 @@ export async function POST(request: Request) {
   // can show and speak it sentence by sentence), then one {"type":"final","reply"}.
   const request_ = parsed.data;
   const encoder = new TextEncoder();
+  // Stopped when the user interrupts (the page aborts the request): the model stops writing too.
+  const abort = new AbortController();
+  request.signal.addEventListener("abort", () => abort.abort(), { once: true });
   const body = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const write = (line: object) => controller.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
+      const write = (line: object) => {
+        if (abort.signal.aborted) return;
+        try { controller.enqueue(encoder.encode(`${JSON.stringify(line)}\n`)); } catch { abort.abort(); }
+      };
       try {
-        const reply = await respond(user.id, request_, { onReplyDelta: (text) => write({ type: "delta", text }) });
+        const reply = await respond(user.id, request_, { onReplyDelta: (text) => write({ type: "delta", text }), signal: abort.signal });
         write({ type: "final", reply });
       } catch (error) {
         console.warn("[assistant] failed:", error);
         write({ type: "final", reply: { type: "clarify", source: "fallback", reply: request_.lang === "en" ? "Something went wrong. Please try again." : "কিছু একটা গোলমাল হয়েছে, আবার বলো।" } });
       }
-      controller.close();
+      try { controller.close(); } catch { /* the page already went away */ }
     },
+    cancel() { abort.abort(); },
   });
   return new Response(body, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store, no-transform", "X-Accel-Buffering": "no" } });
 }

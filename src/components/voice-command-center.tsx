@@ -4,16 +4,18 @@ import { useEffect, useRef, useState } from "react";
 import { Mic } from "lucide-react";
 import { AssistantStatus, VoiceWave } from "@/components/assistant-status";
 import { assistantStrings, type AssistantLang } from "@/lib/assistant-i18n";
-import { useAssistant } from "@/lib/use-assistant";
+import { interruptReply, useAssistant } from "@/lib/use-assistant";
 import { useSpeechRecognition } from "@/lib/use-speech-recognition";
 import { cloudVoiceAvailability } from "@/lib/use-best-mic";
 import { useVoiceCapture } from "@/lib/use-voice-capture";
 import { cn } from "@/lib/utils";
-import { isFatalVoiceError, speak, stopSpeaking, voiceErrorMessage, type VoiceError } from "@/lib/voice";
+import { isAssistantEcho, isFatalVoiceError, isSpeechPaused, pauseSpeaking, resumeSpeaking, speak, stopSpeaking, voiceErrorMessage, type VoiceError } from "@/lib/voice";
 import type { AiLock } from "@/lib/ai-limits";
 import { useAssistantStore } from "@/store/assistant";
 
 const stopPhrases = ["ai বন্ধ", "বন্ধ করো", "শোনা বন্ধ", "stop listening", "ai off", "turn off voice"];
+// Said on their own, these only stop the answer being spoken (the mic stays on), like ChatGPT.
+const hushPhrases = new Set(["থামো", "থাম", "থামুন", "থামাও", "চুপ", "চুপ করো", "চুপ কর", "আচ্ছা থামো", "ঠিক আছে থামো", "এক মিনিট", "দাঁড়াও", "stop", "stop it", "wait", "hold on", "enough", "okay stop", "ok stop", "shut up", "be quiet"]);
 const languages: Array<{ value: AssistantLang; label: string; name: string }> = [
   { value: "bn", label: "বাং", name: "বাংলা" },
   { value: "en", label: "EN", name: "English" },
@@ -34,8 +36,14 @@ export function VoiceCommandCenter({ aiLock }: { aiLock: AiLock }) {
   const cloud = useVoiceCapture({
     context: () => useAssistantStore.getState().entries.findLast((entry) => entry.role === "assistant")?.text ?? "",
     onSpeechStart: () => setLive({ stage: "listening", text: "…" }),
+    // Talking over the assistant holds its voice at once; the words then decide what happens.
+    onBargeIn: () => { pauseSpeaking(); },
     onText: (text) => {
-      if (text) { handleSystemCommand(text, []); return; }
+      // The assistant's own voice leaking back through the speaker is not a new command.
+      const echo = isSpeechPaused() && text.split(/\s+/).length >= 3 && isAssistantEcho(text);
+      if (text && !echo) { handleSystemCommand(text, []); return; }
+      // A cough, a noise or an echo: carry on talking.
+      resumeSpeaking();
       if (useAssistantStore.getState().live?.stage === "listening") setLive(null);
     },
     onError: (error) => { reportError(error); if (isFatalVoiceError(error.code)) cloud.stop(); },
@@ -70,9 +78,14 @@ export function VoiceCommandCenter({ aiLock }: { aiLock: AiLock }) {
 
   function handleSystemCommand(raw: string, alternatives: string[]) {
     // A backgrounded tab isn't being talked to, and a single letter is just noise.
-    if (document.hidden || raw.replace(/[^\p{L}]/gu, "").length < 2) return;
+    if (document.hidden || raw.replace(/[^\p{L}]/gu, "").length < 2) { resumeSpeaking(); return; }
     const command = raw.toLowerCase().trim();
     if (stopPhrases.some((phrase) => command.includes(phrase))) { toggleSystem(); return; }
+    if (hushPhrases.has(command.replace(/[^\p{L}\p{M}\s]/gu, "").replace(/\s+/g, " ").trim())) {
+      interruptReply();
+      setLive({ stage: "result", tone: "ok", text: t.hushedStatus });
+      return;
+    }
     void send(raw, { voice: true, alternatives });
   }
 
