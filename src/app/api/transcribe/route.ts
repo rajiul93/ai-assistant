@@ -3,15 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { checkAi } from "@/server/ai-access";
 import { logUsage } from "@/server/assistant/ai";
 import { fixVoiceText } from "@/server/assistant/voice-fix";
+import { speechHints as hints } from "@/server/speech-hints";
 
 const STT_MODEL = process.env.OPENAI_STT_MODEL || "gpt-4o-transcribe";
 const MAX_AUDIO_BYTES = 4 * 1024 * 1024;
-
-// Tells the model what it is likely to hear: Bangla mixed with English app words, in a Bangladeshi accent.
-const hints = {
-  bn: "বাংলাদেশি উচ্চারণে কথ্য বাংলা, মাঝে মাঝে ইংরেজি শব্দ। পড়াশোনার app-এর সহকারীর সঙ্গে কথা: task, subject, topic, timer, revision, note, dashboard, progress, plan, job application, সেভ করো, হ্যাঁ, না।",
-  en: "Conversational English, possibly with a Bangladeshi accent, talking to a study app assistant: task, subject, topic, timer, revision, note, dashboard, progress, plan, job application.",
-};
 
 // Whether the key may use the model; checked once in a while so the page knows which listener to use.
 let availability: { value: boolean; checkedAt: number } | null = null;

@@ -290,7 +290,8 @@ export async function generateImage(prompt: string, { userId }: { userId: string
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       // Medium quality WebP keeps it quick and small enough to send straight to the chat.
       body: JSON.stringify({ model, prompt, n: 1, size: "1024x1024", quality: "medium", output_format: "webp", output_compression: 85 }),
-      signal: AbortSignal.timeout(55_000),
+      // gpt-image-2 takes 40+ s for a medium-quality picture.
+      signal: AbortSignal.timeout(100_000),
     });
     if (!response.ok) {
       logUsage({ userId, feature: "image", model, httpStatus: response.status, latencyMs: Date.now() - started });

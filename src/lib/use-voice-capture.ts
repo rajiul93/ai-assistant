@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { LiveTranscriber } from "@/lib/live-transcriber";
 import { isAssistantSpeaking, voiceErrorMessage, type VoiceError } from "@/lib/voice";
 import { useAssistantStore } from "@/store/assistant";
 
@@ -57,10 +58,15 @@ type Options = {
    * (default). The voice chat turns it off: the assistant corrects the words in its own reply.
    */
   fixText?: boolean;
+  /**
+   * Stream audio to OpenAI's live transcription so words appear while they are being said
+   * (see live-transcriber). Falls back to per-sentence transcription whenever it isn't available.
+   */
+  live?: boolean;
   onError: (error: VoiceError) => void;
 };
 
-type Capture = { stream: MediaStream; context: AudioContext; source: MediaStreamAudioSourceNode; nodes: AudioNode[]; processor: ScriptProcessorNode };
+type Capture = { stream: MediaStream; context: AudioContext; source: MediaStreamAudioSourceNode; nodes: AudioNode[]; processor: ScriptProcessorNode; live: LiveTranscriber | null };
 
 /** Mono float samples → 16 kHz 16-bit WAV, the smallest format the speech model reads well. */
 function encodeWav(frames: Float32Array[], sampleRate: number) {
@@ -99,7 +105,7 @@ function encodeWav(frames: Float32Array[], sampleRate: number) {
  * browser's recognizer it boosts quiet or distant voices, filters noise, handles Bangladeshi
  * accents, and never plays a start-up chime on phones.
  */
-export function useVoiceCapture({ onText, onSpeechStart, onBargeIn, onPartial, onError, once = false, fixText = true, context: getContext }: Options) {
+export function useVoiceCapture({ onText, onSpeechStart, onBargeIn, onPartial, onError, once = false, fixText = true, live: liveTyping = false, context: getContext }: Options) {
   const [listening, setListening] = useState(false);
   const captureRef = useRef<Capture | null>(null);
   const handlers = useRef({ onText, onSpeechStart, onBargeIn, onPartial, onError, getContext });
@@ -114,6 +120,7 @@ export function useVoiceCapture({ onText, onSpeechStart, onBargeIn, onPartial, o
       capture.nodes.forEach((node) => node.disconnect());
       capture.processor.disconnect();
       capture.stream.getTracks().forEach((track) => track.stop());
+      capture.live?.close();
       void capture.context.close().catch(() => {});
     }
     setListening(false);
@@ -183,6 +190,9 @@ export function useVoiceCapture({ onText, onSpeechStart, onBargeIn, onPartial, o
     const lowpass = new BiquadFilterNode(context, { type: "lowpass", frequency: 7_000, Q: 0.7 });
     const processor = context.createScriptProcessor(2048, 1, 1);
     const frameMs = (2048 / context.sampleRate) * 1000;
+    const live = liveTyping ? new LiveTranscriber({ lang: () => useAssistantStore.getState().lang, onWords: (text) => handlers.current.onPartial?.(text) }) : null;
+    // Opened now, so it is ready by the first sentence.
+    void live?.connect();
 
     let noiseFloor = MIN_LEVEL;
     let preRoll: Float32Array[] = [];
@@ -201,7 +211,8 @@ export function useVoiceCapture({ onText, onSpeechStart, onBargeIn, onPartial, o
     const reset = () => { inSpeech = false; frames = []; loudMs = 0; speechMs = 0; silenceMs = 0; partialAtMs = 0; };
     const preview = () => {
       const heardMs = frames.length * frameMs;
-      if (!handlers.current.onPartial || partialBusy || heardMs - partialAtMs < PARTIAL_EVERY_MS) return;
+      // Live transcription already types the words as they are said.
+      if (!handlers.current.onPartial || live?.open || partialBusy || heardMs - partialAtMs < PARTIAL_EVERY_MS) return;
       partialAtMs = heardMs;
       partialBusy = true;
       const id = utterance;
@@ -249,12 +260,14 @@ export function useVoiceCapture({ onText, onSpeechStart, onBargeIn, onPartial, o
           // Hold the assistant's voice now, while the rest of the sentence is heard.
           if (assistantTalking) handlers.current.onBargeIn?.();
           utterance++;
+          if (live) { live.begin(); for (const frame of frames) live.append(frame, context.sampleRate); }
           handlers.current.onSpeechStart?.();
         }
         return;
       }
 
       frames.push(samples);
+      live?.append(samples, context.sampleRate);
       // A slightly lower bar to stay "in speech" than to enter it, so soft word endings aren't cut.
       if (level > Math.max(MIN_LEVEL, noiseFloor * STAY_RATIO)) { silenceMs = 0; speechMs += frameMs; } else silenceMs += frameMs;
       if (silenceMs >= END_SILENCE_MS || frames.length * frameMs >= MAX_UTTERANCE_MS) {
@@ -262,11 +275,17 @@ export function useVoiceCapture({ onText, onSpeechStart, onBargeIn, onPartial, o
         const spokeFor = speechMs;
         reset();
         utterance++;
-        if (spokeFor < MIN_SPEECH_MS) { handlers.current.onText(""); return; }
+        if (spokeFor < MIN_SPEECH_MS) { live?.discard(); handlers.current.onText(""); return; }
         const audio = encodeWav(spoken, context.sampleRate);
         // Push-to-talk: the sentence is complete, so free the mic before the text comes back.
         if (once) stop();
-        void transcribe(audio);
+        if (live?.open) {
+          // The live session already has the words; if it can't finish the sentence, transcribe it the usual way.
+          void live.commit().then((text) => (text === null ? transcribe(audio) : handlers.current.onText(text)));
+        } else {
+          live?.discard();
+          void transcribe(audio);
+        }
       }
       // Only while words are coming in: a long pause at the end needs no new preview.
       else if (silenceMs === 0 && speechMs >= MIN_SPEECH_MS) preview();
@@ -276,10 +295,10 @@ export function useVoiceCapture({ onText, onSpeechStart, onBargeIn, onPartial, o
     lowpass.connect(processor);
     // Chrome only runs the processor while it is connected to an output; it outputs silence.
     processor.connect(context.destination);
-    captureRef.current = { stream, context, source, nodes: [highpass, lowpass], processor };
+    captureRef.current = { stream, context, source, nodes: [highpass, lowpass], processor, live };
     setListening(true);
     return true;
-  }, [transcribe, request, once, stop]);
+  }, [transcribe, request, once, stop, liveTyping]);
 
   return { listening, start, stop };
 }

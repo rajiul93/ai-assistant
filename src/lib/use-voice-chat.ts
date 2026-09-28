@@ -57,6 +57,8 @@ export function useVoiceChat({ onDraft, onSentence, onError, onStopped }: Option
   const cloud = useVoiceCapture({
     // The assistant returns the corrected wording with its answer, so no separate clean-up call (and wait).
     fixText: false,
+    // Words appear in the box while they are being said (OpenAI live transcription).
+    live: true,
     context: () => useAssistantStore.getState().entries.findLast((entry) => entry.role === "assistant")?.text ?? "",
     onSpeechStart: () => handlers.current.onDraft("…"),
     // Talking over the assistant holds its voice at once; the words then decide what happens.

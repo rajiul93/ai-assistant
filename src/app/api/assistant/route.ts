@@ -65,7 +65,8 @@ function checkAttachment(data: string, declared: string) {
 }
 
 // Drawing an image can take up to about a minute.
-export const maxDuration = 60;
+// Drawing a picture alone can take ~45 s with gpt-image-2.
+export const maxDuration = 120;
 
 export async function POST(request: Request) {
   const user = await requireUser();
