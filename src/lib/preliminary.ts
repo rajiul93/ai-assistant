@@ -159,3 +159,37 @@ export function addDoubts(questions: ReviewedQuestion[], doubts: Array<{ questio
 
 /** How many fields still wait for the user to check. */
 export const reviewCount = (questions: ReviewedQuestion[]) => questions.reduce((total, question) => total + (question.review ? (question.review.onlyOnce ? 1 : 0) + (question.review.text ? 1 : 0) + (question.review.options?.filter(Boolean).length ?? 0) : 0), 0);
+
+const SPOKEN_OPTION = /^(?:অপশন|option)?\s*[(（]?([কখগঘ])[)）.,:।]?\s+(\S.*)$/i;
+const SPOKEN_ANSWER = /^(?:সঠিক\s*)?(?:উত্তর|answer)\s*(?:হলো|হল|হচ্ছে|is)?\s*[:：,।-]?\s*[(（]?([কখগঘ])(?:\s|$|[)）.,।])/i;
+
+/**
+ * One dictated sentence → a line parseMcqText understands: "ক পরম এশ" → "ক) পরম এশ",
+ * "সঠিক উত্তর খ" → "উত্তর: খ" (plus a blank line, so the next sentence starts a new question).
+ */
+export function spokenMcqLine(sentence: string) {
+  const line = sentence.trim().replace(/[।.]$/, "");
+  const answer = SPOKEN_ANSWER.exec(line);
+  if (answer) return `উত্তর: ${answer[1]}\n`;
+  const option = SPOKEN_OPTION.exec(line);
+  if (option) return `${option[1]}) ${option[2]}`;
+  return sentence.trim();
+}
+
+const normalizeForMatch = (value: string) => value.normalize("NFC").toLowerCase().replace(/[\s‌‍]+/g, " ").replace(/[।.?？!,;:'"‘’“”()（）]/g, "").trim();
+
+/** Same wording and the same four options (in any order) → the same key, however it was spaced or punctuated. */
+export function questionKey(question: { text: string; options: string[] }) {
+  return [normalizeForMatch(question.text), ...question.options.map(normalizeForMatch).sort()].join("\u0000");
+}
+
+/** Keeps the first copy of every question. */
+export function withoutDuplicates<T extends { text: string; options: string[] }>(questions: T[]) {
+  const seen = new Set<string>();
+  return questions.filter((question) => {
+    const key = questionKey(question);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}

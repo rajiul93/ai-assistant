@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { QuestionSetStatus } from "@prisma/client";
 import { requireUser } from "@/lib/auth";
 import { APP_TIMEZONE, dayjs } from "@/lib/dayjs";
+import { withoutDuplicates } from "@/lib/preliminary";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -57,7 +58,7 @@ export async function listQuestionSets() {
     where: { userId: user.id },
     orderBy: [{ date: "asc" }, { createdAt: "desc" }],
     select: {
-      id: true, topicName: true, date: true, status: true, updatedAt: true,
+      id: true, topicName: true, date: true, status: true, updatedAt: true, subjectId: true,
       subject: { select: { name: true } },
       _count: { select: { questions: true, attempts: true } },
       attempts: { orderBy: { submittedAt: "desc" }, take: 1, select: { id: true, correct: true, total: true, submittedAt: true } },
@@ -103,6 +104,48 @@ export async function updateQuestionSet(id: string, input: unknown) {
     }),
   ]);
   revalidate(set.id);
+}
+
+const mergeSchema = z.object({
+  setIds: z.array(z.string().min(1)).min(2, "অন্তত ২টা set বেছে নাও"),
+  subjectId: z.string().min(1, "Subject বেছে নাও"),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "তারিখ দাও"),
+  topicName: z.string().trim().min(1, "Topic-এর নাম দাও").max(160),
+  deleteOriginals: z.boolean(),
+});
+
+/**
+ * Several sets → one new Todo set holding their questions in the order the sets were picked.
+ * A question that appears more than once (same wording and options) is kept only the first time.
+ */
+export async function mergeQuestionSets(input: unknown) {
+  const user = await requireUser();
+  const data = mergeSchema.parse(input);
+  const ids = [...new Set(data.setIds)];
+  const subjectId = await ownedSubject(user.id, data.subjectId);
+  const sets = await prisma.questionSet.findMany({
+    where: { id: { in: ids }, userId: user.id },
+    select: { id: true, questions: { orderBy: { position: "asc" }, select: { text: true, options: true, correctIndex: true } } },
+  });
+  if (sets.length !== ids.length) throw new Error("Question set not found.");
+  const all = ids.flatMap((id) => sets.find((set) => set.id === id)!.questions);
+  const questions = withoutDuplicates(all);
+  if (!questions.length) throw new Error("বেছে নেওয়া set-গুলোতে কোনো প্রশ্ন নেই।");
+  if (questions.length > 300) throw new Error(`একটা set-এ সর্বোচ্চ ৩০০ প্রশ্ন রাখা যায় — এখানে ${questions.length}টি।`);
+  const [created] = await prisma.$transaction([
+    prisma.questionSet.create({
+      data: {
+        userId: user.id,
+        subjectId,
+        topicName: data.topicName,
+        date: toDate(data.date),
+        questions: { create: questions.map((question, position) => ({ position, ...question })) },
+      },
+    }),
+    ...(data.deleteOriginals ? [prisma.questionSet.deleteMany({ where: { id: { in: ids }, userId: user.id } })] : []),
+  ]);
+  revalidate();
+  return { id: created.id, questionCount: questions.length, duplicates: all.length - questions.length };
 }
 
 export async function deleteQuestionSet(id: string) {
