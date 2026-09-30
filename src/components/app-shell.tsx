@@ -17,6 +17,7 @@ import {
   Menu,
   NotebookPen,
   TrendingUp,
+  Keyboard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AiLock } from "@/lib/ai-limits";
@@ -35,6 +36,7 @@ const links = [
   { href: "/plan", label: "Study Plan", short: "Plan", icon: CalendarClock },
   { href: "/notes", label: "Notes", short: "Notes", icon: NotebookPen },
   { href: "/preliminary", label: "Preliminary", short: "Preliminary", icon: ClipboardCheck },
+  { href: "/typing", label: "Typing Lab", short: "Typing", icon: Keyboard },
   { href: "/jobs", label: "Jobs", short: "Jobs", icon: BriefcaseBusiness },
   { href: "/usage", label: "AI Usage", short: "AI Usage", icon: Gauge },
   { href: "/billing", label: "Plans", short: "Plans", icon: CreditCard },
