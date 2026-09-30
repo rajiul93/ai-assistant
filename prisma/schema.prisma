@@ -33,6 +33,8 @@ model User {
   tasks         Task[]
   studySessions StudySession[]
   planStarts    DailyPlanStart[]
+  questionSets  QuestionSet[]
+  testAttempts  TestAttempt[]
   applications  JobApplication[]
   notes         Note[]
   aiUsage       AiUsage[]
@@ -67,6 +69,7 @@ model Subject {
   topics        Topic[]
   tasks         Task[]
   notes         Note[]
+  questionSets  QuestionSet[]
   studySessions StudySession[]
 
   @@unique([userId, name])
@@ -388,4 +391,62 @@ model Entitlement {
   createdAt  DateTime  @default(now())
 
   @@index([userId, endsAt])
+}
+
+enum QuestionSetStatus {
+  TODO
+  DOING
+  TESTING
+  DONE
+}
+
+/// Preliminary: MCQs on one topic of a subject, studied (DOING, answers shown) then tested (TESTING, answers hidden).
+model QuestionSet {
+  id        String            @id @default(cuid())
+  userId    String
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId String?
+  subject   Subject?          @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  topicName String
+  /// The day this set is planned for (a date; stored at midnight Asia/Dhaka).
+  date      DateTime
+  status    QuestionSetStatus @default(TODO)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  questions Question[]
+  attempts  TestAttempt[]
+
+  @@index([userId, status])
+  @@index([subjectId])
+}
+
+model Question {
+  id           String      @id @default(cuid())
+  setId        String
+  set          QuestionSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  position     Int         @default(0)
+  text         String
+  /// Always four options, in order ক খ গ ঘ.
+  options      String[]
+  /// 0–3: which option is right. Never sent to the page during a test.
+  correctIndex Int
+
+  @@index([setId, position])
+}
+
+/// One finished test. Keeps a copy of the questions as they were, so the result never changes later.
+model TestAttempt {
+  id          String      @id @default(cuid())
+  setId       String
+  set         QuestionSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  total       Int
+  correct     Int
+  /// [{ text, options, correctIndex, chosen }] — chosen is -1 when left blank.
+  details     Json
+  submittedAt DateTime    @default(now())
+
+  @@index([setId, submittedAt])
+  @@index([userId])
 }

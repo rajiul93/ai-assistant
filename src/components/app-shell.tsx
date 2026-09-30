@@ -10,6 +10,7 @@ import {
   Receipt,
   UsersRound,
   CalendarClock,
+  ClipboardCheck,
   Gauge,
   LayoutDashboard,
   ListTodo,
@@ -33,6 +34,7 @@ const links = [
   { href: "/progress", label: "Progress", short: "Progress", icon: TrendingUp },
   { href: "/plan", label: "Study Plan", short: "Plan", icon: CalendarClock },
   { href: "/notes", label: "Notes", short: "Notes", icon: NotebookPen },
+  { href: "/preliminary", label: "Preliminary", short: "Preliminary", icon: ClipboardCheck },
   { href: "/jobs", label: "Jobs", short: "Jobs", icon: BriefcaseBusiness },
   { href: "/usage", label: "AI Usage", short: "AI Usage", icon: Gauge },
   { href: "/billing", label: "Plans", short: "Plans", icon: CreditCard },
@@ -68,7 +70,9 @@ export function AppShell({
   const moreLinks = [...baseMoreLinks, ...adminLinks];
   const badge = (href: string) => (href === billingAdminLink.href ? pendingPayments : 0);
   const [moreOpen, setMoreOpen] = useState(false);
-  const moreActive = moreLinks.some((link) => link.href === pathname);
+  // A page's own sub-pages (e.g. /preliminary/new) keep its link highlighted.
+  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const moreActive = moreLinks.some((link) => isActive(link.href));
 
   return (
     <div className="min-h-full bg-zinc-50">
@@ -80,7 +84,7 @@ export function AppShell({
         <nav className="flex-1 space-y-1 overflow-y-auto px-3">
           {sideLinks.map((link) => {
             const Icon = link.icon;
-            const active = pathname === link.href;
+            const active = isActive(link.href);
             return (
               <Link
                 key={link.href}
@@ -121,7 +125,7 @@ export function AppShell({
           <div className="grid grid-cols-5">
             {tabs.map((link) => {
               const Icon = link.icon;
-              const active = pathname === link.href;
+              const active = isActive(link.href);
               return (
                 <Link
                   key={link.href}
@@ -152,7 +156,7 @@ export function AppShell({
             <nav aria-label="More pages" className="grid grid-cols-3 gap-2">
               {moreLinks.map((link) => {
                 const Icon = link.icon;
-                const active = pathname === link.href;
+                const active = isActive(link.href);
                 return (
                   <Link
                     key={link.href}
