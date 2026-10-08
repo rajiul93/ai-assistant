@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { CalendarDays, CheckCircle2, CircleHelp, Lightbulb, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { CalendarDays, CheckCircle2, CircleHelp, ImageIcon, Lightbulb, Loader2, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { MathText } from "@/components/math-text";
 import { DictateButton } from "@/components/preliminary/question-set-form";
@@ -56,6 +56,50 @@ function useDictation(insert: (target: string, said: string) => void) {
 }
 
 const joinSpoken = (current: string, said: string) => (current.trim() ? `${current.trimEnd()} ${said}` : said);
+const joinRead = (current: string, read: string) => (current.trim() ? `${current.trimEnd()}\n${read}` : read);
+
+/** A phone photo scaled down to a JPEG the AI reads well and the upload limit allows (base64, no prefix). */
+async function photoToJpeg(file: File, maxSide = 2000) {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return canvas.toDataURL("image/jpeg", 0.88).split(",")[1];
+}
+
+/** "ছবি থেকে": pick or take a photo, and its text (or just the marked part) is handed to onText. */
+function useImageText(purpose: "confusion" | "clarification", onText: (text: string) => void) {
+  const [reading, setReading] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  async function read(file: File | undefined) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { toast.error("একটা ছবি দাও (JPG, PNG, WebP)।"); return; }
+    setReading(true);
+    try {
+      const response = await fetch("/api/confusions/read-image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: await photoToJpeg(file), purpose }) });
+      const payload = (await response.json().catch(() => ({}))) as { text?: string; error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "ছবিটা পড়া গেল না।");
+      if (!payload.text) { toast.error("ছবিতে কোনো লেখা পাওয়া গেল না।"); return; }
+      onText(payload.text);
+      toast.success("ছবি থেকে লেখা বসানো হলো — মিলিয়ে নাও");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "ছবিটা পড়া গেল না।");
+    } finally {
+      setReading(false);
+    }
+  }
+  const field = <input ref={input} type="file" accept="image/*" className="hidden" onChange={(event) => { void read(event.target.files?.[0]); event.target.value = ""; }} />;
+  return { reading, pick: () => input.current?.click(), field };
+}
+
+function PhotoButton({ reading, onClick }: { reading: boolean; onClick: () => void }) {
+  return <button type="button" onClick={onClick} disabled={reading} className="flex h-9 items-center gap-1.5 rounded-xl px-3 text-sm font-medium text-zinc-700 ring-1 ring-zinc-200 hover:bg-zinc-50 disabled:opacity-60">
+    {reading ? <Loader2 className="size-4 animate-spin" /> : <ImageIcon className="size-4" />} {reading ? "ছবি পড়ছে…" : "ছবি থেকে"}
+  </button>;
+}
 
 function Listening({ heard }: { heard: string }) {
   return <p role="status" className="flex items-center gap-2 text-xs font-medium text-red-600"><span className="size-2 shrink-0 animate-pulse rounded-full bg-red-500" />{heard || "শুনছি… বলো"}</p>;
@@ -74,6 +118,7 @@ function ConfusionDialog({ item, mode, subjects, onClose }: { item: Item; mode: 
     if (target === "dialog-clarification") setClarification((value) => joinSpoken(value, said));
   });
   const showClarification = mode === "clear" || item.status === "CLEAR";
+  const photo = useImageText("clarification", (read) => setClarification((value) => joinRead(value, read)));
 
   const save = () => start(async () => {
     try {
@@ -120,8 +165,9 @@ function ConfusionDialog({ item, mode, subjects, onClose }: { item: Item; mode: 
           {voice.supported ? <DictateButton active={voice.dictating === "dialog-clarification"} onClick={() => voice.dictate("dialog-clarification")} label="ব্যাখ্যা" className="absolute right-1.5 top-1.5" /> : null}
         </div>
       </label> : null}
-      {voice.dictating ? <Listening heard={voice.heard} /> : null}
-      <button type="button" onClick={save} disabled={pending || !text.trim()} className={cn("h-11 w-full rounded-xl text-sm font-semibold text-white disabled:opacity-50", mode === "clear" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-zinc-950 hover:bg-zinc-800")}>
+      {showClarification ? <div className="flex items-center justify-between gap-2">{voice.dictating ? <Listening heard={voice.heard} /> : <span className="text-xs text-zinc-500">বোর্ড বা খাতার ছবি থেকেও লেখা যায়</span>}<PhotoButton reading={photo.reading} onClick={photo.pick} />{photo.field}</div>
+        : voice.dictating ? <Listening heard={voice.heard} /> : null}
+      <button type="button" onClick={save} disabled={pending || photo.reading || !text.trim()} className={cn("h-11 w-full rounded-xl text-sm font-semibold text-white disabled:opacity-50", mode === "clear" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-zinc-950 hover:bg-zinc-800")}>
         {pending ? "সেভ হচ্ছে…" : mode === "clear" ? "Clear-এ নাও" : "সেভ করো"}
       </button>
     </DialogContent>
@@ -182,6 +228,7 @@ export function ConfusionBoard({ items, subjects }: { items: Item[]; subjects: S
     if (target === "add-text") setText((value) => joinSpoken(value, said));
     if (target === "add-topic") setTopic((value) => joinSpoken(value, said.replace(/[।.]$/, "")));
   });
+  const photo = useImageText("confusion", (read) => setText((value) => joinRead(value, read)));
   const add = () => startAdding(async () => {
     try {
       await createConfusion({ subjectId: subjectId || null, topic, text });
@@ -222,8 +269,9 @@ export function ConfusionBoard({ items, subjects }: { items: Item[]; subjects: S
         {voice.supported ? <DictateButton active={voice.dictating === "add-text"} onClick={() => voice.dictate("add-text")} label="Confusion" className="absolute right-1.5 top-1.5" /> : null}
       </div>
       <div className="flex items-center justify-between gap-3">
-        {voice.dictating ? <Listening heard={voice.heard} /> : <span />}
-        <button type="button" onClick={add} disabled={adding || !text.trim()} className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-zinc-950 px-4 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50"><Plus className="size-4" /> {adding ? "লেখা হচ্ছে…" : "যোগ করো"}</button>
+        {voice.dictating ? <Listening heard={voice.heard} /> : <PhotoButton reading={photo.reading} onClick={photo.pick} />}
+        {photo.field}
+        <button type="button" onClick={add} disabled={adding || photo.reading || !text.trim()} className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-zinc-950 px-4 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50"><Plus className="size-4" /> {adding ? "লেখা হচ্ছে…" : "যোগ করো"}</button>
       </div>
     </section>
 
