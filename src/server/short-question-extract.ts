@@ -96,3 +96,24 @@ export async function spellCheckShortQuestions(input: z.infer<typeof shortSpellC
     return [];
   }
 }
+
+/* ---------- Pasted text in any shape ---------- */
+
+export const shortTextRequestSchema = z.object({ text: z.string().trim().min(1).max(30_000) });
+
+const textPrompt = `নিচে কেউ সংক্ষিপ্ত প্রশ্ন আর উত্তর paste করেছে — যেকোনো ছাঁদে: এক লাইনে অনেকগুলো, "প্রশ্ন: উত্তর", "প্রশ্ন? উত্তর", "প্রশ্ন — উত্তর", পরের লাইনে উত্তর, নম্বর দিয়ে বা ছাড়া। প্রতিটি প্রশ্ন আর তার উত্তর আলাদা করে বের করো, যে ক্রমে আছে সেই ক্রমে।
+- text: প্রশ্নটা হুবহু, প্রশ্নের নম্বর (১., 2), প্রশ্ন-৩) আর শেষের ":" বা "—" চিহ্ন বাদ দিয়ে।
+- answer: সেই প্রশ্নের উত্তর হুবহু, "উত্তর:"/"Ans:" লেবেল বাদ দিয়ে। লেখায় উত্তর না থাকলে null।
+লেখায় যা আছে শুধু তা-ই — একটা শব্দও বদলাবে না, বানান ঠিক করবে না, নিজে উত্তর লিখবে না বা অনুমান করবে না। topic: লেখায় শিরোনাম থাকলে, না থাকলে null।`;
+
+/** Pasted text the simple parser couldn't follow → question–answer pairs, word for word ("" where no answer is given). */
+export async function extractShortQuestionsFromText(text: string, userId: string): Promise<{ topic: string | null; questions: ExtractedShort[] } | { error: string; status: number }> {
+  const raw = await callAI(`${textPrompt}\n\n---\n${text}`, { responseSchema, userId, feature: "file_assistant", timeoutMs: 60_000 });
+  if (!raw) return { error: "AI এই মুহূর্তে লেখাটা সাজাতে পারল না। একটু পরে আবার চেষ্টা করো।", status: 502 };
+  let parsed: z.infer<typeof extractedSchema>;
+  try { parsed = extractedSchema.parse(JSON.parse(raw)); } catch { return { error: "AI-এর উত্তর বোঝা গেল না। আবার চেষ্টা করো।", status: 502 }; }
+  const questions = parsed.questions
+    .map((question) => ({ text: question.text.trim().slice(0, 2000), answer: (question.answer ?? "").trim().slice(0, 4000) }))
+    .filter((question) => question.text);
+  return { topic: parsed.topic?.trim() || null, questions: questions.slice(0, 300) };
+}
