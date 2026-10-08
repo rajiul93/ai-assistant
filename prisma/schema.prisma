@@ -27,19 +27,21 @@ model User {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  studyPlan     StudyPlan?
-  subjects      Subject[]
-  topics        Topic[]
-  tasks         Task[]
-  studySessions StudySession[]
-  planStarts    DailyPlanStart[]
-  questionSets  QuestionSet[]
-  testAttempts  TestAttempt[]
-  applications  JobApplication[]
-  notes         Note[]
-  aiUsage       AiUsage[]
-  payments      Payment[]
-  entitlements  Entitlement[]
+  studyPlan         StudyPlan?
+  subjects          Subject[]
+  topics            Topic[]
+  tasks             Task[]
+  studySessions     StudySession[]
+  planStarts        DailyPlanStart[]
+  questionSets      QuestionSet[]
+  testAttempts      TestAttempt[]
+  shortQuestionSets ShortQuestionSet[]
+  shortTestAttempts ShortTestAttempt[]
+  applications      JobApplication[]
+  notes             Note[]
+  aiUsage           AiUsage[]
+  payments          Payment[]
+  entitlements      Entitlement[]
 }
 
 model StudyPlan {
@@ -66,11 +68,12 @@ model Subject {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  topics        Topic[]
-  tasks         Task[]
-  notes         Note[]
-  questionSets  QuestionSet[]
-  studySessions StudySession[]
+  topics            Topic[]
+  tasks             Task[]
+  notes             Note[]
+  questionSets      QuestionSet[]
+  shortQuestionSets ShortQuestionSet[]
+  studySessions     StudySession[]
 
   @@unique([userId, name])
   @@index([userId])
@@ -446,6 +449,56 @@ model TestAttempt {
   /// [{ text, options, correctIndex, chosen }] — chosen is -1 when left blank.
   details     Json
   submittedAt DateTime    @default(now())
+
+  @@index([setId, submittedAt])
+  @@index([userId])
+}
+
+/// Short Question: question–answer pairs on one topic, with the same Todo → Doing → Testing → Done flow as Preliminary.
+model ShortQuestionSet {
+  id        String             @id @default(cuid())
+  userId    String
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId String?
+  subject   Subject?           @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  topicName String
+  /// The day this set is planned for (a date; stored at midnight Asia/Dhaka).
+  date      DateTime
+  status    QuestionSetStatus  @default(TODO)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  questions ShortQuestion[]
+  attempts  ShortTestAttempt[]
+
+  @@index([userId, status])
+  @@index([subjectId])
+}
+
+model ShortQuestion {
+  id       String           @id @default(cuid())
+  setId    String
+  set      ShortQuestionSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  position Int              @default(0)
+  text     String
+  /// Never sent to the page during a test.
+  answer   String
+
+  @@index([setId, position])
+}
+
+/// One finished test, self-marked: a copy of the questions as they were, with what was written.
+model ShortTestAttempt {
+  id          String           @id @default(cuid())
+  setId       String
+  set         ShortQuestionSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  total       Int
+  /// How many are marked right so far.
+  correct     Int
+  /// [{ text, answer, given, right }] — right is null until marked.
+  details     Json
+  submittedAt DateTime         @default(now())
 
   @@index([setId, submittedAt])
   @@index([userId])

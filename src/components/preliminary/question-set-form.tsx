@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Check, ClipboardPaste, ImageIcon, Loader2, Plus, ScanText, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, ClipboardPaste, ImageIcon, Loader2, Mic, Plus, ScanText, Square, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { ImageViewer } from "@/components/image-viewer";
@@ -18,7 +18,8 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { isAllowedType } from "@/lib/attachments";
 import { pageTiles } from "@/lib/page-tiles";
-import { addDoubts, mergeReadings, OPTION_LETTERS, parseMcqText, reviewCount, type DraftQuestion, type ExtractedQuestion, type ReviewedQuestion } from "@/lib/preliminary";
+import { addDoubts, mergeReadings, OPTION_LETTERS, parseMcqText, reviewCount, spokenMcqLine, type DraftQuestion, type ExtractedQuestion, type ReviewedQuestion } from "@/lib/preliminary";
+import { useBestMic } from "@/lib/use-best-mic";
 import { cn } from "@/lib/utils";
 import { createQuestionSet, updateQuestionSet } from "@/server/actions/preliminary";
 
@@ -26,7 +27,7 @@ const emptyQuestion = (): ReviewedQuestion => ({ text: "", options: ["", "", "",
 
 type Reading = { topic: string | null; questions: ExtractedQuestion[] };
 
-async function readFile(file: File): Promise<string> {
+export async function readFile(file: File): Promise<string> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   let binary = "";
   for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
@@ -66,7 +67,7 @@ async function readPageTwice(file: File): Promise<{ topic: string | null; questi
 }
 
 /** A field the two readings disagreed on: both readings to pick from, or keep what is typed now. */
-function ReviewChips({ label, readings, current, word, onPick, onAccept }: { label: string; readings: string[]; current: string; word?: string; onPick: (value: string) => void; onAccept: () => void }) {
+export function ReviewChips({ label, readings, current, word, onPick, onAccept }: { label: string; readings: string[]; current: string; word?: string; onPick: (value: string) => void; onAccept: () => void }) {
   return <div className="mt-1.5 flex flex-wrap items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900">
     <AlertTriangle className="size-3.5 shrink-0" />
     <span className="font-medium">{label}</span>
@@ -75,6 +76,18 @@ function ReviewChips({ label, readings, current, word, onPick, onAccept }: { lab
     <button type="button" onClick={onAccept} className="ml-auto flex items-center gap-1 rounded-md px-2 py-1 font-medium hover:bg-white"><Check className="size-3.5" /> ঠিক আছে</button>
   </div>;
 }
+/** A field's mic: tap to say its text, tap again to stop. */
+export function DictateButton({ active, onClick, label, className }: { active: boolean; onClick: () => void; label: string; className?: string }) {
+  return <button type="button" onClick={onClick} aria-label={active ? "শোনা বন্ধ করো" : `${label} — বলে লেখো`} aria-pressed={active} title={active ? "শোনা বন্ধ করো" : "বলে লেখো"} className={cn("flex size-8 shrink-0 items-center justify-center rounded-lg transition", active ? "animate-pulse bg-red-500 text-white" : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700", className)}>
+    {active ? <Square className="size-3.5 fill-current" /> : <Mic className="size-4" />}
+  </button>;
+}
+
+/** "topic", "paste", "q2" (question 3's text) or "q2o1" (its option খ). */
+type DictationTarget = "topic" | "paste" | `q${number}` | `q${number}o${number}`;
+const joinSpoken = (current: string, said: string) => (current.trim() ? `${current.trimEnd()} ${said}` : said);
+const withoutDanda = (said: string) => said.trim().replace(/[।.]$/, "");
+
 const field = "w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition focus:border-zinc-400";
 
 /** Create or edit a question set: subject, date, topic and MCQs (four options, one right answer). */
@@ -97,6 +110,30 @@ export function QuestionSetForm({ subjects, initial }: {
   const [viewing, setViewing] = useState<number | null>(null);
   const [confirmUnchecked, setConfirmUnchecked] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Voice typing: one mic for the whole form, pointed at whichever field's mic was tapped.
+  const [dictating, setDictating] = useState<DictationTarget | null>(null);
+  const [heard, setHeard] = useState("");
+  const dictatingRef = useRef<DictationTarget | null>(null);
+  const endDictation = () => { dictatingRef.current = null; setDictating(null); setHeard(""); };
+  const mic = useBestMic({
+    context: () => {
+      const target = dictatingRef.current;
+      if (target === "topic") return "Topic name of a Bangladesh job-exam MCQ set";
+      if (target === "paste") return "Dictating MCQs: the question, then options ক খ গ ঘ, then the correct answer";
+      return target?.includes("o") ? "One option of a multiple-choice question" : "A multiple-choice exam question";
+    },
+    onInterim: setHeard,
+    onResult: (said) => { const target = dictatingRef.current; endDictation(); if (target) insertSpoken(target, said); },
+    onError: (error) => { endDictation(); toast.error(error.message); },
+  });
+  function dictate(target: DictationTarget) {
+    mic.stop();
+    if (dictatingRef.current === target) { endDictation(); return; }
+    dictatingRef.current = target;
+    setDictating(target);
+    setHeard("");
+    mic.start();
+  }
 
   const update = (index: number, patch: Partial<ReviewedQuestion>) => setQuestions((list) => list.map((question, position) => (position === index ? { ...question, ...patch } : question)));
   /** Resolves one flagged field (the user picked, typed or accepted it). */
@@ -118,6 +155,20 @@ export function QuestionSetForm({ subjects, initial }: {
   }));
   const accept = (index: number, part: "text" | "onlyOnce" | number) => setQuestions((list) => list.map((question, position) => (position === index ? settle(question, part) : question)));
   const unchecked = reviewCount(questions);
+
+  function insertSpoken(target: DictationTarget, said: string) {
+    if (target === "topic") { setTopicName((value) => joinSpoken(value, withoutDanda(said))); return; }
+    if (target === "paste") { setPasteText((value) => (value.trim() ? `${value.trimEnd()}\n${spokenMcqLine(said)}` : spokenMcqLine(said))); return; }
+    const [, question, option] = /^q(\d+)(?:o(\d+))?$/.exec(target) ?? [];
+    const index = Number(question);
+    setQuestions((list) => list.map((item, position) => {
+      if (position !== index) return item;
+      if (option === undefined) return settle({ ...item, text: joinSpoken(item.text, said.trim()) }, "text");
+      const options = [...item.options] as DraftQuestion["options"];
+      options[Number(option)] = joinSpoken(options[Number(option)], withoutDanda(said));
+      return settle({ ...item, options }, Number(option));
+    }));
+  }
 
   async function readImages(files: FileList | null) {
     const list = Array.from(files ?? []).filter((file) => isAllowedType(file.type));
@@ -195,7 +246,10 @@ export function QuestionSetForm({ subjects, initial }: {
       </label>
       <label className="space-y-1.5 sm:col-span-2">
         <span className="text-xs font-medium text-zinc-600">Topic-এর নাম</span>
-        <input value={topicName} onChange={(event) => setTopicName(event.target.value)} maxLength={160} placeholder="যেমন: সন্ধি বিচ্ছেদ" className={cn(field, "h-11", showErrors && !topicName.trim() && "border-red-400")} />
+        <div className="relative">
+          <input value={topicName} onChange={(event) => setTopicName(event.target.value)} maxLength={160} placeholder="যেমন: সন্ধি বিচ্ছেদ" className={cn(field, "h-11", mic.supported && "pr-11", showErrors && !topicName.trim() && "border-red-400")} />
+          {mic.supported ? <DictateButton active={dictating === "topic"} onClick={() => dictate("topic")} label="Topic" className="absolute right-1.5 top-1.5" /> : null}
+        </div>
       </label>
     </section>
 
@@ -224,8 +278,9 @@ export function QuestionSetForm({ subjects, initial }: {
         {question.review?.onlyOnce ? <div className="mb-2 flex items-center gap-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900"><AlertTriangle className="size-3.5 shrink-0" /><span className="flex-1">এই প্রশ্নটা AI একবারই পেয়েছে — পুরোটা ছবির সাথে মিলিয়ে নাও।</span><button type="button" onClick={() => accept(index, "onlyOnce")} className="flex items-center gap-1 rounded-md px-2 py-1 font-medium hover:bg-white"><Check className="size-3.5" /> মিলিয়েছি</button></div> : null}
         <div className="flex items-start gap-2">
           <span className="mt-2.5 w-6 shrink-0 text-sm font-semibold text-zinc-400 tabular-nums">{index + 1}.</span>
-          <div className="min-w-0 flex-1">
-            <textarea value={question.text} onChange={(event) => setText(index, event.target.value)} rows={2} placeholder="প্রশ্ন লেখো" aria-label={`প্রশ্ন ${index + 1}`} className={cn(field, "min-h-16 resize-y py-2.5 leading-relaxed", question.review?.text && "border-amber-400 ring-2 ring-amber-100")} />
+          <div className="relative min-w-0 flex-1">
+            <textarea value={question.text} onChange={(event) => setText(index, event.target.value)} rows={2} placeholder={mic.supported ? "প্রশ্ন লেখো বা 🎤 চেপে বলো" : "প্রশ্ন লেখো"} aria-label={`প্রশ্ন ${index + 1}`} className={cn(field, "min-h-16 resize-y py-2.5 leading-relaxed", mic.supported && "pr-11", question.review?.text && "border-amber-400 ring-2 ring-amber-100")} />
+            {mic.supported ? <DictateButton active={dictating === `q${index}`} onClick={() => dictate(`q${index}`)} label={`প্রশ্ন ${index + 1}`} className="absolute right-1.5 top-1.5" /> : null}
             {question.review?.text ? <ReviewChips label="প্রশ্ন:" readings={question.review.text} current={question.text} word={question.review.words?.[0]} onPick={(value) => setText(index, value)} onAccept={() => accept(index, "text")} /> : null}
           </div>
           {questions.length > 1 ? <button type="button" onClick={() => setQuestions((list) => list.filter((_, position) => position !== index))} aria-label={`প্রশ্ন ${index + 1} মুছে ফেলো`} className="mt-1 flex size-9 shrink-0 items-center justify-center rounded-lg text-zinc-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="size-4" /></button> : null}
@@ -238,6 +293,7 @@ export function QuestionSetForm({ subjects, initial }: {
                 {correct ? <Check className="size-3.5" strokeWidth={3} /> : OPTION_LETTERS[optionIndex]}
               </button>
               <input value={option} onChange={(event) => setOption(index, optionIndex, event.target.value)} placeholder={`Option ${OPTION_LETTERS[optionIndex]}`} aria-label={`প্রশ্ন ${index + 1}, option ${OPTION_LETTERS[optionIndex]}`} className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-none" />
+              {mic.supported ? <DictateButton active={dictating === `q${index}o${optionIndex}`} onClick={() => dictate(`q${index}o${optionIndex}`)} label={`প্রশ্ন ${index + 1}, option ${OPTION_LETTERS[optionIndex]}`} /> : null}
             </div>;
           })}
         </div>
@@ -262,7 +318,7 @@ export function QuestionSetForm({ subjects, initial }: {
     {/* Save stays in reach while scrolling through many questions. */}
     <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 border-t border-zinc-200 bg-white/90 px-4 py-3 backdrop-blur-xl lg:bottom-0 lg:pl-64">
       <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
-        <p className="text-xs text-zinc-500">{questions.length}টি প্রশ্ন · {problems.filter((problem) => !problem).length}টি সম্পূর্ণ{unchecked ? <span className="font-medium text-amber-700"> · {unchecked} যাচাই বাকি</span> : null}</p>
+        {dictating ? <p role="status" className="flex min-w-0 items-center gap-2 text-xs font-medium text-red-600"><Mic className="size-4 shrink-0 animate-pulse" /><span className="truncate">{heard && heard !== "…" ? heard : "শুনছি… বলো"}</span></p> : <p className="text-xs text-zinc-500">{questions.length}টি প্রশ্ন · {problems.filter((problem) => !problem).length}টি সম্পূর্ণ{unchecked ? <span className="font-medium text-amber-700"> · {unchecked} যাচাই বাকি</span> : null}</p>}
         <button type="button" onClick={() => void save()} disabled={saving} className="h-11 rounded-xl bg-zinc-950 px-5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50">{saving ? "Saving…" : initial ? "সেভ করো" : "Set বানাও"}</button>
       </div>
     </div>
@@ -274,7 +330,11 @@ export function QuestionSetForm({ subjects, initial }: {
           <ScanText className="size-8 shrink-0 text-indigo-600" />
           <span><span className="block text-sm font-semibold text-indigo-950">ছবি বা PDF দাও — AI সব প্রশ্ন বানিয়ে দেবে</span><span className="block text-xs text-indigo-800">বই/গাইডের পাতার ছবি। প্রশ্ন, ৪টা option আর পাতায় চিহ্নিত উত্তর নিজে বসবে; যেখানে AI নিশ্চিত নয় সেটা দেখিয়ে দেবে।</span></span>
         </button>
-        <p className="mb-2 text-xs leading-relaxed text-zinc-500">অথবা লিখে দাও: প্রতিটি প্রশ্নের পর ক) খ) গ) ঘ) option, তারপর “Correct Answer: খ” বা “উত্তর: খ”।</p>
+        <div className="mb-2 flex items-start justify-between gap-2">
+          <p className="text-xs leading-relaxed text-zinc-500">অথবা লিখে দাও: প্রতিটি প্রশ্নের পর ক) খ) গ) ঘ) option, তারপর “Correct Answer: খ” বা “উত্তর: খ”।{mic.supported ? " 🎤 চেপে বলেও লেখা যায় — প্রশ্ন, তারপর “ক ঢাকা”, “খ …”, শেষে “সঠিক উত্তর ক”; প্রতিটি বাক্যের পর আবার 🎤 চাপো।" : ""}</p>
+          {mic.supported ? <DictateButton active={dictating === "paste"} onClick={() => dictate("paste")} label="প্রশ্নগুলো" className="ring-1 ring-zinc-200" /> : null}
+        </div>
+        {dictating === "paste" ? <p role="status" className="mb-2 text-xs font-medium text-red-600">{heard && heard !== "…" ? heard : "শুনছি… বলো"}</p> : null}
         <textarea value={pasteText} onChange={(event) => setPasteText(event.target.value)} rows={12} autoFocus placeholder={"‘পরমেশ’ শব্দটির সঠিক সন্ধি বিচ্ছেদ কোনটি?\nক) পরম + এশ\nখ) পরম + ঈশ\nগ) পরম + ইশ\nঘ) পরম + ঈশা\nCorrect Answer: খ\n\nপরের প্রশ্ন…"} className={cn(field, "py-2.5 font-mono text-[13px] leading-relaxed")} />
         <button type="button" onClick={addPasted} disabled={!pasteText.trim()} className="mt-3 h-11 w-full rounded-xl bg-zinc-950 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50">প্রশ্নগুলো যোগ করো</button>
       </DialogContent>
