@@ -94,7 +94,7 @@ export const sameText = (a: string, b: string) => {
 };
 
 /** How alike two texts are (0–1), for pairing up the questions of two readings. */
-function likeness(a: string, b: string) {
+export function likeness(a: string, b: string) {
   const pairs = (value: string) => { const text = value.replace(/\s+/g, ""); return new Set(Array.from({ length: Math.max(0, text.length - 1) }, (_, index) => text.slice(index, index + 2))); };
   const left = pairs(a), right = pairs(b);
   if (!left.size || !right.size) return 0;
@@ -176,7 +176,7 @@ export function spokenMcqLine(sentence: string) {
   return sentence.trim();
 }
 
-const normalizeForMatch = (value: string) => value.normalize("NFC").toLowerCase().replace(/[\s‌‍]+/g, " ").replace(/[।.?？!,;:'"‘’“”()（）]/g, "").trim();
+export const normalizeForMatch = (value: string) => value.normalize("NFC").toLowerCase().replace(/[\s‌‍]+/g, " ").replace(/[।.?？!,;:'"‘’“”()（）]/g, "").trim();
 
 /** Same wording and the same four options (in any order) → the same key, however it was spaced or punctuated. */
 export function questionKey(question: { text: string; options: string[] }) {

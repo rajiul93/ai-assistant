@@ -27,7 +27,7 @@ const emptyQuestion = (): ReviewedQuestion => ({ text: "", options: ["", "", "",
 
 type Reading = { topic: string | null; questions: ExtractedQuestion[] };
 
-async function readFile(file: File): Promise<string> {
+export async function readFile(file: File): Promise<string> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   let binary = "";
   for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
@@ -67,7 +67,7 @@ async function readPageTwice(file: File): Promise<{ topic: string | null; questi
 }
 
 /** A field the two readings disagreed on: both readings to pick from, or keep what is typed now. */
-function ReviewChips({ label, readings, current, word, onPick, onAccept }: { label: string; readings: string[]; current: string; word?: string; onPick: (value: string) => void; onAccept: () => void }) {
+export function ReviewChips({ label, readings, current, word, onPick, onAccept }: { label: string; readings: string[]; current: string; word?: string; onPick: (value: string) => void; onAccept: () => void }) {
   return <div className="mt-1.5 flex flex-wrap items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900">
     <AlertTriangle className="size-3.5 shrink-0" />
     <span className="font-medium">{label}</span>
@@ -77,7 +77,7 @@ function ReviewChips({ label, readings, current, word, onPick, onAccept }: { lab
   </div>;
 }
 /** A field's mic: tap to say its text, tap again to stop. */
-function DictateButton({ active, onClick, label, className }: { active: boolean; onClick: () => void; label: string; className?: string }) {
+export function DictateButton({ active, onClick, label, className }: { active: boolean; onClick: () => void; label: string; className?: string }) {
   return <button type="button" onClick={onClick} aria-label={active ? "শোনা বন্ধ করো" : `${label} — বলে লেখো`} aria-pressed={active} title={active ? "শোনা বন্ধ করো" : "বলে লেখো"} className={cn("flex size-8 shrink-0 items-center justify-center rounded-lg transition", active ? "animate-pulse bg-red-500 text-white" : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700", className)}>
     {active ? <Square className="size-3.5 fill-current" /> : <Mic className="size-4" />}
   </button>;
