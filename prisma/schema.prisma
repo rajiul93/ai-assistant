@@ -37,6 +37,7 @@ model User {
   testAttempts      TestAttempt[]
   shortQuestionSets ShortQuestionSet[]
   shortTestAttempts ShortTestAttempt[]
+  confusions        Confusion[]
   applications      JobApplication[]
   notes             Note[]
   aiUsage           AiUsage[]
@@ -73,6 +74,7 @@ model Subject {
   notes             Note[]
   questionSets      QuestionSet[]
   shortQuestionSets ShortQuestionSet[]
+  confusions        Confusion[]
   studySessions     StudySession[]
 
   @@unique([userId, name])
@@ -502,4 +504,29 @@ model ShortTestAttempt {
 
   @@index([setId, submittedAt])
   @@index([userId])
+}
+
+enum ConfusionStatus {
+  CONFUSION
+  CLEAR
+}
+
+/// Confusion: a doubt noted down to ask in class, then marked Clear with what was learned.
+model Confusion {
+  id            String          @id @default(cuid())
+  userId        String
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId     String?
+  subject       Subject?        @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  topic         String?
+  text          String
+  /// What made it clear (the teacher's explanation), written when it is marked Clear.
+  clarification String?
+  status        ConfusionStatus @default(CONFUSION)
+  clearedAt     DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([userId, status])
+  @@index([subjectId])
 }
