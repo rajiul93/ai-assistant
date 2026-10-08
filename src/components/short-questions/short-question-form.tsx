@@ -183,13 +183,36 @@ export function ShortQuestionForm({ subjects, initial }: {
     }
   }
 
-  function addPasted() {
-    const { questions: parsed, skipped } = parseShortText(pasteText);
-    if (!parsed.length) { toast.error("কোনো প্রশ্ন চিনতে পারিনি। নিচের উদাহরণের মতো লিখে দেখো।"); return; }
-    setQuestions((list) => [...keepFilled(list), ...parsed]);
+  const [sorting, setSorting] = useState(false);
+
+  /** The page's own parser first (free, instant); text it can't fully follow goes to AI to sort out. */
+  async function addPasted() {
+    const local = parseShortText(pasteText);
+    let added: ReviewedShortQuestion[] = local.questions;
+    let note = local.skipped ? ` · ${local.skipped}টি বোঝা যায়নি (উত্তর নেই)` : "";
+    if (local.skipped || !local.questions.length) {
+      setSorting(true);
+      try {
+        const response = await fetch("/api/short-questions/parse-text", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: pasteText }) });
+        const payload = (await response.json().catch(() => ({}))) as { questions?: ExtractedShortQuestion[]; error?: string };
+        if (!response.ok) throw new Error(payload.error ?? "AI লেখাটা সাজাতে পারল না।");
+        const sorted = payload.questions ?? [];
+        if (sorted.length >= local.questions.length) {
+          added = sorted;
+          const noAnswer = sorted.filter((question) => !question.answer.trim()).length;
+          note = ` · AI সাজিয়েছে${noAnswer ? ` · ${noAnswer}টির উত্তর লেখায় নেই — লিখে দাও` : ""}`;
+        }
+      } catch (error) {
+        if (!local.questions.length) { toast.error(error instanceof Error ? error.message : "কোনো প্রশ্ন চিনতে পারিনি।"); return; }
+      } finally {
+        setSorting(false);
+      }
+    }
+    if (!added.length) { toast.error("কোনো প্রশ্ন চিনতে পারিনি। নিচের উদাহরণের মতো লিখে দেখো।"); return; }
+    setQuestions((list) => [...keepFilled(list), ...added]);
     setPasteOpen(false);
     setPasteText("");
-    toast.success(`${parsed.length}টি প্রশ্ন যোগ হলো${skipped ? ` · ${skipped}টি বোঝা যায়নি (উত্তর নেই)` : ""}`);
+    toast.success(`${added.length}টি প্রশ্ন যোগ হলো${note}`, { duration: 6000 });
   }
 
   return <div className="mx-auto max-w-3xl space-y-4 pb-24">
@@ -280,12 +303,12 @@ export function ShortQuestionForm({ subjects, initial }: {
           <span><span className="block text-sm font-semibold text-indigo-950">ছবি বা PDF দাও — AI সব প্রশ্ন আর উত্তর বসিয়ে দেবে</span><span className="block text-xs text-indigo-800">বই/গাইড/নোটের পাতার ছবি। পাতায় যে উত্তর লেখা আছে সেটাই বসবে; যেখানে AI নিশ্চিত নয় সেটা দেখিয়ে দেবে।</span></span>
         </button>
         <div className="mb-2 flex items-start justify-between gap-2">
-          <p className="text-xs leading-relaxed text-zinc-500">অথবা লিখে দাও: প্রতিটি প্রশ্নের পরের লাইনে “উত্তর: …”।{mic.supported ? " 🎤 চেপে বলেও লেখা যায় — প্রশ্ন বলো, তারপর আবার 🎤 চেপে “উত্তর হলো …”।" : ""}</p>
+          <p className="text-xs leading-relaxed text-zinc-500">অথবা লিখে দাও যেকোনোভাবে — পরের লাইনে “উত্তর: …”, বা “১. প্রশ্ন: উত্তর ২. প্রশ্ন: উত্তর” এক লাইনেই; না বুঝলে AI সাজিয়ে দেবে।{mic.supported ? " 🎤 চেপে বলেও লেখা যায় — প্রশ্ন বলো, তারপর আবার 🎤 চেপে “উত্তর হলো …”।" : ""}</p>
           {mic.supported ? <DictateButton active={dictating === "paste"} onClick={() => dictate("paste")} label="প্রশ্নগুলো" className="ring-1 ring-zinc-200" /> : null}
         </div>
         {dictating === "paste" ? <p role="status" className="mb-2 text-xs font-medium text-red-600">{heard && heard !== "…" ? heard : "শুনছি… বলো"}</p> : null}
         <textarea value={pasteText} onChange={(event) => setPasteText(event.target.value)} rows={12} autoFocus placeholder={"১. বাংলা একাডেমি কবে প্রতিষ্ঠিত হয়?\nউত্তর: ৩ ডিসেম্বর ১৯৫৫\n\n২. ‘অগ্নিবীণা’ কাব্যের রচয়িতা কে?\nউত্তর: কাজী নজরুল ইসলাম"} className={cn(field, "py-2.5 font-mono text-[13px] leading-relaxed")} />
-        <button type="button" onClick={addPasted} disabled={!pasteText.trim()} className="mt-3 h-11 w-full rounded-xl bg-zinc-950 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50">প্রশ্নগুলো যোগ করো</button>
+        <button type="button" onClick={() => void addPasted()} disabled={!pasteText.trim() || sorting} className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-zinc-950 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50">{sorting ? <><Loader2 className="size-4 animate-spin" /> AI লেখাটা সাজাচ্ছে…</> : "প্রশ্নগুলো যোগ করো"}</button>
       </DialogContent>
     </Dialog>
 

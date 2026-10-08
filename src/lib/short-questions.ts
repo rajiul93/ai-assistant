@@ -35,12 +35,44 @@ export const answersMatch = (given: string, answer: string) => Boolean(given.tri
 const ANSWER_START = /^(?:\*\*)?\s*(?:উত্তর|উঃ|উ:|answer|ans)\s*(?:\*\*)?\s*[:：.\-–—)]\s*(?:\*\*)?\s*/i;
 const QUESTION_START = /^(?:\*\*)?\s*(?:(?:প্রশ্ন|প্রঃ|question|q)\s*[\d০-৯]*\s*[:：.)]|[\d০-৯]+\s*[.)।])\s*(?:\*\*)?\s*/i;
 
+const toNumber = (digits: string) => Number(digits.replace(/[০-৯]/g, (digit) => String("০১২৩৪৫৬৭৮৯".indexOf(digit))));
+
 /**
- * Many question–answer pairs pasted as text → questions. Each question is followed by its answer
- * on a line starting "উত্তর:" / "Ans:"; a new numbered line or "প্রশ্ন:" starts the next one.
+ * "১. … ২. … ৩. …" run together on one line → one item per line. Only numbers that count up in
+ * order are taken as item numbers, so a "৩." inside an answer or a year is left alone.
+ */
+function splitNumberedItems(input: string) {
+  const marks = [...input.matchAll(/(^|\s)([\d০-৯]{1,3})\s*[.)।]\s+/g)];
+  let expected: number | null = null;
+  const cuts: number[] = [];
+  for (const mark of marks) {
+    const value = toNumber(mark[2]);
+    if (expected === null || value === expected) {
+      const at = (mark.index ?? 0) + mark[1].length;
+      if (at > 0 && input[at - 1] !== "\n") cuts.push(at);
+      expected = value + 1;
+    }
+  }
+  let output = input;
+  for (const at of cuts.reverse()) output = `${output.slice(0, at).trimEnd()}\n${output.slice(at)}`;
+  return output;
+}
+
+/** "প্রশ্ন: উত্তর" or "প্রশ্ন? উত্তর" with no "উত্তর:" label → the answer is what follows the last colon (or question mark). */
+function splitQuestionAnswer(text: string): DraftShortQuestion | null {
+  const colon = /^(.*\S)\s*[:：]\s*([^:：]*\S)\s*$/.exec(text);
+  if (colon) return { text: colon[1].trim(), answer: colon[2].trim() };
+  const asked = /^(.*[?？])\s*([^?？]*\S)\s*$/.exec(text);
+  return asked ? { text: asked[1].trim(), answer: asked[2].trim() } : null;
+}
+
+/**
+ * Many question–answer pairs pasted as text → questions. Understands
  *
  *   ১. বাংলা একাডেমি কবে প্রতিষ্ঠিত হয়?
  *   উত্তর: ৩ ডিসেম্বর ১৯৫৫
+ *
+ * as well as "প্রশ্ন … উত্তর: …" on one line, and "১. প্রশ্ন: উত্তর ২. প্রশ্ন: উত্তর" run together.
  */
 export function parseShortText(input: string): { questions: DraftShortQuestion[]; skipped: number } {
   const questions: DraftShortQuestion[] = [];
@@ -50,11 +82,13 @@ export function parseShortText(input: string): { questions: DraftShortQuestion[]
     if (!current) return;
     const text = current.text.join(" ").replace(/\*\*/g, "").replace(/\s+/g, " ").trim();
     const answer = (current.answer ?? []).join("\n").replace(/\*\*/g, "").trim();
+    const split = !answer && text ? splitQuestionAnswer(text) : null;
     if (text && answer) questions.push({ text, answer });
+    else if (split) questions.push(split);
     else if (text || answer) skipped++;
     current = null;
   };
-  for (const raw of input.replace(/\r/g, "").split("\n")) {
+  for (const raw of splitNumberedItems(input.replace(/\r/g, "")).split("\n")) {
     const line = raw.trim();
     if (!line) { if (current?.answer?.length) flush(); continue; }
     // "প্রশ্ন … উত্তর: …" on one line.
