@@ -2,10 +2,11 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Check, ClipboardPaste, ImageIcon, Loader2, Mic, Plus, ScanText, Square, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, ClipboardPaste, ImageIcon, Loader2, Mic, Plus, ScanText, Square, Trash2, Underline } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { ImageViewer } from "@/components/image-viewer";
+import { MathText } from "@/components/math-text";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -110,6 +111,7 @@ export function QuestionSetForm({ subjects, initial }: {
   const [viewing, setViewing] = useState<number | null>(null);
   const [confirmUnchecked, setConfirmUnchecked] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const questionBoxes = useRef<Record<number, HTMLTextAreaElement | null>>({});
   // Voice typing: one mic for the whole form, pointed at whichever field's mic was tapped.
   const [dictating, setDictating] = useState<DictationTarget | null>(null);
   const [heard, setHeard] = useState("");
@@ -155,6 +157,19 @@ export function QuestionSetForm({ subjects, initial }: {
   }));
   const accept = (index: number, part: "text" | "onlyOnce" | number) => setQuestions((list) => list.map((question, position) => (position === index ? settle(question, part) : question)));
   const unchecked = reviewCount(questions);
+
+  /** Underlines the selected words of a question (`<u>…</u>`), or removes the underline when they already have one. */
+  function toggleUnderline(index: number) {
+    const box = questionBoxes.current[index];
+    if (!box) return;
+    const { selectionStart: start, selectionEnd: end, value } = box;
+    if (start === end) { toast.info("যে শব্দে দাগ দেবে সেটা আগে select করো।"); return; }
+    const wrapped = value.slice(start - 3, start) === "<u>" && value.slice(end, end + 4) === "</u>";
+    const next = wrapped ? value.slice(0, start - 3) + value.slice(start, end) + value.slice(end + 4) : `${value.slice(0, start)}<u>${value.slice(start, end)}</u>${value.slice(end)}`;
+    setText(index, next);
+    const caret = wrapped ? end - 3 : end + 7;
+    requestAnimationFrame(() => { box.focus(); box.setSelectionRange(caret, caret); });
+  }
 
   function insertSpoken(target: DictationTarget, said: string) {
     if (target === "topic") { setTopicName((value) => joinSpoken(value, withoutDanda(said))); return; }
@@ -279,8 +294,11 @@ export function QuestionSetForm({ subjects, initial }: {
         <div className="flex items-start gap-2">
           <span className="mt-2.5 w-6 shrink-0 text-sm font-semibold text-zinc-400 tabular-nums">{index + 1}.</span>
           <div className="relative min-w-0 flex-1">
-            <textarea value={question.text} onChange={(event) => setText(index, event.target.value)} rows={2} placeholder={mic.supported ? "প্রশ্ন লেখো বা 🎤 চেপে বলো" : "প্রশ্ন লেখো"} aria-label={`প্রশ্ন ${index + 1}`} className={cn(field, "min-h-16 resize-y py-2.5 leading-relaxed", mic.supported && "pr-11", question.review?.text && "border-amber-400 ring-2 ring-amber-100")} />
+            <textarea ref={(box) => { questionBoxes.current[index] = box; }} value={question.text} onChange={(event) => setText(index, event.target.value)} rows={3} placeholder={mic.supported ? "প্রশ্ন লেখো বা 🎤 চেপে বলো" : "প্রশ্ন লেখো"} aria-label={`প্রশ্ন ${index + 1}`} className={cn(field, "min-h-20 resize-y py-2.5 pr-11 leading-relaxed", question.review?.text && "border-amber-400 ring-2 ring-amber-100")} />
             {mic.supported ? <DictateButton active={dictating === `q${index}`} onClick={() => dictate(`q${index}`)} label={`প্রশ্ন ${index + 1}`} className="absolute right-1.5 top-1.5" /> : null}
+            {/* mousedown, not click: keeps the text selection the button acts on. */}
+            <button type="button" onMouseDown={(event) => { event.preventDefault(); toggleUnderline(index); }} aria-label="Select করা শব্দে নিচে দাগ দাও" title="Select করা শব্দে নিচে দাগ (underline)" className={cn("absolute right-1.5 flex size-8 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700", mic.supported ? "top-10" : "top-1.5")}><Underline className="size-4" /></button>
+            {question.text.includes("<u>") ? <p className="mt-1 px-1 text-xs leading-relaxed text-zinc-500">দেখতে: <span className="text-sm text-zinc-800"><MathText text={question.text} /></span></p> : null}
             {question.review?.text ? <ReviewChips label="প্রশ্ন:" readings={question.review.text} current={question.text} word={question.review.words?.[0]} onPick={(value) => setText(index, value)} onAccept={() => accept(index, "text")} /> : null}
           </div>
           {questions.length > 1 ? <button type="button" onClick={() => setQuestions((list) => list.filter((_, position) => position !== index))} aria-label={`প্রশ্ন ${index + 1} মুছে ফেলো`} className="mt-1 flex size-9 shrink-0 items-center justify-center rounded-lg text-zinc-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="size-4" /></button> : null}

@@ -19,6 +19,7 @@ import {
   TrendingUp,
   Keyboard,
   MessageSquareText,
+  CircleHelp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AiLock } from "@/lib/ai-limits";
@@ -38,6 +39,7 @@ const links = [
   { href: "/notes", label: "Notes", short: "Notes", icon: NotebookPen },
   { href: "/preliminary", label: "Preliminary", short: "Preliminary", icon: ClipboardCheck },
   { href: "/short-questions", label: "Short Question", short: "Short Q", icon: MessageSquareText },
+  { href: "/confusions", label: "Confusion", short: "Confusion", icon: CircleHelp },
   { href: "/typing", label: "Typing Lab", short: "Typing", icon: Keyboard },
   { href: "/jobs", label: "Jobs", short: "Jobs", icon: BriefcaseBusiness },
   { href: "/usage", label: "AI Usage", short: "AI Usage", icon: Gauge },
