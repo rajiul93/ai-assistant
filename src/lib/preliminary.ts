@@ -176,7 +176,7 @@ export function spokenMcqLine(sentence: string) {
   return sentence.trim();
 }
 
-export const normalizeForMatch = (value: string) => value.normalize("NFC").toLowerCase().replace(/[\s‌‍]+/g, " ").replace(/[।.?？!,;:'"‘’“”()（）]/g, "").trim();
+export const normalizeForMatch = (value: string) => value.replace(/<\/?u>/g, "").normalize("NFC").toLowerCase().replace(/[\s‌‍]+/g, " ").replace(/[।.?？!,;:'"‘’“”()（）]/g, "").trim();
 
 /** Same wording and the same four options (in any order) → the same key, however it was spaced or punctuated. */
 export function questionKey(question: { text: string; options: string[] }) {
