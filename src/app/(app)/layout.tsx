@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app-shell";
+import { LiveProvider } from "@/components/collaboration/live-provider";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getAiState } from "@/server/ai-access";
@@ -12,5 +13,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     getAiState(user, admin),
     admin ? prisma.payment.count({ where: { status: "PENDING" } }) : 0,
   ]);
-  return <AppShell userName={user.name || user.email} aiLock={ai.lock} admin={admin} superAdmin={role === "SUPER_ADMIN"} pendingPayments={pendingPayments}>{children}</AppShell>;
+  // Live counts (bell, Messages badge) for every signed-in page: socket.io if configured, else polling.
+  return <LiveProvider><AppShell userName={user.name || user.email} aiLock={ai.lock} admin={admin} superAdmin={role === "SUPER_ADMIN"} pendingPayments={pendingPayments}>{children}</AppShell></LiveProvider>;
 }

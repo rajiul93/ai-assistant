@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { APP_TIMEZONE, dayjs } from "@/lib/dayjs";
+import { ShareButton } from "@/components/collaboration/share-button";
 import { cn } from "@/lib/utils";
 import { createNote, deleteNote, generateNoteContent, getNote, listNotes, updateNote } from "@/server/actions/notes";
 import { useAssistantStore } from "@/store/assistant";
@@ -107,6 +108,7 @@ function NoteEditor({ noteId, subjects, topics, onSaved, onDeleted, onBack }: { 
         <button type="button" onClick={() => setAiOpen(!aiOpen)} className={cn("flex h-10 items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition lg:h-8 lg:px-2.5", aiOpen ? "bg-indigo-50 text-indigo-700" : "text-zinc-600 hover:bg-zinc-100")}>
           <Sparkles className="size-4" /> <span className="lg:hidden">AI</span><span className="hidden lg:inline">Write with AI</span>
         </button>
+        <ShareButton type="NOTE" itemId={noteId} title={shownTitle} label={false} className="size-10 justify-center text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 lg:size-8" />
         <button type="button" onClick={() => setConfirmDelete(true)} className="flex size-10 items-center justify-center rounded-lg text-zinc-500 hover:bg-red-50 hover:text-red-700 lg:size-8" aria-label="Delete note"><Trash2 className="size-4" /></button>
       </div>
     </div>

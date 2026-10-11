@@ -19,6 +19,7 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatDate } from "@/lib/dayjs";
 import { statusInfo, statusOrder } from "@/lib/preliminary";
+import { ShareButton } from "@/components/collaboration/share-button";
 import { cn } from "@/lib/utils";
 import { deleteQuestionSet, mergeQuestionSets, setQuestionSetStatus, type listQuestionSets } from "@/server/actions/preliminary";
 import { deleteShortQuestionSet, mergeShortQuestionSets, setShortQuestionSetStatus } from "@/server/actions/short-questions";
@@ -130,6 +131,7 @@ function SetCard({ kind, set, onDelete }: { kind: BoardKind; set: SetRow; onDele
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-0.5">
+        <ShareButton type={kind === "short" ? "SHORT_QUESTION_SET" : "PRELIMINARY_SET"} itemId={set.id} title={set.topicName} label={false} className="size-9 justify-center text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900" />
         {set.status !== "TESTING" ? <Link href={`${base}/${set.id}/edit`} aria-label="Edit" className="flex size-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"><Pencil className="size-4" /></Link> : null}
         <button type="button" onClick={onDelete} aria-label="Delete" className="flex size-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-red-50 hover:text-red-700"><Trash2 className="size-4" /></button>
       </div>

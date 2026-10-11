@@ -1,3 +1,4 @@
+import { RequestsPanel } from "@/components/collaboration/requests-panel";
 import { DashboardView } from "@/components/dashboard/dashboard-view";
 import { now } from "@/lib/dayjs";
 import { dueRevisionCount } from "@/lib/revisions";
@@ -33,6 +34,9 @@ export default async function DashboardPage() {
       : Math.round((counts.completedTasks / counts.totalTasks) * 100);
 
   return (
+    <>
+    {/* Friend requests and shared items waiting for an answer; renders nothing when there are none. */}
+    <div className="mx-auto mb-5 max-w-6xl empty:hidden"><RequestsPanel compact /></div>
     <DashboardView
       longTermDeadline={plan?.longTermDeadline ?? null}
       dateOfBirth={plan?.dateOfBirth ?? null}
@@ -51,5 +55,6 @@ export default async function DashboardPage() {
       firstName={user.name?.split(" ")[0] ?? ""}
       firstTask={firstTask ? { title: firstTask.title, subjectId: firstTask.subjectId ?? "", topicId: firstTask.topicId ?? "", subjectName: firstTask.subject?.name ?? "" } : null}
     />
+    </>
   );
 }
