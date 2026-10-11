@@ -41,6 +41,7 @@ model User {
   verbEntries       VerbEntry[]
   affixEntries      AffixEntry[]
   nounEntries       NounEntry[]
+  vocabLearned      VocabLearned[]
   applications      JobApplication[]
   notes             Note[]
   aiUsage           AiUsage[]
@@ -534,11 +535,12 @@ model Confusion {
   @@index([subjectId])
 }
 
-/// Vocabulary: one verb's forms and its meaning, written by the user.
+/// Vocabulary, shared by everyone: one verb's forms and its meaning. Built-in rows come from
+/// prisma/seed-vocabulary.ts and have no userId; rows an admin adds keep who added them.
 model VerbEntry {
   id             String   @id @default(cuid())
-  userId         String
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   present        String
   past           String
   pastParticiple String
@@ -557,8 +559,8 @@ enum AffixKind {
 /// Vocabulary: a prefix or suffix with its Bangla meaning and an example word, written by the user.
 model AffixEntry {
   id        String    @id @default(cuid())
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
   kind      AffixKind
   affix     String
   meaning   String
@@ -574,13 +576,34 @@ model AffixEntry {
 /// "-" for singular means it is used only in the plural; "-" for plural means it has none.
 model NounEntry {
   id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   singular  String
   plural    String
   meaning   String
+  /// The noun is a person, so its Bangla plural takes "-রা" (শিশুরা) rather than "-গুলো".
+  person    Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+}
+
+enum VocabKind {
+  VERB
+  NOUN
+  AFFIX
+  PERSON
+}
+
+/// A vocabulary row one user has marked as learned. entryId is the VerbEntry/NounEntry/AffixEntry id,
+/// or a fixed key for the Person reference table.
+model VocabLearned {
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      VocabKind
+  entryId   String
+  createdAt DateTime  @default(now())
+
+  @@id([userId, kind, entryId])
 }
