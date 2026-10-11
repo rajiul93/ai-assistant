@@ -38,6 +38,8 @@ model User {
   shortQuestionSets ShortQuestionSet[]
   shortTestAttempts ShortTestAttempt[]
   confusions        Confusion[]
+  verbEntries       VerbEntry[]
+  affixEntries      AffixEntry[]
   applications      JobApplication[]
   notes             Note[]
   aiUsage           AiUsage[]
@@ -529,4 +531,40 @@ model Confusion {
 
   @@index([userId, status])
   @@index([subjectId])
+}
+
+/// Vocabulary: one verb's forms and its meaning, written by the user.
+model VerbEntry {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  present        String
+  past           String
+  pastParticiple String
+  meaning        String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId, present])
+}
+
+enum AffixKind {
+  PREFIX
+  SUFFIX
+}
+
+/// Vocabulary: a prefix or suffix with its Bangla meaning and an example word, written by the user.
+model AffixEntry {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      AffixKind
+  affix     String
+  meaning   String
+  /// An example word and its meaning, e.g. "unhappy — অসুখী".
+  example   String    @default("")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId, kind])
 }
