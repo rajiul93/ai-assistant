@@ -40,6 +40,7 @@ model User {
   confusions        Confusion[]
   verbEntries       VerbEntry[]
   affixEntries      AffixEntry[]
+  nounEntries       NounEntry[]
   applications      JobApplication[]
   notes             Note[]
   aiUsage           AiUsage[]
@@ -567,4 +568,19 @@ model AffixEntry {
   updatedAt DateTime  @updatedAt
 
   @@index([userId, kind])
+}
+
+/// Vocabulary: a noun's singular and plural with its Bangla meaning, written by the user.
+/// "-" for singular means it is used only in the plural; "-" for plural means it has none.
+model NounEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  singular  String
+  plural    String
+  meaning   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
