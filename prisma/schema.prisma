@@ -27,26 +27,38 @@ model User {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
-  studyPlan         StudyPlan?
-  subjects          Subject[]
-  topics            Topic[]
-  tasks             Task[]
-  studySessions     StudySession[]
-  planStarts        DailyPlanStart[]
-  questionSets      QuestionSet[]
-  testAttempts      TestAttempt[]
-  shortQuestionSets ShortQuestionSet[]
-  shortTestAttempts ShortTestAttempt[]
-  confusions        Confusion[]
-  verbEntries       VerbEntry[]
-  affixEntries      AffixEntry[]
-  nounEntries       NounEntry[]
-  vocabLearned      VocabLearned[]
-  applications      JobApplication[]
-  notes             Note[]
-  aiUsage           AiUsage[]
-  payments          Payment[]
-  entitlements      Entitlement[]
+  studyPlan              StudyPlan?
+  subjects               Subject[]
+  topics                 Topic[]
+  tasks                  Task[]
+  studySessions          StudySession[]
+  planStarts             DailyPlanStart[]
+  questionSets           QuestionSet[]
+  testAttempts           TestAttempt[]
+  shortQuestionSets      ShortQuestionSet[]
+  shortTestAttempts      ShortTestAttempt[]
+  confusions             Confusion[]
+  verbEntries            VerbEntry[]
+  affixEntries           AffixEntry[]
+  nounEntries            NounEntry[]
+  vocabLearned           VocabLearned[]
+  // Collaboration (docs/collaboration-plan.md)
+  friendRequestsSent     FriendRequest[]    @relation("FriendRequestFrom")
+  friendRequestsReceived FriendRequest[]    @relation("FriendRequestTo")
+  friendshipsA           Friendship[]       @relation("FriendshipA")
+  friendshipsB           Friendship[]       @relation("FriendshipB")
+  sharesSent             ShareRequest[]     @relation("ShareSender")
+  sharesReceived         ShareRequest[]     @relation("ShareRecipient")
+  notifications          Notification[]     @relation("NotificationUser")
+  notificationsCaused    Notification[]     @relation("NotificationActor")
+  conversationsA         Conversation[]     @relation("ConversationA")
+  conversationsB         Conversation[]     @relation("ConversationB")
+  messagesSent           Message[]
+  applications           JobApplication[]
+  notes                  Note[]
+  aiUsage                AiUsage[]
+  payments               Payment[]
+  entitlements           Entitlement[]
 }
 
 model StudyPlan {
@@ -606,4 +618,138 @@ model VocabLearned {
   createdAt DateTime  @default(now())
 
   @@id([userId, kind, entryId])
+}
+
+/**
+ * ---------- Collaboration: friends, sharing, notifications, chat (docs/collaboration-plan.md) ----------
+ */
+
+enum RequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+enum ShareItemType {
+  NOTE
+  TASK
+  PRELIMINARY_SET
+  SHORT_QUESTION_SET
+}
+
+enum NotificationType {
+  FRIEND_REQUEST
+  FRIEND_ACCEPTED
+  FRIEND_REJECTED
+  SHARE_REQUEST
+  SHARE_ACCEPTED
+  SHARE_REJECTED
+}
+
+/// A friend request. History is kept; the migration adds a partial unique index so only one
+/// PENDING request exists per unordered pair of users.
+model FriendRequest {
+  id          String        @id @default(cuid())
+  fromId      String
+  from        User          @relation("FriendRequestFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  toId        String
+  to          User          @relation("FriendRequestTo", fields: [toId], references: [id], onDelete: Cascade)
+  status      RequestStatus @default(PENDING)
+  createdAt   DateTime      @default(now())
+  respondedAt DateTime?
+
+  notifications Notification[]
+
+  @@index([toId, status])
+  @@index([fromId, status])
+}
+
+/// Two users who are friends, stored once per pair with userAId < userBId (a CHECK in the migration).
+/// Friendship is what allows sharing and chatting.
+model Friendship {
+  userAId   String
+  userA     User     @relation("FriendshipA", fields: [userAId], references: [id], onDelete: Cascade)
+  userBId   String
+  userB     User     @relation("FriendshipB", fields: [userBId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userAId, userBId])
+  @@index([userBId])
+}
+
+/// One item offered to a friend. `payload` is a copy of the item frozen at send time (the original
+/// may change or be deleted later); accepting creates the recipient's own item from it exactly once
+/// and records it in `createdItemId`. A partial unique index stops duplicate PENDING shares.
+model ShareRequest {
+  id            String        @id @default(cuid())
+  senderId      String
+  sender        User          @relation("ShareSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipientId   String
+  recipient     User          @relation("ShareRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  itemType      ShareItemType
+  /// The sender's item at send time. No foreign key: it may be deleted later.
+  sourceItemId  String
+  title         String
+  payload       Json
+  status        RequestStatus @default(PENDING)
+  createdItemId String?
+  createdAt     DateTime      @default(now())
+  respondedAt   DateTime?
+
+  notifications Notification[]
+
+  @@index([recipientId, status])
+  @@index([senderId, status])
+}
+
+/// Something a user should know about (friend and share events). Chat messages are not notified
+/// row by row; unread chat counts come from Message and Conversation.*LastReadAt.
+model Notification {
+  id              String           @id @default(cuid())
+  userId          String
+  user            User             @relation("NotificationUser", fields: [userId], references: [id], onDelete: Cascade)
+  type            NotificationType
+  actorId         String?
+  actor           User?            @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  friendRequestId String?
+  friendRequest   FriendRequest?   @relation(fields: [friendRequestId], references: [id], onDelete: SetNull)
+  shareRequestId  String?
+  shareRequest    ShareRequest?    @relation(fields: [shareRequestId], references: [id], onDelete: SetNull)
+  readAt          DateTime?
+  createdAt       DateTime         @default(now())
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+}
+
+/// A one-to-one chat, one per pair with userAId < userBId (a CHECK in the migration). Each side's
+/// last-read time gives its unread count. Kept after unfriending (read-only then).
+model Conversation {
+  id              String    @id @default(cuid())
+  userAId         String
+  userA           User      @relation("ConversationA", fields: [userAId], references: [id], onDelete: Cascade)
+  userBId         String
+  userB           User      @relation("ConversationB", fields: [userBId], references: [id], onDelete: Cascade)
+  userALastReadAt DateTime?
+  userBLastReadAt DateTime?
+  lastMessageAt   DateTime?
+  createdAt       DateTime  @default(now())
+  messages        Message[]
+
+  @@unique([userAId, userBId])
+  @@index([userBId])
+}
+
+/// A chat message: plain text only, always rendered as text (never HTML).
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  body           String
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
 }

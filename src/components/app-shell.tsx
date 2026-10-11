@@ -21,8 +21,11 @@ import {
   MessageSquareText,
   CircleHelp,
   Languages,
+  MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLive } from "@/components/collaboration/live-provider";
+import { NotificationBell } from "@/components/collaboration/notification-bell";
 import type { AiLock } from "@/lib/ai-limits";
 import { SignOutButton } from "@/components/sign-out-button";
 import { StudyAssistant } from "@/components/study-assistant";
@@ -43,6 +46,7 @@ const links = [
   { href: "/confusions", label: "Confusion", short: "Confusion", icon: CircleHelp },
   { href: "/vocabulary", label: "Vocabulary", short: "Vocabulary", icon: Languages },
   { href: "/typing", label: "Typing Lab", short: "Typing", icon: Keyboard },
+  { href: "/messages", label: "Messages", short: "Messages", icon: MessageCircle },
   { href: "/jobs", label: "Jobs", short: "Jobs", icon: BriefcaseBusiness },
   { href: "/usage", label: "AI Usage", short: "AI Usage", icon: Gauge },
   { href: "/billing", label: "Plans", short: "Plans", icon: CreditCard },
@@ -76,7 +80,8 @@ export function AppShell({
   const adminLinks = [...(admin ? [billingAdminLink] : []), ...(superAdmin ? [rolesLink] : [])];
   const sideLinks = [...links, ...adminLinks];
   const moreLinks = [...baseMoreLinks, ...adminLinks];
-  const badge = (href: string) => (href === billingAdminLink.href ? pendingPayments : 0);
+  const { counts } = useLive();
+  const badge = (href: string) => (href === billingAdminLink.href ? pendingPayments : href === "/messages" ? counts.messagesUnread : 0);
   const [moreOpen, setMoreOpen] = useState(false);
   // A page's own sub-pages (e.g. /preliminary/new) keep its link highlighted.
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
@@ -85,9 +90,12 @@ export function AppShell({
   return (
     <div className="min-h-full bg-zinc-50">
       <aside className="fixed inset-y-0 left-0 hidden w-60 border-r border-zinc-200 bg-white lg:flex lg:flex-col">
-        <div className="px-6 py-6">
-          <Link href="/dashboard" className="text-lg font-semibold tracking-tight">Prep</Link>
-          <p className="mt-1 text-sm text-zinc-500">Job preparation</p>
+        <div className="flex items-start justify-between px-6 py-6">
+          <div>
+            <Link href="/dashboard" className="text-lg font-semibold tracking-tight">Prep</Link>
+            <p className="mt-1 text-sm text-zinc-500">Job preparation</p>
+          </div>
+          <NotificationBell className="-mr-2" />
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto px-3">
           {sideLinks.map((link) => {
@@ -119,6 +127,7 @@ export function AppShell({
         {/* Phone header. Voice lives in the assistant's message box. */}
         <header className="sticky top-0 z-30 flex h-[calc(3.5rem+env(safe-area-inset-top))] items-end border-b border-zinc-200 bg-white/90 px-4 pb-3 pt-[env(safe-area-inset-top)] backdrop-blur-xl lg:hidden">
           <Link href="/dashboard" className="text-lg font-semibold tracking-tight">Prep</Link>
+          <NotificationBell className="-mb-1 ml-auto" />
         </header>
         <StudyAssistant aiLock={aiLock} />
         <TimerAlarm />
@@ -152,7 +161,11 @@ export function AppShell({
               aria-haspopup="dialog"
               className={cn("flex min-h-14 flex-col items-center justify-center gap-1 text-[11px] font-medium transition active:scale-95", moreActive ? "text-zinc-950" : "text-zinc-500")}
             >
-              <Menu className="size-5" />
+              <span className="relative">
+                <Menu className="size-5" />
+                {/* Unread chats live under "More" on phones. */}
+                {counts.messagesUnread ? <span className="absolute -right-1.5 -top-1 size-2.5 rounded-full bg-rose-500 ring-2 ring-white" /> : null}
+              </span>
               More
             </button>
           </div>
@@ -175,7 +188,10 @@ export function AppShell({
                       active ? "border-zinc-950 bg-zinc-950 text-white" : "border-zinc-200 text-zinc-700",
                     )}
                   >
-                    <Icon className="size-5" />
+                    <span className="relative">
+                      <Icon className="size-5" />
+                      {badge(link.href) > 0 ? <span className="absolute -right-2.5 -top-1.5 rounded-full bg-rose-500 px-1 text-[10px] font-semibold text-white">{badge(link.href)}</span> : null}
+                    </span>
                     {link.label}
                   </Link>
                 );

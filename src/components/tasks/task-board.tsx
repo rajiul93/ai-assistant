@@ -6,7 +6,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { TaskStatus } from "@prisma/client";
-import { ArrowUpDown, Check, Clock, FileText, ListTodo, MoreHorizontal, Pencil, Play, Plus, RefreshCcw, Search, Trash2 } from "lucide-react";
+import { ArrowUpDown, Check, Clock, FileText, ListTodo, MoreHorizontal, Pencil, Play, Plus, RefreshCcw, Search, Share2, Trash2 } from "lucide-react";
+import { ShareDialog } from "@/components/collaboration/share-button";
 import { RevisionManager } from "@/components/revisions/revision-manager";
 import { dueRevisionCount } from "@/lib/revisions";
 import { htmlToPlainText, isRichHtml, toEditorHtml } from "@/lib/note-html";
@@ -97,6 +98,7 @@ function TaskCard({ task, todayStart, now, timerRunning, onStart, onStatus, onEd
   onDelete: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const finished = task.status === "FINISHED";
   const description = task.description ? (isRichHtml(task.description) ? htmlToPlainText(task.description) : task.description).trim() : "";
@@ -155,9 +157,11 @@ function TaskCard({ task, todayStart, now, timerRunning, onStart, onStatus, onEd
               </button>)}
               <div className="my-1 border-t border-zinc-100" />
               <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onEdit(); }} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-zinc-50"><Pencil className="size-4" /> Edit</button>
+              <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setShareOpen(true); }} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-zinc-50"><Share2 className="size-4" /> Share</button>
               <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onDelete(); }} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-red-600 hover:bg-red-50"><Trash2 className="size-4" /> Delete</button>
             </div>
           </> : null}
+          {shareOpen ? <ShareDialog type="TASK" itemId={task.id} title={task.title} onClose={() => setShareOpen(false)} /> : null}
         </div>
       </div>
     </div>
