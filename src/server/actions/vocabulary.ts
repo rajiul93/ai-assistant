@@ -4,15 +4,15 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { bareAffix, commonAffixes } from "@/lib/vocabulary/common-affixes";
-import { commonNouns, nounKey } from "@/lib/vocabulary/common-nouns";
-import { commonVerbs } from "@/lib/vocabulary/common-verbs";
+import { bareAffix } from "@/lib/vocabulary/affixes";
+import { namesAPerson, nounKey } from "@/lib/vocabulary/nouns";
 import { isAdminUser } from "@/server/roles";
 
 /**
- * Vocabulary: shared tables of verbs, nouns (singular/plural) and prefixes/suffixes. Everyone sees
- * the built-in lists plus what admins have added; only admins (and the super admin) can add, edit
- * or delete. A word already in a table — built in or added — can't be added again.
+ * Vocabulary: shared tables of verbs, nouns (singular/plural) and prefixes/suffixes, all in the
+ * database — the built-in rows are loaded by prisma/seed-vocabulary.ts (no userId), admins add the
+ * rest. Everyone reads them and marks rows learned for themselves; only admins (and the super admin)
+ * add, edit or delete, and a word already in a table can't be added again.
  */
 
 /** The signed-in user, if they may change the vocabulary tables. */
@@ -33,9 +33,8 @@ const verbSchema = z.object({
   meaning: z.string().trim().min(1, "অর্থ লেখো").max(300),
 });
 
-/** The same verb (any capitalisation) in the built-in list or already added, other than the one being edited. */
+/** The same verb (any capitalisation) already in the table, other than the one being edited. */
 async function verbExists(present: string, exceptId?: string) {
-  if (commonVerbs.some((verb) => verb.present.toLowerCase() === present.toLowerCase())) return true;
   return Boolean(await prisma.verbEntry.findFirst({ where: { present: { equals: present, mode: "insensitive" }, ...(exceptId ? { id: { not: exceptId } } : {}) }, select: { id: true } }));
 }
 
@@ -43,7 +42,7 @@ export async function listVerbs() {
   await requireUser();
   return prisma.verbEntry.findMany({
     orderBy: { present: "asc" },
-    select: { id: true, present: true, past: true, pastParticiple: true, meaning: true },
+    select: { id: true, present: true, past: true, pastParticiple: true, meaning: true, userId: true },
   });
 }
 
@@ -65,7 +64,7 @@ export async function updateVerb(id: string, input: unknown) {
 
 export async function deleteVerb(id: string) {
   await requireEditor();
-  await prisma.verbEntry.delete({ where: { id } });
+  await prisma.$transaction([prisma.vocabLearned.deleteMany({ where: { kind: "VERB", entryId: id } }), prisma.verbEntry.delete({ where: { id } })]);
   revalidatePath("/vocabulary");
 }
 
@@ -78,9 +77,8 @@ const affixSchema = z.object({
   example: z.string().trim().max(300),
 });
 
-/** The same prefix/suffix (ignoring case and its dashes) built in or already added, other than the one being edited. */
+/** The same prefix/suffix (ignoring case and its dashes) already in the table, other than the one being edited. */
 async function affixExists(kind: "PREFIX" | "SUFFIX", affix: string, exceptId?: string) {
-  if (commonAffixes.some((entry) => entry.kind === kind && bareAffix(entry.affix) === bareAffix(affix))) return true;
   const rows = await prisma.affixEntry.findMany({ where: { kind, ...(exceptId ? { id: { not: exceptId } } : {}) }, select: { affix: true } });
   return rows.some((row) => bareAffix(row.affix) === bareAffix(affix));
 }
@@ -89,7 +87,7 @@ export async function listAffixes() {
   await requireUser();
   return prisma.affixEntry.findMany({
     orderBy: [{ kind: "asc" }, { affix: "asc" }],
-    select: { id: true, kind: true, affix: true, meaning: true, example: true },
+    select: { id: true, kind: true, affix: true, meaning: true, example: true, userId: true },
   });
 }
 
@@ -111,7 +109,7 @@ export async function updateAffix(id: string, input: unknown) {
 
 export async function deleteAffix(id: string) {
   await requireEditor();
-  await prisma.affixEntry.delete({ where: { id } });
+  await prisma.$transaction([prisma.vocabLearned.deleteMany({ where: { kind: "AFFIX", entryId: id } }), prisma.affixEntry.delete({ where: { id } })]);
   revalidatePath("/vocabulary");
 }
 
@@ -124,23 +122,22 @@ const nounSchema = z.object({
   meaning: z.string().trim().min(1, "অর্থ লেখো").max(300),
 }).refine((noun) => noun.singular !== "-" || noun.plural !== "-", "Singular আর Plural দুটোই ফাঁকা হতে পারে না।");
 
-/** The same noun built in or already added, other than the one being edited. */
+/** The same noun already in the table, other than the one being edited. */
 async function nounExists(noun: { singular: string; plural: string }, exceptId?: string) {
-  if (commonNouns.some((entry) => nounKey(entry) === nounKey(noun))) return true;
   const rows = await prisma.nounEntry.findMany({ where: exceptId ? { id: { not: exceptId } } : {}, select: { singular: true, plural: true } });
   return rows.some((row) => nounKey(row) === nounKey(noun));
 }
 
 export async function listNouns() {
   await requireUser();
-  return prisma.nounEntry.findMany({ orderBy: { singular: "asc" }, select: { id: true, singular: true, plural: true, meaning: true } });
+  return prisma.nounEntry.findMany({ orderBy: { singular: "asc" }, select: { id: true, singular: true, plural: true, meaning: true, person: true, userId: true } });
 }
 
 export async function createNoun(input: unknown) {
   const user = await requireEditor();
   const data = nounSchema.parse(input);
   if (await nounExists(data)) throw alreadyThere(nounKey(data));
-  await prisma.nounEntry.create({ data: { userId: user.id, ...data } });
+  await prisma.nounEntry.create({ data: { userId: user.id, ...data, person: namesAPerson(data.meaning) } });
   revalidatePath("/vocabulary");
 }
 
@@ -148,12 +145,32 @@ export async function updateNoun(id: string, input: unknown) {
   await requireEditor();
   const data = nounSchema.parse(input);
   if (await nounExists(data, id)) throw alreadyThere(nounKey(data));
-  await prisma.nounEntry.update({ where: { id }, data });
+  await prisma.nounEntry.update({ where: { id }, data: { ...data, person: namesAPerson(data.meaning) } });
   revalidatePath("/vocabulary");
 }
 
 export async function deleteNoun(id: string) {
   await requireEditor();
-  await prisma.nounEntry.delete({ where: { id } });
+  await prisma.$transaction([prisma.vocabLearned.deleteMany({ where: { kind: "NOUN", entryId: id } }), prisma.nounEntry.delete({ where: { id } })]);
   revalidatePath("/vocabulary");
+}
+
+/* ---------- What each user has learned ---------- */
+
+const learnedSchema = z.object({ kind: z.enum(["VERB", "NOUN", "AFFIX", "PERSON"]), entryId: z.string().min(1).max(120), learned: z.boolean() });
+
+/** The rows this user has ticked, as "KIND:id" keys. */
+export async function listLearned() {
+  const user = await requireUser();
+  const rows = await prisma.vocabLearned.findMany({ where: { userId: user.id }, select: { kind: true, entryId: true } });
+  return rows.map((row) => `${row.kind}:${row.entryId}`);
+}
+
+/** Ticks (or unticks) one row for the signed-in user only. */
+export async function setLearned(input: unknown) {
+  const user = await requireUser();
+  const { kind, entryId, learned } = learnedSchema.parse(input);
+  const key = { userId_kind_entryId: { userId: user.id, kind, entryId } };
+  if (learned) await prisma.vocabLearned.upsert({ where: key, create: { userId: user.id, kind, entryId }, update: {} });
+  else await prisma.vocabLearned.deleteMany({ where: { userId: user.id, kind, entryId } });
 }
