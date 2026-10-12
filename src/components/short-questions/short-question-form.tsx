@@ -30,6 +30,8 @@ import {
   type ReviewedShortQuestion,
 } from "@/lib/short-questions";
 import { useBestMic } from "@/lib/use-best-mic";
+import { TopicSelect } from "@/components/subject-topic-filter";
+import type { TopicNode } from "@/lib/subject-filter";
 import { cn } from "@/lib/utils";
 import { createShortQuestionSet, updateShortQuestionSet } from "@/server/actions/short-questions";
 
@@ -71,12 +73,14 @@ const withoutDanda = (said: string) => said.trim().replace(/[।.]$/, "");
 const field = "w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none transition focus:border-zinc-400";
 
 /** Create or edit a short-question set: subject, date, topic and question–answer pairs. */
-export function ShortQuestionForm({ subjects, initial }: {
+export function ShortQuestionForm({ subjects, topics = [], initial }: {
   subjects: Array<{ id: string; name: string }>;
-  initial?: { id: string; subjectId: string | null; date: string; topicName: string; questions: DraftShortQuestion[] };
+  topics?: TopicNode[];
+  initial?: { id: string; subjectId: string | null; topicId?: string | null; date: string; topicName: string; questions: DraftShortQuestion[] };
 }) {
   const router = useRouter();
   const [subjectId, setSubjectId] = useState(initial?.subjectId ?? "");
+  const [topicId, setTopicId] = useState(initial?.topicId ?? "");
   const [date, setDate] = useState(initial?.date ?? new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Dhaka" }));
   const [topicName, setTopicName] = useState(initial?.topicName ?? "");
   const [questions, setQuestions] = useState<ReviewedShortQuestion[]>(initial?.questions.length ? initial.questions : [emptyQuestion()]);
@@ -172,7 +176,7 @@ export function ShortQuestionForm({ subjects, initial }: {
     if (unchecked && !force) { setConfirmUnchecked(true); return; }
     setSaving(true);
     try {
-      const payload = { subjectId, date, topicName, questions: questions.map(({ text, answer }) => ({ text, answer })) };
+      const payload = { subjectId, topicId: topicId || null, date, topicName, questions: questions.map(({ text, answer }) => ({ text, answer })) };
       if (initial) { await updateShortQuestionSet(initial.id, payload); toast.success("Set সেভ হলো"); router.push("/short-questions"); }
       else { await createShortQuestionSet(payload); toast.success("Set বানানো হলো — Todo-তে আছে"); router.push("/short-questions?status=todo"); }
       router.refresh();
@@ -222,18 +226,22 @@ export function ShortQuestionForm({ subjects, initial }: {
     <section className="grid gap-3 rounded-2xl border border-zinc-200 bg-white p-4 sm:grid-cols-2">
       <label className="space-y-1.5">
         <span className="text-xs font-medium text-zinc-600">Subject</span>
-        <select value={subjectId} onChange={(event) => setSubjectId(event.target.value)} className={cn(field, "h-11", showErrors && !subjectId && "border-red-400")}>
+        <select value={subjectId} onChange={(event) => { setSubjectId(event.target.value); setTopicId(""); }} className={cn(field, "h-11", showErrors && !subjectId && "border-red-400")}>
           <option value="">বেছে নাও…</option>
           {subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
         </select>
         {!subjects.length ? <p className="text-xs text-amber-700">আগে <Link href="/subjects" className="underline">Subjects</Link> পাতায় একটা subject যোগ করো।</p> : null}
       </label>
       <label className="space-y-1.5">
+        <span className="text-xs font-medium text-zinc-600">Topic <span className="font-normal text-zinc-400">(subject-এর ভেতরে কোথায় থাকবে)</span></span>
+        <TopicSelect subjectId={subjectId} topics={topics} value={topicId} onChange={setTopicId} className={cn(field, "h-11 disabled:bg-zinc-50 disabled:text-zinc-400")} />
+      </label>
+      <label className="space-y-1.5">
         <span className="text-xs font-medium text-zinc-600">তারিখ</span>
         <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className={cn(field, "h-11", showErrors && !date && "border-red-400")} />
       </label>
-      <label className="space-y-1.5 sm:col-span-2">
-        <span className="text-xs font-medium text-zinc-600">Topic-এর নাম</span>
+      <label className="space-y-1.5">
+        <span className="text-xs font-medium text-zinc-600">Set-এর নাম</span>
         <div className="relative">
           <input value={topicName} onChange={(event) => setTopicName(event.target.value)} maxLength={160} placeholder="যেমন: বাংলা সাহিত্য — গুরুত্বপূর্ণ তথ্য" className={cn(field, "h-11", mic.supported && "pr-11", showErrors && !topicName.trim() && "border-red-400")} />
           {mic.supported ? <DictateButton active={dictating === "topic"} onClick={() => dictate("topic")} label="Topic" className="absolute right-1.5 top-1.5" /> : null}
