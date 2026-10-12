@@ -20,6 +20,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { formatDate } from "@/lib/dayjs";
 import { statusInfo, statusOrder } from "@/lib/preliminary";
 import { ShareButton } from "@/components/collaboration/share-button";
+import { SubjectTopicFilter, useSubjectTopicFilter } from "@/components/subject-topic-filter";
+import { topicPath, type TopicNode } from "@/lib/subject-filter";
 import { cn } from "@/lib/utils";
 import { deleteQuestionSet, mergeQuestionSets, setQuestionSetStatus, type listQuestionSets } from "@/server/actions/preliminary";
 import { deleteShortQuestionSet, mergeShortQuestionSets, setShortQuestionSetStatus } from "@/server/actions/short-questions";
@@ -36,12 +38,12 @@ const kinds = {
 const percent = (correct: number, total: number) => (total ? Math.round((correct / total) * 100) : 0);
 
 /** A card in "Set মেলাও" mode: the whole card toggles it; the number is its place in the merged set. */
-function SelectableCard({ set, order, onToggle }: { set: SetRow; order: number; onToggle: () => void }) {
+function SelectableCard({ set, place, order, onToggle }: { set: SetRow; place: string; order: number; onToggle: () => void }) {
   const selected = order > 0;
   return <button type="button" onClick={onToggle} aria-pressed={selected} className={cn("flex w-full items-start gap-3 rounded-2xl border bg-white p-4 text-left transition", selected ? "border-indigo-400 ring-2 ring-indigo-100" : "border-zinc-200 hover:border-zinc-300")}>
     <span className={cn("mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ring-1", selected ? "bg-indigo-600 text-white ring-indigo-600" : "bg-white text-transparent ring-zinc-300")}>{selected ? order : <Check className="size-3.5" />}</span>
     <span className="min-w-0">
-      <span className="block truncate text-xs font-medium text-indigo-600">{set.subject?.name ?? "Subject নেই"}</span>
+      <span className="block truncate text-xs font-medium text-indigo-600">{place}</span>
       <span className="mt-0.5 block text-base font-semibold leading-snug"><MathText text={set.topicName} /></span>
       <span className="mt-1 flex flex-wrap items-center gap-x-3 text-xs text-zinc-500">
         <span className="flex items-center gap-1"><CalendarDays className="size-3.5" />{formatDate(set.date)}</span>
@@ -108,7 +110,7 @@ function MergeDialog({ kind, picked, subjects, onClose, onDone }: { kind: BoardK
   </Dialog>;
 }
 
-function SetCard({ kind, set, onDelete }: { kind: BoardKind; set: SetRow; onDelete: () => void }) {
+function SetCard({ kind, set, place, onDelete }: { kind: BoardKind; set: SetRow; place: string; onDelete: () => void }) {
   const base = kinds[kind].base;
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -122,7 +124,7 @@ function SetCard({ kind, set, onDelete }: { kind: BoardKind; set: SetRow; onDele
   return <article className="rounded-2xl border border-zinc-200 bg-white p-4">
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
-        <p className="truncate text-xs font-medium text-indigo-600">{set.subject?.name ?? "Subject নেই"}</p>
+        <p className="truncate text-xs font-medium text-indigo-600">{place}</p>
         <h2 className="mt-0.5 text-base font-semibold leading-snug"><MathText text={set.topicName} /></h2>
         <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-zinc-500">
           <span className="flex items-center gap-1"><CalendarDays className="size-3.5" />{formatDate(set.date)}</span>
@@ -162,7 +164,7 @@ function SetCard({ kind, set, onDelete }: { kind: BoardKind; set: SetRow; onDele
 }
 
 /** Question sets in four columns of work — Todo, Doing (study), Testing (exam), Done. */
-export function PreliminaryBoard({ kind = "mcq", sets, subjects }: { kind?: BoardKind; sets: SetRow[]; subjects: Array<{ id: string; name: string }> }) {
+export function PreliminaryBoard({ kind = "mcq", sets, subjects, topics = [] }: { kind?: BoardKind; sets: SetRow[]; subjects: Array<{ id: string; name: string }>; topics?: TopicNode[] }) {
   const { base, title, blurb, remove } = kinds[kind];
   const router = useRouter();
   const pathname = usePathname();
@@ -177,8 +179,25 @@ export function PreliminaryBoard({ kind = "mcq", sets, subjects }: { kind?: Boar
   const pickedSets = picked.map((id) => sets.find((set) => set.id === id)).filter((set) => set !== undefined);
   const togglePick = (id: string) => setPicked((list) => (list.includes(id) ? list.filter((item) => item !== id) : [...list, id]));
   const stopSelecting = () => { setSelecting(false); setPicked([]); setMerging(false); };
-  const counts = Object.fromEntries(statusOrder.map((status) => [status, sets.filter((set) => set.status === status).length])) as Record<QuestionSetStatus, number>;
-  const visible = sets.filter((set) => set.status === active);
+  // Sets are filed under the user's subject → topic tree; the status tabs count only what the filter shows.
+  const filter = useSubjectTopicFilter(subjects, topics);
+  const inScope = sets.filter((set) => filter.matches(set));
+  const counts = Object.fromEntries(statusOrder.map((status) => [status, inScope.filter((set) => set.status === status).length])) as Record<QuestionSetStatus, number>;
+  const visible = inScope.filter((set) => set.status === active);
+  const topicById = new Map(topics.map((topic) => [topic.id, topic]));
+  const subjectNames = new Map(subjects.map((subject) => [subject.id, subject.name]));
+  /** "Subject › Topic" for a card; "Other" when it has no (existing) subject. */
+  const placeOf = (set: SetRow) => {
+    const subject = set.subjectId ? subjectNames.get(set.subjectId) : undefined;
+    if (!subject) return "Other";
+    const topic = set.topicId ? topicById.get(set.topicId) : undefined;
+    return topic ? `${subject} › ${topicPath(topic, topics)}` : subject;
+  };
+  const statusHref = (status: QuestionSetStatus) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("status", status.toLowerCase());
+    return `${pathname}?${params}`;
+  };
 
   return <div className="mx-auto max-w-3xl space-y-4">
     <div className="flex items-end justify-between gap-3">
@@ -192,13 +211,15 @@ export function PreliminaryBoard({ kind = "mcq", sets, subjects }: { kind?: Boar
       </div>
     </div>
 
+    <SubjectTopicFilter subjects={subjects} topics={topics} items={sets} selection={filter.selection} onSelect={filter.select} matches={filter.matches} />
+
     <div role="tablist" aria-label="Status" className="grid grid-cols-4 gap-1 rounded-2xl bg-zinc-100 p-1">
       {statusOrder.map((status) => <button
         key={status}
         type="button"
         role="tab"
         aria-selected={active === status}
-        onClick={() => router.replace(`${pathname}?status=${status.toLowerCase()}`, { scroll: false })}
+        onClick={() => router.replace(statusHref(status), { scroll: false })}
         className={cn("flex h-10 items-center justify-center gap-1.5 rounded-xl text-sm font-medium transition", active === status ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-500 hover:text-zinc-800")}
       >
         <span className={cn("hidden size-2 rounded-full sm:inline-block", statusInfo[status].dot)} aria-hidden />
@@ -210,8 +231,8 @@ export function PreliminaryBoard({ kind = "mcq", sets, subjects }: { kind?: Boar
       : <p className={cn("text-xs", statusInfo[active].tone)}>{statusInfo[active].hint}</p>}
 
     {visible.length ? <div className={cn("space-y-3", selecting && "pb-20")}>{visible.map((set) => selecting
-      ? <SelectableCard key={set.id} set={set} order={picked.indexOf(set.id) + 1} onToggle={() => togglePick(set.id)} />
-      : <SetCard key={set.id} kind={kind} set={set} onDelete={() => setDeleting(set)} />)}</div>
+      ? <SelectableCard key={set.id} set={set} place={placeOf(set)} order={picked.indexOf(set.id) + 1} onToggle={() => togglePick(set.id)} />
+      : <SetCard key={set.id} kind={kind} set={set} place={placeOf(set)} onDelete={() => setDeleting(set)} />)}</div>
       : <div className="rounded-2xl border border-dashed border-zinc-300 bg-white px-4 py-12 text-center text-sm text-zinc-500">
         {active === "TODO" ? <>কোনো set নেই। <Link href={`${base}/new`} className="font-medium text-zinc-900 underline underline-offset-2">নতুন set বানাও</Link></> : `${statusInfo[active].label}-এ এখন কিছু নেই।`}
       </div>}

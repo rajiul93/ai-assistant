@@ -33,6 +33,11 @@ export async function getSubjects(userId: string) {
   });
 }
 
+/** The user's topic tree as flat nodes, for the subject → topic filter and topic pickers. */
+export async function getTopicNodes(userId: string) {
+  return prisma.topic.findMany({ where: { userId }, orderBy: byPosition, select: { id: true, name: true, subjectId: true, parentId: true } });
+}
+
 export async function getFlatTopics(userId: string) {
   return prisma.topic.findMany({
     where: { userId },

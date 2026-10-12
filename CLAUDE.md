@@ -100,7 +100,11 @@ alone. Record decisions and their reasons; don't restate code.
 - Question sets: `QuestionSet` + `Question` + `TestAttempt` (Preliminary, MCQ);
   `ShortQuestionSet` + `ShortQuestion` + `ShortTestAttempt` (self-marked). Both use
   `QuestionSetStatus` TODO → DOING → TESTING → DONE; answers never reach the page during TESTING.
-- `Confusion` (CONFUSION → CLEAR). Jobs: `JobApplication`. Billing: `PlanPackage`, `Payment`,
+- Sets and confusions are filed under the owner's subject → topic tree: `subjectId` + optional
+  `topicId` (a `Topic`; `QuestionSet.topicName` is the set's own name, not a topic). Boards filter by
+  subject → topic (a topic includes its sub-topics; URL `?subject=&topic=`, logic in
+  `src/lib/subject-filter.ts`); items with no (existing) subject show under **Other**.
+- `Confusion` (CONFUSION → CLEAR; old entries may have a free-text `topic`, kept for display). Jobs: `JobApplication`. Billing: `PlanPackage`, `Payment`,
   `Entitlement`, `AiUsage`.
 - Vocabulary (shared, not per user): `VerbEntry`, `NounEntry`, `AffixEntry` — built-in rows come
   from the seed (no `userId`); admins add more; `VocabLearned` = per-user ticks.

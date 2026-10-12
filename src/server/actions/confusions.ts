@@ -13,6 +13,7 @@ import { prisma } from "@/lib/prisma";
 const confusionSchema = z.object({
   subjectId: z.string().nullable(),
   topic: z.string().trim().max(160),
+  topicId: z.string().max(64).nullish(),
   text: z.string().trim().min(1, "কী নিয়ে confusion লেখো").max(4000),
   clarification: z.string().trim().max(8000).optional(),
 });
@@ -21,6 +22,14 @@ async function ownedConfusion(userId: string, id: string) {
   const confusion = await prisma.confusion.findFirst({ where: { id, userId } });
   if (!confusion) throw new Error("Confusion not found.");
   return confusion;
+}
+
+/** The topic, if it is the user's and sits under the chosen subject; null when none was picked. */
+async function ownedTopic(userId: string, topicId: string | null | undefined, subjectId: string | null) {
+  if (!topicId) return null;
+  const topic = await prisma.topic.findFirst({ where: { id: topicId, userId }, select: { id: true, subjectId: true } });
+  if (!topic || topic.subjectId !== subjectId) throw new Error("Topic-টা এই subject-এর না।");
+  return topic.id;
 }
 
 async function ownedSubject(userId: string, subjectId: string | null) {
@@ -35,16 +44,16 @@ export async function listConfusions() {
   return prisma.confusion.findMany({
     where: { userId: user.id },
     orderBy: [{ createdAt: "desc" }],
-    select: { id: true, subjectId: true, topic: true, text: true, clarification: true, status: true, clearedAt: true, createdAt: true, subject: { select: { name: true } } },
+    select: { id: true, subjectId: true, topicId: true, topic: true, text: true, clarification: true, status: true, clearedAt: true, createdAt: true, subject: { select: { name: true } } },
   });
 }
 
 export async function createConfusion(input: unknown) {
   const user = await requireUser();
   const data = confusionSchema.parse(input);
-  await prisma.confusion.create({
-    data: { userId: user.id, subjectId: await ownedSubject(user.id, data.subjectId), topic: data.topic || null, text: data.text },
-  });
+  const subjectId = await ownedSubject(user.id, data.subjectId);
+  const topicId = await ownedTopic(user.id, data.topicId, subjectId);
+  await prisma.confusion.create({ data: { userId: user.id, subjectId, topicId, topic: data.topic || null, text: data.text } });
   revalidatePath("/confusions");
 }
 
@@ -52,10 +61,13 @@ export async function updateConfusion(id: string, input: unknown) {
   const user = await requireUser();
   const confusion = await ownedConfusion(user.id, id);
   const data = confusionSchema.parse(input);
+  const subjectId = await ownedSubject(user.id, data.subjectId);
+  const topicId = await ownedTopic(user.id, data.topicId, subjectId);
   await prisma.confusion.update({
     where: { id: confusion.id },
     data: {
-      subjectId: await ownedSubject(user.id, data.subjectId),
+      subjectId,
+      topicId,
       topic: data.topic || null,
       text: data.text,
       ...(data.clarification !== undefined ? { clarification: data.clarification || null } : {}),

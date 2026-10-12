@@ -24,6 +24,7 @@ const setSchema = z.object({
   subjectId: z.string().min(1, "Subject বেছে নাও"),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "তারিখ দাও"),
   topicName: z.string().trim().min(1, "Topic-এর নাম দাও").max(160),
+  topicId: z.string().max(64).nullish(),
   questions: z.array(questionSchema).min(1, "অন্তত একটা প্রশ্ন দাও").max(300),
 });
 
@@ -44,6 +45,14 @@ async function ownedSubject(userId: string, subjectId: string) {
   return subject.id;
 }
 
+/** The topic, if it is the user's and sits under the chosen subject; null when none was picked. */
+async function ownedTopic(userId: string, topicId: string | null | undefined, subjectId: string | null) {
+  if (!topicId) return null;
+  const topic = await prisma.topic.findFirst({ where: { id: topicId, userId }, select: { id: true, subjectId: true } });
+  if (!topic || topic.subjectId !== subjectId) throw new Error("Topic-টা এই subject-এর না।");
+  return topic.id;
+}
+
 const toDate = (value: string) => dayjs.tz(value, "YYYY-MM-DD", APP_TIMEZONE).toDate();
 
 function revalidate(id?: string) {
@@ -58,7 +67,7 @@ export async function listQuestionSets() {
     where: { userId: user.id },
     orderBy: [{ date: "asc" }, { createdAt: "desc" }],
     select: {
-      id: true, topicName: true, date: true, status: true, updatedAt: true, subjectId: true,
+      id: true, topicName: true, date: true, status: true, updatedAt: true, subjectId: true, topicId: true,
       subject: { select: { name: true } },
       _count: { select: { questions: true, attempts: true } },
       attempts: { orderBy: { submittedAt: "desc" }, take: 1, select: { id: true, correct: true, total: true, submittedAt: true } },
@@ -71,10 +80,12 @@ export async function createQuestionSet(input: unknown) {
   const user = await requireUser();
   const data = setSchema.parse(input);
   const subjectId = await ownedSubject(user.id, data.subjectId);
+  const topicId = await ownedTopic(user.id, data.topicId, subjectId);
   const set = await prisma.questionSet.create({
     data: {
       userId: user.id,
       subjectId,
+      topicId,
       topicName: data.topicName,
       date: toDate(data.date),
       questions: { create: data.questions.map((question, position) => ({ position, ...question })) },
@@ -91,12 +102,14 @@ export async function updateQuestionSet(id: string, input: unknown) {
   if (set.status === "TESTING") throw new Error("Test চলার সময় প্রশ্ন বদলানো যাবে না। আগে Doing-এ ফেরাও।");
   const data = setSchema.parse(input);
   const subjectId = await ownedSubject(user.id, data.subjectId);
+  const topicId = await ownedTopic(user.id, data.topicId, subjectId);
   await prisma.$transaction([
     prisma.question.deleteMany({ where: { setId: set.id } }),
     prisma.questionSet.update({
       where: { id: set.id },
       data: {
         subjectId,
+        topicId,
         topicName: data.topicName,
         date: toDate(data.date),
         questions: { create: data.questions.map((question, position) => ({ position, ...question })) },
@@ -175,7 +188,7 @@ export async function getQuestionSet(id: string) {
   const set = await prisma.questionSet.findFirst({
     where: { id, userId: user.id },
     select: {
-      id: true, topicName: true, date: true, status: true, subjectId: true,
+      id: true, topicName: true, date: true, status: true, subjectId: true, topicId: true,
       subject: { select: { name: true } },
       questions: { orderBy: { position: "asc" }, select: { id: true, text: true, options: true, correctIndex: true } },
       attempts: { orderBy: { submittedAt: "desc" }, take: 10, select: { id: true, correct: true, total: true, submittedAt: true } },

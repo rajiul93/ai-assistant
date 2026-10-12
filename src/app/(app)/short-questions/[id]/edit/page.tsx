@@ -3,22 +3,24 @@ import { ShortQuestionForm } from "@/components/short-questions/short-question-f
 import { requireUser } from "@/lib/auth";
 import { APP_TIMEZONE, dayjs } from "@/lib/dayjs";
 import { getShortQuestionSet } from "@/server/actions/short-questions";
-import { getSubjects } from "@/server/queries";
+import { getSubjects, getTopicNodes } from "@/server/queries";
 
 export default async function EditShortQuestionSetPage(props: PageProps<"/short-questions/[id]/edit">) {
   const { id } = await props.params;
   const user = await requireUser();
-  const [set, subjects] = await Promise.all([getShortQuestionSet(id), getSubjects(user.id)]);
+  const [set, subjects, topics] = await Promise.all([getShortQuestionSet(id), getSubjects(user.id), getTopicNodes(user.id)]);
   if (!set) notFound();
   // Editing shows the answers, so a set being tested goes to its exam instead.
   if (set.status === "TESTING") redirect(`/short-questions/${id}`);
   return <ShortQuestionForm
     subjects={subjects.map((subject) => ({ id: subject.id, name: subject.name }))}
+    topics={topics}
     initial={{
       id: set.id,
       subjectId: set.subjectId,
       date: dayjs(set.date).tz(APP_TIMEZONE).format("YYYY-MM-DD"),
       topicName: set.topicName,
+      topicId: set.topicId,
       questions: set.questions.map((question) => ({ text: question.text, answer: question.answer ?? "" })),
     }}
   />;

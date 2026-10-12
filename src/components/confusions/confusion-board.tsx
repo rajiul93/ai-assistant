@@ -18,6 +18,8 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatDate } from "@/lib/dayjs";
 import { useBestMic } from "@/lib/use-best-mic";
+import { SubjectTopicFilter, TopicSelect, useSubjectTopicFilter } from "@/components/subject-topic-filter";
+import { topicPath, type TopicNode } from "@/lib/subject-filter";
 import { cn } from "@/lib/utils";
 import { createConfusion, deleteConfusion, setConfusionStatus, updateConfusion, type listConfusions } from "@/server/actions/confusions";
 
@@ -106,10 +108,12 @@ function Listening({ heard }: { heard: string }) {
 }
 
 /** Edit a confusion, or mark it Clear with what made it clear. */
-function ConfusionDialog({ item, mode, subjects, onClose }: { item: Item; mode: "edit" | "clear"; subjects: Subject[]; onClose: () => void }) {
+function ConfusionDialog({ item, mode, subjects, topics, onClose }: { item: Item; mode: "edit" | "clear"; subjects: Subject[]; topics: TopicNode[]; onClose: () => void }) {
   const router = useRouter();
   const [subjectId, setSubjectId] = useState(item.subjectId ?? "");
-  const [topic, setTopic] = useState(item.topic ?? "");
+  const [topicId, setTopicId] = useState(item.topicId ?? "");
+  // Older entries have a free-text topic; it's kept as it is.
+  const topic = item.topic ?? "";
   const [text, setText] = useState(item.text);
   const [clarification, setClarification] = useState(item.clarification ?? "");
   const [pending, start] = useTransition();
@@ -126,7 +130,7 @@ function ConfusionDialog({ item, mode, subjects, onClose }: { item: Item; mode: 
         await setConfusionStatus(item.id, "CLEAR", clarification);
         toast.success("Clear হয়েছে!");
       } else {
-        await updateConfusion(item.id, { subjectId: subjectId || null, topic, text, ...(showClarification ? { clarification } : {}) });
+        await updateConfusion(item.id, { subjectId: subjectId || null, topicId: topicId || null, topic, text, ...(showClarification ? { clarification } : {}) });
         toast.success("সেভ হলো");
       }
       voice.stop();
@@ -145,12 +149,12 @@ function ConfusionDialog({ item, mode, subjects, onClose }: { item: Item; mode: 
         : <div className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block space-y-1.5"><span className="text-xs font-medium text-zinc-600">Subject</span>
-              <select value={subjectId} onChange={(event) => setSubjectId(event.target.value)} className={cn(field, "h-11")}>
-                <option value="">Subject ছাড়া</option>
+              <select value={subjectId} onChange={(event) => { setSubjectId(event.target.value); setTopicId(""); }} className={cn(field, "h-11")}>
+                <option value="">Subject ছাড়া (Other)</option>
                 {subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
               </select>
             </label>
-            <label className="block space-y-1.5"><span className="text-xs font-medium text-zinc-600">Topic (ইচ্ছা হলে)</span><input value={topic} onChange={(event) => setTopic(event.target.value)} maxLength={160} className={cn(field, "h-11")} /></label>
+            <label className="block space-y-1.5"><span className="text-xs font-medium text-zinc-600">Topic (ইচ্ছা হলে)</span><TopicSelect subjectId={subjectId} topics={topics} value={topicId} onChange={setTopicId} className={cn(field, "h-11 disabled:bg-zinc-50 disabled:text-zinc-400")} />{topic ? <span className="block text-xs text-zinc-500">আগে লেখা: {topic}</span> : null}</label>
           </div>
           <label className="block space-y-1.5"><span className="text-xs font-medium text-zinc-600">কী নিয়ে confusion</span>
             <div className="relative">
@@ -174,7 +178,7 @@ function ConfusionDialog({ item, mode, subjects, onClose }: { item: Item; mode: 
   </Dialog>;
 }
 
-function ConfusionCard({ item, onEdit, onClear, onDelete }: { item: Item; onEdit: () => void; onClear: () => void; onDelete: () => void }) {
+function ConfusionCard({ item, place, onEdit, onClear, onDelete }: { item: Item; place: string; onEdit: () => void; onClear: () => void; onDelete: () => void }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const reopen = () => start(async () => {
@@ -186,8 +190,8 @@ function ConfusionCard({ item, onEdit, onClear, onDelete }: { item: Item; onEdit
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
         <p className="flex flex-wrap items-center gap-x-2 text-xs text-zinc-500">
-          <span className="font-medium text-indigo-600">{item.subject?.name ?? "Subject নেই"}</span>
-          {item.topic ? <span>· {item.topic}</span> : null}
+          <span className="font-medium text-indigo-600">{place}</span>
+          {item.topic && !item.topicId ? <span>· {item.topic}</span> : null}
           <span className="flex items-center gap-1">· <CalendarDays className="size-3.5" />{formatDate(item.createdAt)}</span>
         </p>
         <p className="mt-1.5 whitespace-pre-line font-medium leading-relaxed"><MathText text={item.text} /></p>
@@ -210,28 +214,26 @@ function ConfusionCard({ item, onEdit, onClear, onDelete }: { item: Item; onEdit
 }
 
 /** Confusion: doubts to ask in class, in two columns — Confusion and Clear. */
-export function ConfusionBoard({ items, subjects }: { items: Item[]; subjects: Subject[] }) {
+export function ConfusionBoard({ items, subjects, topics = [] }: { items: Item[]; subjects: Subject[]; topics?: TopicNode[] }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const active: Status = searchParams.get("status")?.toUpperCase() === "CLEAR" ? "CLEAR" : "CONFUSION";
-  const [subjectFilter, setSubjectFilter] = useState<string>("all");
   const [dialog, setDialog] = useState<{ item: Item; mode: "edit" | "clear" } | null>(null);
   const [deleting, setDeleting] = useState<Item | null>(null);
 
   // Quick add.
   const [subjectId, setSubjectId] = useState("");
-  const [topic, setTopic] = useState("");
+  const [topicId, setTopicId] = useState("");
   const [text, setText] = useState("");
   const [adding, startAdding] = useTransition();
   const voice = useDictation((target, said) => {
     if (target === "add-text") setText((value) => joinSpoken(value, said));
-    if (target === "add-topic") setTopic((value) => joinSpoken(value, said.replace(/[।.]$/, "")));
   });
   const photo = useImageText("confusion", (read) => setText((value) => joinRead(value, read)));
   const add = () => startAdding(async () => {
     try {
-      await createConfusion({ subjectId: subjectId || null, topic, text });
+      await createConfusion({ subjectId: subjectId || null, topicId: topicId || null, topic: "", text });
       setText("");
       toast.success("Confusion লেখা হলো — ক্লাসে জিজ্ঞেস করো");
       if (active !== "CONFUSION") router.replace(`${pathname}?status=confusion`, { scroll: false });
@@ -241,11 +243,22 @@ export function ConfusionBoard({ items, subjects }: { items: Item[]; subjects: S
     }
   });
 
-  const counts = { CONFUSION: items.filter((item) => item.status === "CONFUSION").length, CLEAR: items.filter((item) => item.status === "CLEAR").length };
-  const inTab = items.filter((item) => item.status === active);
+  // Filed under the user's subject → topic tree; the tabs count only what the filter shows.
+  const filter = useSubjectTopicFilter(subjects, topics);
+  const inScope = items.filter((item) => filter.matches(item));
+  const counts = { CONFUSION: inScope.filter((item) => item.status === "CONFUSION").length, CLEAR: inScope.filter((item) => item.status === "CLEAR").length };
+  const inTab = inScope.filter((item) => item.status === active);
+  const topicById = new Map(topics.map((topic) => [topic.id, topic]));
+  const subjectNames = new Map(subjects.map((subject) => [subject.id, subject.name]));
+  /** "Subject › Topic" for a card; "Other" when it has no (existing) subject. */
+  const placeOf = (item: Item) => {
+    const subject = item.subjectId ? subjectNames.get(item.subjectId) : undefined;
+    if (!subject) return "Other";
+    const topic = item.topicId ? topicById.get(item.topicId) : undefined;
+    return topic ? `${subject} › ${topicPath(topic, topics)}` : subject;
+  };
   // Only subjects that have something in this tab, so the filter stays short.
-  const tabSubjects = subjects.filter((subject) => inTab.some((item) => item.subjectId === subject.id));
-  const visible = inTab.filter((item) => subjectFilter === "all" || (subjectFilter === "none" ? !item.subjectId : item.subjectId === subjectFilter));
+  const visible = inTab.filter((item) => filter.matches(item));
 
   return <div className="mx-auto max-w-3xl space-y-4">
     <div>
@@ -255,14 +268,11 @@ export function ConfusionBoard({ items, subjects }: { items: Item[]; subjects: S
 
     <section className="space-y-2.5 rounded-2xl border border-zinc-200 bg-white p-4">
       <div className="grid gap-2.5 sm:grid-cols-2">
-        <select value={subjectId} onChange={(event) => setSubjectId(event.target.value)} aria-label="Subject" className={cn(field, "h-11")}>
-          <option value="">Subject বেছে নাও (ইচ্ছা হলে)</option>
+        <select value={subjectId} onChange={(event) => { setSubjectId(event.target.value); setTopicId(""); }} aria-label="Subject" className={cn(field, "h-11")}>
+          <option value="">Subject বেছে নাও (না দিলে Other)</option>
           {subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
         </select>
-        <div className="relative">
-          <input value={topic} onChange={(event) => setTopic(event.target.value)} maxLength={160} placeholder="Topic (ইচ্ছা হলে)" aria-label="Topic" className={cn(field, "h-11", voice.supported && "pr-11")} />
-          {voice.supported ? <DictateButton active={voice.dictating === "add-topic"} onClick={() => voice.dictate("add-topic")} label="Topic" className="absolute right-1.5 top-1.5" /> : null}
-        </div>
+        <TopicSelect subjectId={subjectId} topics={topics} value={topicId} onChange={setTopicId} className={cn(field, "h-11 disabled:bg-zinc-50 disabled:text-zinc-400")} />
       </div>
       <div className="relative">
         <textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} placeholder={voice.supported ? "কী নিয়ে confusion? লেখো বা 🎤 চেপে বলো" : "কী নিয়ে confusion?"} aria-label="Confusion" className={cn(field, "resize-y py-2.5 leading-relaxed", voice.supported && "pr-11")} />
@@ -275,13 +285,20 @@ export function ConfusionBoard({ items, subjects }: { items: Item[]; subjects: S
       </div>
     </section>
 
+    <SubjectTopicFilter subjects={subjects} topics={topics} items={items} selection={filter.selection} onSelect={filter.select} matches={filter.matches} />
+
     <div role="tablist" aria-label="Status" className="grid grid-cols-2 gap-1 rounded-2xl bg-zinc-100 p-1">
       {tabs.map((tab) => <button
         key={tab.status}
         type="button"
         role="tab"
         aria-selected={active === tab.status}
-        onClick={() => { setSubjectFilter("all"); router.replace(`${pathname}?status=${tab.status.toLowerCase()}`, { scroll: false }); }}
+        onClick={() => {
+          // Keep the subject/topic filter while switching tabs.
+          const params = new URLSearchParams(searchParams.toString());
+          params.set("status", tab.status.toLowerCase());
+          router.replace(`${pathname}?${params}`, { scroll: false });
+        }}
         className={cn("flex h-10 items-center justify-center gap-1.5 rounded-xl text-sm font-medium transition", active === tab.status ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-500 hover:text-zinc-800")}
       >
         <tab.icon className={cn("size-4", tab.status === "CONFUSION" ? "text-amber-500" : "text-emerald-600")} />
@@ -291,17 +308,12 @@ export function ConfusionBoard({ items, subjects }: { items: Item[]; subjects: S
     </div>
     <p className={cn("text-xs", active === "CONFUSION" ? "text-amber-700" : "text-emerald-700")}>{tabs.find((tab) => tab.status === active)?.hint}</p>
 
-    {tabSubjects.length > 1 || (tabSubjects.length && inTab.some((item) => !item.subjectId)) ? <div className="flex flex-wrap gap-1.5">
-      {[{ id: "all", name: `সব (${inTab.length})` }, ...tabSubjects, ...(inTab.some((item) => !item.subjectId) ? [{ id: "none", name: "Subject নেই" }] : [])].map((subject) => (
-        <button key={subject.id} type="button" onClick={() => setSubjectFilter(subject.id)} aria-pressed={subjectFilter === subject.id} className={cn("h-8 rounded-full px-3 text-xs font-medium ring-1 transition", subjectFilter === subject.id ? "bg-zinc-950 text-white ring-zinc-950" : "bg-white text-zinc-600 ring-zinc-200 hover:ring-zinc-400")}>{subject.name}</button>
-      ))}
-    </div> : null}
 
     {visible.length
-      ? <div className="space-y-3">{visible.map((item) => <ConfusionCard key={item.id} item={item} onEdit={() => setDialog({ item, mode: "edit" })} onClear={() => setDialog({ item, mode: "clear" })} onDelete={() => setDeleting(item)} />)}</div>
+      ? <div className="space-y-3">{visible.map((item) => <ConfusionCard key={item.id} item={item} place={placeOf(item)} onEdit={() => setDialog({ item, mode: "edit" })} onClear={() => setDialog({ item, mode: "clear" })} onDelete={() => setDeleting(item)} />)}</div>
       : <div className="rounded-2xl border border-dashed border-zinc-300 bg-white px-4 py-12 text-center text-sm text-zinc-500">{active === "CONFUSION" ? "কোনো confusion নেই — উপরে লিখে রাখো।" : "এখনো কিছু Clear হয়নি।"}</div>}
 
-    {dialog ? <ConfusionDialog key={dialog.item.id + dialog.mode} item={dialog.item} mode={dialog.mode} subjects={subjects} onClose={() => setDialog(null)} /> : null}
+    {dialog ? <ConfusionDialog key={dialog.item.id + dialog.mode} item={dialog.item} mode={dialog.mode} subjects={subjects} topics={topics} onClose={() => setDialog(null)} /> : null}
 
     <AlertDialog open={Boolean(deleting)} onOpenChange={(open) => !open && setDeleting(null)}>
       <AlertDialogContent>
