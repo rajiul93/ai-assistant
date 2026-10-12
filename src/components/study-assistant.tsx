@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ArrowUp, Check, CircleCheck, Download, FileText, Lock, Maximize2, Mic, Minimize2, NotebookPen, Paperclip, RefreshCcw, Sparkles, Square, Volume2, X } from "lucide-react";
-import { ChatMarkdown } from "@/components/chat-markdown";
 import { MathText } from "@/components/math-text";
 import { ChatPurchase } from "@/components/billing/chat-purchase";
 import { ImageViewer } from "@/components/image-viewer";
@@ -18,6 +17,11 @@ import { cn } from "@/lib/utils";
 import { isVoicePlaying, speak, subscribeVoicePlaying } from "@/lib/voice";
 import type { AiLock } from "@/lib/ai-limits";
 import { useAssistantStore, type AssistantEntry } from "@/store/assistant";
+
+// The markdown renderer (react-markdown, highlight.js, KaTeX) is ~600KB and this panel sits in every
+// page's shell, so it loads only once the assistant is opened; until then a reply shows as plain text.
+const loadChatMarkdown = () => import("@/components/chat-markdown").then((m) => ({ default: m.ChatMarkdown }));
+const ChatMarkdown = lazy(loadChatMarkdown);
 
 const priorityStyles = { LOW: "bg-zinc-100 text-zinc-600", MEDIUM: "bg-sky-50 text-sky-700", HIGH: "bg-rose-50 text-rose-700" } as const;
 
@@ -122,6 +126,8 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
   const [question, setQuestion] = useState("");
   const [voiceError, setVoiceError] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
+  // Fetch the markdown renderer as soon as the panel opens, before the first reply needs it.
+  useEffect(() => { if (open) void loadChatMarkdown(); }, [open]);
   const setLive = useAssistantStore((state) => state.setLive);
   const lang = useAssistantStore((state) => state.lang);
   const setLang = useAssistantStore((state) => state.setLang);
@@ -297,7 +303,7 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
           : <div key={entry.id} className="assistant-in mr-2 min-w-0">
             {entry.source ? <p className={cn("mb-1 text-[11px] font-medium", entry.source === "ai" ? "text-indigo-500" : "text-amber-600")}>{entry.source === "ai" ? `✦ ${t.sourceAi}` : t.sourceFallback}</p> : null}
             <div className="min-w-0 rounded-2xl rounded-bl-md bg-zinc-100/80 px-3.5 py-2 text-sm leading-relaxed text-zinc-900">
-              <ChatMarkdown text={entry.text} />
+              <Suspense fallback={<p className="whitespace-pre-wrap">{entry.text}</p>}><ChatMarkdown text={entry.text} /></Suspense>
               {entry.image ? <figure className="mt-2">
                 {/* eslint-disable-next-line @next/next/no-img-element -- a generated data URL, not an optimizable asset */}
                 <img src={entry.image} alt={entry.text} className="w-full rounded-xl border border-zinc-200 bg-white" />
