@@ -1,5 +1,5 @@
 import type { UserRole } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
+import { freshUserFlags } from "@/server/user-flags";
 
 /** The one super admin. Fixed in code, so no database edit can create another. */
 export const SUPER_ADMIN_EMAIL = "rajiulrayhan@gmail.com";
@@ -17,8 +17,7 @@ export function isSuperAdminEmail(email: string | null | undefined) {
  */
 export async function roleOf(user: WhoAmI): Promise<UserRole> {
   if (isSuperAdminEmail(user.email)) return "SUPER_ADMIN";
-  const row = await prisma.user.findUnique({ where: { id: user.id }, select: { role: true } });
-  const role = row?.role ?? "USER";
+  const role = (await freshUserFlags(user.id))?.role ?? "USER";
   return role === "SUPER_ADMIN" ? "ADMIN" : role;
 }
 

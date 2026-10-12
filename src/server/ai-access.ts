@@ -2,6 +2,7 @@ import { aiLockOf, type AiQuota } from "@/lib/ai-limits";
 import { prisma } from "@/lib/prisma";
 import { getPlanStatus } from "@/server/billing";
 import { isAdminUser } from "@/server/roles";
+import { freshUserFlags } from "@/server/user-flags";
 
 /**
  * Tokens against the user's allowance. Admins have no limit. Everyone else has what their plans
@@ -12,7 +13,7 @@ export async function getAiQuota(user: { id: string; email: string }, admin?: bo
     const usage = await prisma.aiUsage.aggregate({ where: { userId: user.id }, _sum: { totalTokens: true } });
     return { used: usage._sum.totalTokens ?? 0, limit: null };
   }
-  const [plan, row] = await Promise.all([getPlanStatus(user.id), prisma.user.findUnique({ where: { id: user.id }, select: { aiPaused: true } })]);
+  const [plan, row] = await Promise.all([getPlanStatus(user.id), freshUserFlags(user.id)]);
   const paused = row?.aiPaused ?? false;
   if (!plan.hasPlan) return { used: 0, limit: 0, planEndsAt: null, paused };
   return { used: plan.tokensUsed, limit: plan.tokensTotal, planEndsAt: plan.endsAt?.toISOString() ?? null, paused };

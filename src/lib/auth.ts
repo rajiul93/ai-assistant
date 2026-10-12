@@ -6,6 +6,7 @@ import { getAuth } from "firebase-admin/auth";
 import { prisma } from "@/lib/prisma";
 import { adminAuth, isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import { loginCookieOptions, SESSION_COOKIE } from "@/lib/session";
+import { freshUserFlags } from "@/server/user-flags";
 
 export { SESSION_COOKIE };
 
@@ -191,7 +192,7 @@ export const getCurrentUser = cache(async () => {
 });
 
 /** Read fresh (not from the 5-minute session cache) once per request, so a block applies at once. */
-const isBlocked = cache(async (userId: string) => (await prisma.user.findUnique({ where: { id: userId }, select: { status: true } }))?.status === "BLOCKED");
+const isBlocked = async (userId: string) => (await freshUserFlags(userId))?.status === "BLOCKED";
 
 export async function requireUser() {
   const user = await getCurrentUser();
