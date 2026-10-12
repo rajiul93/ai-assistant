@@ -14,8 +14,20 @@ const pageKeywords: Array<{ page: AssistantPage; words: string[] }> = [
   { page: "progress", words: ["progress", "প্রগ্রেস", "প্রোগ্রেস", "অগ্রগতি"] },
   { page: "timer", words: ["timer", "টাইমার", "pomodoro", "পোমোডোরো"] },
   { page: "plan", words: ["plan", "প্ল্যান", "প্লান", "পরিকল্পনা", "রুটিন", "routine"] },
+  // Notifications come before Notes: a mumbled "নোটিফিকেশন" must not open Notes.
+  { page: "notifications", words: ["notification", "notifications", "নোটিফিকেশন", "নোটিফিকেশনস"] },
   { page: "notes", words: ["notes", "note", "নোট", "নোটস", "নোটগুলো"] },
   { page: "jobs", words: ["jobs", "job", "জব", "জবস", "চাকরি", "চাকরির", "applications", "অ্যাপ্লিকেশন"] },
+  { page: "preliminary", words: ["preliminary", "prelim", "প্রিলিমিনারি", "প্রিলিমিনারী", "প্রিলি", "mcq", "এমসিকিউ"] },
+  // Two-word names are also listed joined, so the fuzzy match catches "শর্টকোশ্চেন" and other spellings.
+  { page: "short_questions", words: ["short question", "short questions", "shortquestion", "শর্ট কোয়েশ্চেন", "শর্ট কোশ্চেন", "শর্ট কোয়েশ্চন", "শর্ট প্রশ্ন", "সংক্ষিপ্ত প্রশ্ন", "শর্টকোয়েশ্চেন", "শর্টপ্রশ্ন"] },
+  { page: "confusions", words: ["confusion", "confusions", "কনফিউশন", "কনফিউশান", "কনফিউজন"] },
+  { page: "vocabulary", words: ["vocabulary", "vocab", "ভোকাবুলারি", "ভোকাব", "শব্দভান্ডার", "শব্দভাণ্ডার"] },
+  { page: "typing", words: ["typing", "টাইপিং"] },
+  { page: "messages", words: ["messages", "message", "মেসেজ", "ম্যাসেজ", "inbox", "ইনবক্স", "friends", "ফ্রেন্ড", "ফ্রেন্ডস", "বন্ধুরা"] },
+  { page: "usage", words: ["usage", "ইউসেজ", "টোকেন", "token", "tokens"] },
+  // "plan" alone means the Study plan; buying words open the purchase box instead (buyWords).
+  { page: "billing", words: ["billing", "বিলিং"] },
 ];
 
 const refreshWords = ["reload", "refresh", "রিলোড", "রিফ্রেশ", "রিলোডে"];

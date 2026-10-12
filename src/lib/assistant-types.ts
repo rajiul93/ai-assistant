@@ -91,6 +91,17 @@ export const assistantPages = {
   plan: "/plan",
   jobs: "/jobs",
   notes: "/notes",
+  preliminary: "/preliminary",
+  new_preliminary: "/preliminary/new",
+  short_questions: "/short-questions",
+  new_short_question: "/short-questions/new",
+  confusions: "/confusions",
+  vocabulary: "/vocabulary",
+  typing: "/typing",
+  messages: "/messages",
+  notifications: "/notifications",
+  usage: "/usage",
+  billing: "/billing",
 } as const;
 
 export type AssistantPage = keyof typeof assistantPages;

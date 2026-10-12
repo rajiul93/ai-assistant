@@ -226,9 +226,9 @@ action বেছে নাও:
 - read_note: ব্যবহারকারী তার নিজের সেভ করা note-এর লেখা পড়তে/শুনতে/জানতে চায়, বা note-এ থাকা তথ্য চায় ("আমার physics note পড়ে শোনাও", "ড্রিম ট্যুরিজম নিয়ে note-এ যা আছে দাও", "note-এ X-এর তারিখ কী লিখেছিলাম")। noteLookup.title = নিচের "Notes" তালিকার সবচেয়ে মিলে যাওয়া title হুবহু, না মিললে null; noteLookup.search = note খোঁজার মূল শব্দ, বাংলা আর ইংরেজি দুই বানানেই (যেমন ["ড্রিম ট্যুরিজম", "dream tourism"]); নির্দিষ্ট প্রশ্ন থাকলে noteLookup.question, পুরো note চাইলে null; "পড়ে শোনাও/শুনাও/read aloud" বললে readAloud true। reply খালি রাখো — note-এর লেখা server দেবে, বানিয়ে লিখবে না।
 - my_data: ব্যবহারকারী নিজের সেভ করা তথ্য জানতে চায় — যে চাকরিতে apply করেছে ("বাংলাদেশ ব্যাংকের job-টা সম্পর্কে বলো", "BRAC-এর পরীক্ষা কবে", "কোন কোন job-এর deadline সামনে", "আমার roll/user ID কত"), note-এ লেখা তথ্য, task, subject/topic, পড়ার সময়, study plan/লক্ষ্য/বয়সসীমা। dataLookup.kinds = কোন ধরনের তথ্য (jobs, notes, tasks, subjects, study; নিশ্চিত না হলে একাধিক); dataLookup.search = খোঁজার নাম/শব্দ, বাংলা আর ইংরেজি দুই বানানেই (যেমন ["বাংলাদেশ ব্যাংক", "Bangladesh Bank"]), পুরো তালিকা চাইলে খালি। reply খালি রাখো — উত্তর সেভ করা তথ্য থেকে server দেবে। note পুরোটা পড়ে শোনাতে চাইলে read_note।
 - create_image: ব্যবহারকারী ছবি/image/picture/illustration/logo/diagram আঁকতে বা বানাতে চায় ("একটা বিড়ালের ছবি বানাও", "draw a logo for my app")। imagePrompt = যা আঁকতে হবে তার বিস্তারিত ইংরেজি বর্ণনা (বিষয়, style, রং, পটভূমি; ছবিতে লেখা থাকলে সেই লেখা হুবহু)। reply-তে এক লাইনে বলো কী আঁকছ।
-- navigate: শুধু কোনো পাতা খুলতে/দেখতে চাইলে। page: dashboard, tasks, new_task (নতুন task-এর ফাঁকা form), subjects, revisions, progress, timer, plan, jobs (job application-এর তালিকা), notes (Notes পাতা)।
+- navigate: শুধু কোনো পাতা খুলতে/দেখতে চাইলে। page: dashboard, tasks, new_task (নতুন task-এর ফাঁকা form), subjects, revisions, progress, timer, plan (study plan), jobs (job application-এর তালিকা), notes (Notes পাতা), preliminary (Preliminary/MCQ set-এর তালিকা), new_preliminary (নতুন Preliminary set-এর form), short_questions (Short Question set-এর তালিকা), new_short_question (নতুন Short Question set-এর form), confusions (Confusion-এর তালিকা), vocabulary (verb, singular/plural, prefix/suffix), typing (Typing Lab), messages (বন্ধু, friend request আর chat), notifications, usage (AI usage/token), billing (AI-এর plan/package কেনার পাতা — study plan নয়)।
 - answer: প্রশ্ন, আলাপ, পরামর্শ, মন খারাপ, সাধারণ জ্ঞান — যা কোনো app action নয়। reply-তে সরাসরি পুরো উত্তরটা দাও। পড়াশোনা নিয়ে প্রশ্নে নিচের study data ব্যবহার করে ব্যক্তিগত পরামর্শ দাও।
-- clarify: উদ্দেশ্য অস্পষ্ট, বা এমন কিছু চাইছে যা app-এ নেই (যেমন notes পাতা নেই)। reply-তে বিনয়ের সঙ্গে জানাও কী করা যায় এবং প্রশ্ন করো।
+- clarify: উদ্দেশ্য অস্পষ্ট, বা এমন কিছু চাইছে যা app-এ নেই (উপরের page তালিকার বাইরের কোনো পাতা)। reply-তে বিনয়ের সঙ্গে জানাও কী করা যায় এবং প্রশ্ন করো।
 ${request.voice ? `- heard: ব্যবহারকারীর সর্বশেষ কথাটা (mic থেকে লেখা) সঠিক করে লেখো — প্রসঙ্গ দেখে প্রমিত বাংলা বানান, ভাঙা/ভুল যুক্তবর্ণ ঠিক ("বিঞ্জান"→"বিজ্ঞান", "পরিক্ষা"→"পরীক্ষা"), আর মুখে বলা গণিত LaTeX-এ $…$ ("এক বাই দুই"→$\\frac{1}{2}$, "x স্কয়ার"→$x^{2}$)। অর্থ, শব্দ, ভাষা বদলাবে না; ইংরেজি শব্দ ইংরেজিতেই। ঠিক করার কিছু না থাকলে হুবহু।\n` : ""}${request.voice ? "- ignore: mic সবসময় খোলা থাকে, তাই আশেপাশের আওয়াজও আসে। কথাটা স্পষ্টতই সহকারীকে বলা না হলে — TV/ভিডিও/গানের সংলাপ, অন্য কারো সঙ্গে কথা, অর্থহীন টুকরো শব্দ — ignore দাও, reply খালি। সামান্য সন্দেহ থাকলেও ignore নয়; তখন answer বা clarify।\n" : ""}অনুমান করে ভুল কাজ করবে না। ${languageRule(request.lang)} ${styleRule(request.voice)}
 
 ${privacyRule}
@@ -530,7 +530,28 @@ async function answer(userId: string, message: string, history: ChatMessage[], c
     ?? await callAI(`${basePrompt}\n\nWeb search এই মুহূর্তে unavailable হতে পারে। তোমার সাধারণ জ্ঞান ব্যবহার করে উত্তর দাও, তবে current তথ্য নিশ্চিত না হলে সেটা স্পষ্ট করে বলো।`, { files, userId, feature: "answer" });
 }
 
+const preliminaryPattern = /(preliminary|prelim|প্রিলি|mcq|এমসিকিউ)/i;
+const shortQuestionPattern = /(short ?question|শর্ট ?(কোয়েশ্চেন|কোশ্চেন|কোয়েশ্চন|প্রশ্ন)|সংক্ষিপ্ত প্রশ্ন)/i;
+
+/** "নতুন … set": the empty form, like new_task. */
+const newFormRules: Array<{ pattern: RegExp; page: AssistantPage; reply: string }> = [
+  { pattern: shortQuestionPattern, page: "new_short_question", reply: "ঠিক আছে, নতুন Short Question set-এর form খুলছি।" },
+  { pattern: preliminaryPattern, page: "new_preliminary", reply: "ঠিক আছে, নতুন Preliminary set-এর form খুলছি।" },
+];
+
+// First match wins, so the narrower names come first: "notification" before "note", "billing" before "plan".
 const navigationRules: Array<{ pattern: RegExp; page: AssistantPage; reply: string }> = [
+  { pattern: shortQuestionPattern, page: "short_questions", reply: "চলো, Short Question set-গুলো দেখি।" },
+  { pattern: preliminaryPattern, page: "preliminary", reply: "চলো, Preliminary set-গুলো দেখি।" },
+  { pattern: /(confusion|কনফিউশন|কনফিউশান|কনফিউজন)/i, page: "confusions", reply: "চলো, confusion-এর তালিকা দেখি।" },
+  { pattern: /(vocab|ভোকাব|শব্দভা[নণ]্ডার)/i, page: "vocabulary", reply: "চলো, vocabulary দেখি।" },
+  { pattern: /(typing|টাইপিং)/i, page: "typing", reply: "চলো, Typing Lab-এ যাই।" },
+  { pattern: /(notification|নোটিফিকেশন)/i, page: "notifications", reply: "তোমার notification-গুলো দেখাচ্ছি।" },
+  { pattern: /(message|মেসেজ|ম্যাসেজ|inbox|ইনবক্স|friend|ফ্রেন্ড)/i, page: "messages", reply: "চলো, Messages-এ যাই।" },
+  { pattern: /(usage|ইউসেজ|টোকেন|token)/i, page: "usage", reply: "তোমার AI usage দেখাচ্ছি।" },
+  { pattern: /(billing|বিলিং|package|প্যাকেজ|subscription|সাবস্ক্রিপশন)/i, page: "billing", reply: "চলো, Plans-এর পাতায় যাই।" },
+  { pattern: /(note|নোট)/i, page: "notes", reply: "চলো, notes দেখি।" },
+  { pattern: /(job|জব|চাকরি|application|অ্যাপ্লিকেশন)/i, page: "jobs", reply: "চলো, job application-এর তালিকা দেখি।" },
   { pattern: /(subject|subjects|সাবজেক্ট|বিষয়)/i, page: "subjects", reply: "চলো, subjects দেখি।" },
   { pattern: /(revision|রিভিশন|পুনরাবৃত্তি)/i, page: "revisions", reply: "চলো, revision-এর পাতায় যাই।" },
   { pattern: /(progress|প্রগ্রেস|অগ্রগতি|কতদূর)/i, page: "progress", reply: "তোমার progress দেখাচ্ছি।" },
@@ -546,6 +567,8 @@ function fallbackReply(message: string, context: StudyContext, lang?: "bn" | "en
   const wantsTask = /(task|টাস্ক|কাজ|কাজের তালিকা)/i.test(text);
   if (wantsTask && /(add|নতুন|যোগ|তৈরি|লিখ|বান|করতে চাই|করবো|করব|শুরু)/i.test(text)) return { type: "navigate", source: "fallback", href: assistantPages.new_task, reply: "ঠিক আছে, নতুন task-এর form খুলছি।" };
   if (wantsTask && navigation) return { type: "navigate", source: "fallback", href: assistantPages.tasks, reply: "চলো, task page-এ যাই।" };
+  const newForm = /(add|নতুন|যোগ|তৈরি|বান)/i.test(text) ? newFormRules.find((item) => item.pattern.test(text)) : undefined;
+  if (newForm) return { type: "navigate", source: "fallback", href: assistantPages[newForm.page], reply: newForm.reply };
   const rule = navigation ? navigationRules.find((item) => item.pattern.test(text)) : undefined;
   if (rule) return { type: "navigate", source: "fallback", href: assistantPages[rule.page], reply: rule.reply };
 
