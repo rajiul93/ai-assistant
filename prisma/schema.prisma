@@ -873,9 +873,9 @@ model BankSet {
 }
 
 model BankQuestion {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   setId        String
-  set          BankSet  @relation(fields: [setId], references: [id], onDelete: Cascade)
+  set          BankSet   @relation(fields: [setId], references: [id], onDelete: Cascade)
   /// The sheet's "ক্রম"; questions are shown in this order.
   serial       Int
   text         String
@@ -889,8 +889,12 @@ model BankQuestion {
   /// Hash of the question and its options: the sheet has no ID, so this is how a re-upload finds
   /// the same question (and updates it) instead of adding it twice.
   fingerprint  String
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  /// Set when an admin edits the question or has AI clean it. A later upload of the sheet then leaves
+  /// it alone (the sheet still holds the old text). The fingerprint stays the sheet's, so the same
+  /// row is still recognised and never added twice.
+  editedAt     DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@unique([setId, fingerprint])
   @@index([setId, serial])

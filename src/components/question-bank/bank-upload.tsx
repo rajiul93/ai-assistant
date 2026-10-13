@@ -15,15 +15,15 @@ import {
 } from "@/components/ui/alert-dialog";
 import { formatDateTime } from "@/lib/dayjs";
 import {
-  BANK_CHECK_BATCH, BANK_EXAMS, BANK_IMPORT_BATCH, checkRow, FIELD_LABELS, isBlankRow, mapColumns, questionFingerprint, repeatsInFile, rowContentHash, rowSetKey,
+  BANK_CHECK_BATCH, BANK_EDITED, BANK_EXAMS, BANK_IMPORT_BATCH, checkRow, FIELD_LABELS, isBlankRow, mapColumns, questionFingerprint, repeatsInFile, rowContentHash, rowSetKey,
   type BankField, type BankRow, type CheckedRow,
 } from "@/lib/question-bank";
 import { cn } from "@/lib/utils";
 import { checkBankRows, deleteBankSets, importBankRows, type listAllBankSets } from "@/server/actions/question-bank";
 
 type BankSetRow = Awaited<ReturnType<typeof listAllBankSets>>[number];
-/** What uploading a row would do: add it, update an edited copy, or nothing (already there). */
-type Fate = "new" | "changed" | "same";
+/** What uploading a row would do: add it, update it, nothing (already there), or nothing because an admin edited it in the app. */
+type Fate = "new" | "changed" | "same" | "edited";
 type Sorted = { line: number; row: BankRow; fate: Fate };
 type Checked = { fileName: string; sheet: string; sheets: string[]; file: File; missing: BankField[]; rows: CheckedRow[]; repeats: Map<number, number>; sorted: Sorted[] };
 type Progress = { done: number; total: number; created: number; updated: number; failed?: string };
@@ -50,7 +50,7 @@ async function sortAgainstBank(rows: Array<{ line: number; row: BankRow }>): Pro
   }
   return keyed.map(({ line, row, print }) => {
     const hash = stored[`${rowSetKey(row)}|${print}`];
-    return { line, row, fate: hash === undefined ? "new" : hash === rowContentHash(row) ? "same" : "changed" };
+    return { line, row, fate: hash === undefined ? "new" : hash === BANK_EDITED ? "edited" : hash === rowContentHash(row) ? "same" : "changed" };
   });
 }
 
@@ -102,7 +102,7 @@ export function BankUpload({ sets }: { sets: BankSetRow[] }) {
   }
 
   const sorted = checked?.sorted ?? [];
-  const toSend = sorted.filter((item) => item.fate !== "same");
+  const toSend = sorted.filter((item) => item.fate === "new" || item.fate === "changed");
   const count = (fate: Fate) => sorted.filter((item) => item.fate === fate).length;
   const errors = (checked?.rows ?? []).filter((row) => row.errors.length);
   const warnings = (checked?.rows ?? []).filter((row) => row.row && row.warnings.length);
@@ -192,6 +192,7 @@ export function BankUpload({ sets }: { sets: BankSetRow[] }) {
           {repeats.length ? ` · ${repeats.length}টি সারি এই ফাইলেই দুবার আছে (একবার নেওয়া হবে)` : ""}
           {warnings.length ? ` · ${warnings.length}টি সতর্কতা` : ""}
           {skipped.length ? ` · ${skipped.length}টি MCQ নয় (বাদ)` : ""}
+          {count("edited") ? ` · ${count("edited")}টি অ্যাপে edit করা — sheet দিয়ে বদলাবে না` : ""}
         </p>
 
         {errors.length || warnings.length || repeats.length ? <div className="max-h-72 divide-y divide-zinc-100 overflow-y-auto rounded-xl border border-zinc-200 text-sm">

@@ -6,14 +6,15 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { now, startOfDay } from "@/lib/dayjs";
 import { prisma } from "@/lib/prisma";
-import { BANK_CHECK_BATCH, BANK_IMPORT_BATCH, placementForSet, questionFingerprint, rowContentHash, rowSetKey } from "@/lib/question-bank";
+import { BANK_CHECK_BATCH, BANK_EDITED, BANK_IMPORT_BATCH, placementForSet, questionFingerprint, rowContentHash, rowSetKey } from "@/lib/question-bank";
 import { placeFor } from "@/server/collaboration/share-copy";
-import { isSuperAdminEmail } from "@/server/roles";
+import { isAdminUser, isSuperAdminEmail } from "@/server/roles";
 
 /**
  * Question Bank (docs/question-bank-plan.md): shared sets of past exam MCQs, one set per session.
  * Everyone reads them for free and sends a copy to their own Preliminary, where they study and
- * take the exam. Only the super admin uploads (from the sheet) or deletes sets.
+ * take the exam. Only the super admin uploads (from the sheet) or deletes sets; admins and the
+ * super admin edit questions (by hand or with AI, see /api/question-bank/beautify).
  */
 
 const examSchema = z.enum(["BCS", "PRIMARY", "GRADE_11_20"]);
@@ -42,20 +43,21 @@ export async function listBankSets(exam: string) {
   return sets.map((set) => ({ id: set.id, section: set.section, name: set.name, questionCount: set._count.questions, copyId: set.copies[0]?.id ?? null }));
 }
 
-/** One set with every question, answer, solution and explanation (it's for reading). */
+/** One set with every question, answer, solution and explanation (it's for reading), and whether I may edit it. */
 export async function getBankSet(id: string) {
   const me = await requireUser();
+  const canEdit = await isAdminUser(me);
   const set = await prisma.bankSet.findUnique({
     where: { id: idSchema.parse(id) },
     select: {
       id: true, exam: true, section: true, name: true,
-      questions: { orderBy: [{ serial: "asc" }, { id: "asc" }], select: { id: true, text: true, options: true, correctIndex: true, solution: true, explanation: true } },
+      questions: { orderBy: [{ serial: "asc" }, { id: "asc" }], select: { id: true, text: true, options: true, correctIndex: true, solution: true, explanation: true, editedAt: true } },
       copies: { where: { userId: me.id }, select: { id: true } },
     },
   });
   if (!set) return null;
   const { copies, ...rest } = set;
-  return { ...rest, copyId: copies[0]?.id ?? null };
+  return { ...rest, copyId: copies[0]?.id ?? null, canEdit };
 }
 
 /**
@@ -110,6 +112,34 @@ async function requireSuperAdmin() {
   return me;
 }
 
+const editSchema = z.object({
+  id: idSchema,
+  text: z.string().trim().min(1, "প্রশ্ন লেখো").max(2000),
+  options: z.array(z.string().trim().min(1, "কোনো option ফাঁকা রাখা যাবে না").max(500)).min(4, "অন্তত ৪টা option লাগবে").max(5, "সর্বোচ্চ ৫টা option"),
+  correctIndex: z.number().int().min(0).max(4),
+  solution: z.string().trim().max(5000).nullish().transform((value) => value || null),
+  explanation: z.string().trim().max(5000).nullish().transform((value) => value || null),
+}).refine((question) => question.correctIndex < question.options.length, { message: "সঠিক উত্তর বেছে নাও" });
+
+/**
+ * An admin's edit of one bank question (typed, or an AI clean-up they accepted). Marked edited, so
+ * uploading the sheet again won't bring the old text back. Copies already sent to Preliminary keep
+ * the text they were sent with.
+ */
+export async function updateBankQuestion(input: unknown) {
+  const me = await requireUser();
+  if (!(await isAdminUser(me))) throw new Error("শুধু admin প্রশ্ন বদলাতে পারেন।");
+  const { id, ...data } = editSchema.parse(input);
+  const saved = await prisma.bankQuestion.update({
+    where: { id },
+    data: { ...data, editedAt: new Date() },
+    select: { id: true, text: true, options: true, correctIndex: true, solution: true, explanation: true, editedAt: true },
+  }).catch(() => null);
+  if (!saved) throw new Error("প্রশ্নটা পাওয়া যায়নি।");
+  revalidatePath("/question-bank", "layout");
+  return saved;
+}
+
 const rowSchema = z.object({
   exam: examSchema,
   section: z.string().trim().min(1).max(200),
@@ -145,7 +175,7 @@ export async function importBankRows(input: unknown) {
     const byPrint = new Map(group.map((row) => [questionFingerprint(row.text, row.options), row]));
     const existing = await prisma.bankQuestion.findMany({
       where: { setId: set.id, fingerprint: { in: [...byPrint.keys()] } },
-      select: { id: true, fingerprint: true, serial: true, text: true, options: true, correctIndex: true, solution: true, explanation: true, sources: true },
+      select: { id: true, fingerprint: true, serial: true, text: true, options: true, correctIndex: true, solution: true, explanation: true, sources: true, editedAt: true },
     });
     const found = new Map(existing.map((question) => [question.fingerprint, question]));
     const fresh = [...byPrint].filter(([print]) => !found.has(print));
@@ -159,6 +189,8 @@ export async function importBankRows(input: unknown) {
     for (const [print, row] of byPrint) {
       const old = found.get(print);
       if (!old) continue;
+      // An admin fixed this one in the app; the sheet still has the old text.
+      if (old.editedAt) { unchanged++; continue; }
       const data = { serial: row.serial, text: row.text, options: row.options, correctIndex: row.correctIndex, solution: row.solution, explanation: row.explanation, sources: row.sources };
       const same = old.serial === data.serial && old.text === data.text && old.correctIndex === data.correctIndex && old.solution === data.solution
         && old.explanation === data.explanation && old.sources === data.sources && JSON.stringify(old.options) === JSON.stringify(data.options);
@@ -175,7 +207,8 @@ const checkSchema = z.array(z.object({ exam: examSchema, section: z.string().max
 
 /**
  * Before an upload: which of these questions are already in the bank, each with a hash of what is
- * stored, so the page can skip the unchanged ones and update only the edited ones.
+ * stored, so the page can skip the unchanged ones and update only the edited ones. Questions an
+ * admin edited in the app come back as BANK_EDITED: the upload leaves them alone.
  * Keyed `<set key>|<fingerprint>`.
  */
 export async function checkBankRows(input: unknown) {
@@ -194,9 +227,9 @@ export async function checkBankRows(input: unknown) {
     if (!set) continue;
     const stored = await prisma.bankQuestion.findMany({
       where: { setId: set.id, fingerprint: { in: entry.prints } },
-      select: { fingerprint: true, serial: true, text: true, options: true, correctIndex: true, solution: true, explanation: true, sources: true },
+      select: { fingerprint: true, serial: true, text: true, options: true, correctIndex: true, solution: true, explanation: true, sources: true, editedAt: true },
     });
-    for (const question of stored) found[`${key}|${question.fingerprint}`] = rowContentHash(question);
+    for (const question of stored) found[`${key}|${question.fingerprint}`] = question.editedAt ? BANK_EDITED : rowContentHash(question);
   }
   return found;
 }

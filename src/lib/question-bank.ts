@@ -13,6 +13,8 @@ export const BANK_EXAMS: Array<{ id: BankExam; slug: string; label: string }> = 
 
 /** Rows per upload call: keeps each request well under the server action body limit (1 MB). */
 export const BANK_IMPORT_BATCH = 150;
+/** What the pre-upload check says for a question an admin edited in the app (never overwritten). */
+export const BANK_EDITED = "edited";
 /** Rows per "already in the bank?" check (only keys travel, so far more fit). */
 export const BANK_CHECK_BATCH = 2000;
 

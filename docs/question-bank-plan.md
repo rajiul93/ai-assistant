@@ -74,6 +74,24 @@ Assumed until the owner says otherwise (all in `src/lib/question-bank.ts`, unit-
 - Set list on the upload page: filter by exam, tick sets or "সব বাছো", delete the ticked ones
   together (`deleteBankSets`). Copies already sent to Preliminary stay.
 
+## 4b. Admin editing and AI clean-up (owner, 2026-10-13)
+
+The owner's sheet came from copying rendered math off a website, so each formula appears two or
+three times ("x−1x=1x - \frac{1}{x} = 1x−1=1"). Rules can't untangle that; AI can.
+
+- On a set page, admins and the super admin get: per question ✨ (AI tidies it and fills the
+  editor — check, then save) and ✏️ (edit by hand: question, 4–5 options, right answer, solution,
+  explanation, with a live book-style preview); for the set, "সব AI দিয়ে গোছাও" or pick some
+  ("বাছাই করো") — saved at once, 4 per AI call, with "আগের অবস্থায় ফেরাও" for the whole run.
+- `POST /api/question-bank/beautify` (admins, `checkAi`, feature `bank_beautify`): removes the
+  duplicated copies, writes math as `$LaTeX$`, lays the solution out step by step. The AI never
+  changes the right answer (kept from the original) or the number of options (answers that do are
+  dropped); a solution/explanation it leaves out is kept.
+- `BankQuestion.editedAt`: set by any admin edit or AI save. Uploading the sheet again never
+  overwrites such a question (it shows as "অ্যাপে edit করা"); its fingerprint stays the sheet's, so
+  the row is still recognised and not added twice.
+- Copies already sent to Preliminary keep the text they were sent with.
+
 ## 5. Not built (from the first plan, dropped or later)
 
 Exam inside the bank, bookmarks, AI explanations, AI math clean-up, CSV upload, column-mapping
