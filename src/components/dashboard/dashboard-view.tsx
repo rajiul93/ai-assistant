@@ -15,7 +15,7 @@ import {
   RotateCcw,
   type LucideIcon,
 } from "lucide-react";
-import { ClockTools } from "@/components/dashboard/clock-tools";
+import { ClockToolsCard } from "@/components/dashboard/clock-tools-card";
 import { DailyChallengeCard } from "@/components/dashboard/daily-challenge-card";
 import { DeadlineCountdown } from "@/components/dashboard/deadline-countdown";
 import { HeroIllustration } from "@/components/dashboard/hero-illustration";
@@ -53,6 +53,8 @@ export function DashboardView({
   studiedSeconds,
   streak,
   todayTasks,
+  pendingCount,
+  finishedCount,
   revisionCount,
   toRevise,
   todayMs,
@@ -70,6 +72,8 @@ export function DashboardView({
   /** Days in a row with any study. */
   streak: number;
   todayTasks: TaskWithRelations[];
+  pendingCount: number;
+  finishedCount: number;
   /** Revision-list tasks that need revising (never, or not for a week). */
   revisionCount: number;
   /** Up to five revision-list tasks, most in need of revision first. */
@@ -143,64 +147,72 @@ export function DashboardView({
         </nav>
       </section>
 
-      <DailyChallengeCard dailyTargetMinutes={dailyTargetMinutes} savedSeconds={studiedSeconds} streak={streak} />
+      {/* Below the shortcuts everything sits two to a row, phones included, so the page stays short. */}
+      <div className="grid grid-cols-2 gap-[clamp(10px,3vw,20px)] lg:grid-cols-3">
+        <DailyChallengeCard dailyTargetMinutes={dailyTargetMinutes} savedSeconds={studiedSeconds} streak={streak} />
 
-      {/* Today's tasks and what to revise, side by side. */}
-      <div className="grid gap-3 sm:grid-cols-2 sm:gap-5">
-        <section className="flex flex-col rounded-3xl bg-linear-to-br from-orange-50 to-amber-50/60 p-4 sm:p-5">
-          <div className="flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-[clamp(15px,4.3vw,20px)] font-bold text-slate-900"><ListTodo className="size-5 text-orange-500" /> আজকের কাজ</h2>
-            <Link href="/tasks" className="flex items-center text-sm text-slate-500 hover:text-blue-700">সব <ChevronRight className="size-4" /></Link>
-          </div>
-          {todayTasks.length ? <ul className="mt-3 space-y-2">
-            {todayTasks.slice(0, 4).map((task) => <li key={task.id}>
-              <Link href="/tasks" className="flex items-center gap-3 rounded-2xl bg-white/80 px-3 py-2.5 transition hover:bg-white">
-                <span className={cn("size-2.5 shrink-0 rounded-full", task.status === "FINISHED" ? "bg-emerald-500" : task.priority === "HIGH" ? "bg-red-500" : task.priority === "MEDIUM" ? "bg-amber-400" : "bg-slate-300")} />
-                <span className="min-w-0 flex-1">
-                  <span className={cn("block truncate text-sm font-medium", task.status === "FINISHED" && "text-slate-400 line-through")}><MathText text={task.title} /></span>
-                  <span className="block truncate text-xs text-slate-500">{task.subject?.name ?? "No subject"} · {task.estimatedMinutes}m</span>
-                </span>
-              </Link>
-            </li>)}
-          </ul> : <p className="mt-3 text-sm text-slate-600">আজকের জন্য কোনো কাজ নেই।</p>}
-          <Link href="/tasks?add=1" className="mt-4 inline-flex w-fit items-center gap-1.5 rounded-full bg-white px-4 py-2 text-sm font-semibold text-blue-700 shadow-sm ring-1 ring-blue-100 hover:bg-blue-50">নতুন task <ChevronRight className="size-4" /></Link>
-        </section>
-
-        <section className={cn(card, "p-4 sm:p-5")}>
-          <div className="flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-[clamp(15px,4.3vw,20px)] font-bold text-slate-900"><RotateCcw className="size-5 text-blue-600" /> রিভিশন বাকি</h2>
-            <Link href="/tasks?view=revisions" className="flex items-center text-sm text-slate-500 hover:text-blue-700">সব <ChevronRight className="size-4" /></Link>
-          </div>
-          {toRevise.length ? <ul className="mt-2 divide-y divide-slate-100">
-            {toRevise.map((task, index) => <li key={task.id}>
-              <Link href="/tasks?view=revisions" className="flex items-center gap-3 py-2.5">
-                <span className={cn("flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold", index === 0 ? "bg-amber-100 text-amber-700" : index === 1 ? "bg-slate-100 text-slate-600" : "bg-orange-100 text-orange-700")}>{index + 1}</span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium"><MathText text={task.title} /></span>
-                  <span className="block text-xs text-slate-500">{task.subject?.name ?? "No subject"}</span>
-                </span>
-                <span className={needsRevision(task, todayMs) ? "shrink-0 text-xs font-medium text-amber-700" : "shrink-0 text-xs text-slate-500"}>
-                  {task.timesRevised}× · {lastRevisedLabel(task.lastRevisedAt, todayMs).replace("last: ", "")}
-                </span>
-              </Link>
-            </li>)}
-          </ul> : <p className="mt-3 text-sm text-slate-500">শেষ করা task এখানে রিভিশনের জন্য আসবে।</p>}
-        </section>
-      </div>
-
-      {/* Overall progress and the clock tools. */}
-      <div className="grid gap-3 sm:gap-5 lg:grid-cols-[1fr_1.2fr] lg:items-start">
-        <Link href="/progress" className={cn(card, "block p-4 transition active:scale-[0.99] sm:p-5")}>
-          <div className="flex items-baseline justify-between gap-3">
-            <p className="text-sm font-semibold text-slate-800">সার্বিক প্রস্তুতি</p>
-            <p className="text-lg font-bold tabular-nums text-blue-700">{progressPercent}%</p>
-          </div>
-          <Progress className="mt-2.5 bg-slate-100" barClassName="bg-blue-600" value={progressPercent} />
-          <p className={cn("mt-3 text-xs", prep?.overdue ? "font-medium text-red-600" : "text-slate-500")}>
-            🔥 প্রস্তুতির সময়: {prep?.label ?? "Study Plan-এ deadline দিন"}
-          </p>
+        <Link href="/progress" className={cn(card, "flex h-full flex-col p-3.5 transition active:scale-[0.98] sm:p-5")}>
+          <span className="flex items-center gap-2">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-50 sm:size-11"><ChartColumnIncreasing className="size-5 text-blue-600 sm:size-6" /></span>
+            <span className="text-[13px] font-bold leading-tight text-slate-900 sm:text-base">সার্বিক প্রস্তুতি</span>
+          </span>
+          <span className="mt-2 block text-2xl font-bold tabular-nums text-blue-700 sm:text-3xl">{progressPercent}%</span>
+          <span className="mt-auto block pt-1.5">
+            <Progress className="h-1.5 bg-slate-100 sm:h-2" barClassName="bg-blue-600" value={progressPercent} />
+            <span className={cn("mt-1.5 block truncate text-[11px] sm:text-sm", prep?.overdue ? "font-medium text-red-600" : "text-slate-500")}>{prep ? `সময়: ${prep.label}` : "Deadline দিন"}</span>
+          </span>
         </Link>
-        <ClockTools />
+
+        <section className="flex h-full flex-col rounded-3xl bg-linear-to-br from-orange-50 to-amber-50/60 p-3.5 sm:p-5">
+          <Link href="/tasks" className="flex items-center justify-between gap-1">
+            <span className="flex items-center gap-1.5 text-[13px] font-bold text-slate-900 sm:text-base"><ListTodo className="size-4 text-orange-500 sm:size-5" /> আজকের কাজ</span>
+            <ChevronRight className="size-4 shrink-0 text-slate-400" />
+          </Link>
+          {todayTasks.length ? <ul className="mt-2 space-y-1.5">
+            {todayTasks.slice(0, 3).map((task) => <li key={task.id}>
+              <Link href="/tasks" className="flex items-center gap-2 rounded-xl bg-white/80 px-2 py-1.5">
+                <span className={cn("size-2 shrink-0 rounded-full", task.status === "FINISHED" ? "bg-emerald-500" : task.priority === "HIGH" ? "bg-red-500" : task.priority === "MEDIUM" ? "bg-amber-400" : "bg-slate-300")} />
+                <span className={cn("min-w-0 flex-1 truncate text-[12px] font-medium sm:text-sm", task.status === "FINISHED" && "text-slate-400 line-through")}><MathText text={task.title} /></span>
+              </Link>
+            </li>)}
+          </ul> : <p className="mt-2 text-[12px] text-slate-600 sm:text-sm">আজ কোনো কাজ নেই।</p>}
+          {todayTasks.length > 3 ? <p className="mt-1 text-[11px] text-slate-500">আরও {todayTasks.length - 3}টি</p> : null}
+          <Link href="/tasks?add=1" className="mt-auto pt-2 text-[12px] font-semibold text-blue-700 sm:text-sm">+ নতুন task</Link>
+        </section>
+
+        <section className={cn(card, "flex h-full flex-col p-3.5 sm:p-5")}>
+          <Link href="/tasks?view=revisions" className="flex items-center justify-between gap-1">
+            <span className="flex items-center gap-1.5 text-[13px] font-bold text-slate-900 sm:text-base"><RotateCcw className="size-4 text-blue-600 sm:size-5" /> রিভিশন বাকি</span>
+            <ChevronRight className="size-4 shrink-0 text-slate-400" />
+          </Link>
+          {toRevise.length ? <ul className="mt-2 space-y-1.5">
+            {toRevise.slice(0, 3).map((task, index) => <li key={task.id}>
+              <Link href="/tasks?view=revisions" className="flex items-center gap-2">
+                <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold", index === 0 ? "bg-amber-100 text-amber-700" : index === 1 ? "bg-slate-100 text-slate-600" : "bg-orange-100 text-orange-700")}>{index + 1}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[12px] font-medium sm:text-sm"><MathText text={task.title} /></span>
+                  <span className={cn("block truncate text-[10.5px] sm:text-xs", needsRevision(task, todayMs) ? "text-amber-700" : "text-slate-500")}>{lastRevisedLabel(task.lastRevisedAt, todayMs).replace("last: ", "")}</span>
+                </span>
+              </Link>
+            </li>)}
+          </ul> : <p className="mt-2 text-[12px] text-slate-500 sm:text-sm">শেষ করা task রিভিশনের জন্য এখানে আসবে।</p>}
+          {revisionCount > 3 ? <p className="mt-auto pt-1 text-[11px] text-slate-500">মোট {revisionCount}টি বাকি</p> : null}
+        </section>
+
+        <ClockToolsCard />
+
+        <Link href="/tasks" className={cn(card, "flex h-full flex-col p-3.5 transition active:scale-[0.98] sm:p-5")}>
+          <span className="flex items-center gap-2">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-violet-50 sm:size-11"><ListChecks className="size-5 text-violet-600 sm:size-6" /></span>
+            <span className="text-[13px] font-bold leading-tight text-slate-900 sm:text-base">কাজের হিসাব</span>
+          </span>
+          <span className="mt-auto grid grid-cols-3 gap-1 pt-2.5 text-center">
+            {[{ label: "বাকি", value: pendingCount, tone: "text-slate-900" }, { label: "শেষ", value: finishedCount, tone: "text-emerald-700" }, { label: "রিভিশন", value: revisionCount, tone: revisionCount ? "text-amber-700" : "text-slate-900" }].map((stat) => <span key={stat.label} className="rounded-xl bg-slate-50 py-1.5">
+              <span className={cn("block text-base font-bold tabular-nums leading-tight sm:text-xl", stat.tone)}>{stat.value}</span>
+              <span className="block truncate text-[10px] text-slate-500 sm:text-xs">{stat.label}</span>
+            </span>)}
+          </span>
+        </Link>
       </div>
     </div>
   );
