@@ -130,12 +130,14 @@ export function DashboardView({
           <h2 className="text-[clamp(17px,4.9vw,24px)] font-bold tracking-tight text-slate-900">Quick Access</h2>
           <PageFinder trigger="see-all" />
         </div>
-        <nav aria-label="Quick access" className="grid grid-cols-5 gap-[clamp(6px,2vw,16px)]">
+        {/* Phones: just the icon and its name on the page, so five fit a row with room to breathe;
+            from sm up each sits on its own white card, as in the design. */}
+        <nav aria-label="Quick access" className="grid grid-cols-5 gap-x-1 gap-y-4 sm:gap-[clamp(10px,2vw,16px)]">
           {quickAccess.map((item) => {
             const Icon = item.icon;
-            return <Link key={item.href} href={item.href} className={cn(card, "flex flex-col items-center gap-[clamp(6px,1.8vw,12px)] px-0.5 py-[clamp(10px,3vw,20px)] text-center transition hover:-translate-y-0.5 active:scale-95")}>
-              <span className={cn("flex size-[clamp(42px,11.6vw,64px)] items-center justify-center rounded-[clamp(12px,3.4vw,20px)]", item.tone)}><Icon className="size-[clamp(21px,5.8vw,30px)]" strokeWidth={2} /></span>
-              <span className="whitespace-nowrap text-[clamp(10.5px,2.95vw,15px)] font-medium leading-tight tracking-tight text-slate-700">{item.label}</span>
+            return <Link key={item.href} href={item.href} className="group flex flex-col items-center gap-1.5 text-center transition active:scale-95 sm:rounded-3xl sm:bg-white sm:px-1 sm:py-5 sm:shadow-[0_6px_24px_-12px_rgba(15,23,42,0.15)] sm:hover:-translate-y-0.5">
+              <span className={cn("flex size-[clamp(48px,13.6vw,64px)] items-center justify-center rounded-[clamp(15px,4.2vw,20px)] ring-1 ring-white shadow-[0_6px_16px_-10px_rgba(15,23,42,0.35)] sm:shadow-none", item.tone)}><Icon className="size-[clamp(23px,6.4vw,30px)]" strokeWidth={2} /></span>
+              <span className="w-full truncate px-0.5 text-[clamp(11px,3vw,15px)] font-medium leading-tight text-slate-700">{item.label}</span>
             </Link>;
           })}
         </nav>
