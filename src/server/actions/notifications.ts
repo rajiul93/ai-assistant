@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { personSelect, publicPerson } from "@/server/collaboration/people";
 
 /**
- * Notifications for friend and share events, persisted so they survive refresh and sign-in. Chat
+ * Notifications for friend, share and group events, persisted so they survive refresh and sign-in. Chat
  * messages aren't stored here; the bell adds unread chats from the Messages counts.
  */
 
@@ -23,6 +23,7 @@ export async function listNotifications(limit = 30) {
       actor: { select: personSelect },
       friendRequest: { select: { id: true, status: true } },
       shareRequest: { select: { id: true, status: true, itemType: true, title: true, payload: true, createdItemId: true } },
+      group: { select: { id: true, name: true } },
     },
   });
   const friendIds = new Set((await prisma.friendship.findMany({ where: { OR: [{ userAId: me.id }, { userBId: me.id }] }, select: { userAId: true, userBId: true } })).map((row) => (row.userAId === me.id ? row.userBId : row.userAId)));
@@ -36,6 +37,7 @@ export async function listNotifications(limit = 30) {
     share: row.shareRequest
       ? { id: row.shareRequest.id, status: row.shareRequest.status, type: row.shareRequest.itemType as ShareType, title: row.shareRequest.title, preview: sharePreview(row.shareRequest.itemType as ShareType, row.shareRequest.payload), createdItemId: row.shareRequest.createdItemId }
       : null,
+    group: row.group,
   }));
 }
 

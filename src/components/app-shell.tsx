@@ -22,6 +22,7 @@ import {
   CircleHelp,
   Languages,
   MessageCircle,
+  UserRound,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLive } from "@/components/collaboration/live-provider";
@@ -50,6 +51,7 @@ const links = [
   { href: "/jobs", label: "Jobs", short: "Jobs", icon: BriefcaseBusiness },
   { href: "/usage", label: "AI Usage", short: "AI Usage", icon: Gauge },
   { href: "/billing", label: "Plans", short: "Plans", icon: CreditCard },
+  { href: "/profile", label: "Profile", short: "Profile", icon: UserRound },
 ];
 
 const billingAdminLink = { href: "/admin/billing", label: "Billing", short: "Billing", icon: Receipt };
@@ -118,7 +120,7 @@ export function AppShell({
           })}
         </nav>
         <div className="border-t border-zinc-200 p-4">
-          <p className="mb-3 truncate text-sm text-zinc-600">{userName}</p>
+          <Link href="/profile" className="mb-3 block truncate text-sm text-zinc-600 hover:text-zinc-950">{userName}</Link>
           <SignOutButton />
         </div>
       </aside>
@@ -198,7 +200,7 @@ export function AppShell({
               })}
             </nav>
             <div className="mt-5 flex items-center justify-between gap-3 border-t border-zinc-200 pt-4">
-              <p className="truncate text-sm text-zinc-600">{userName}</p>
+              <Link href="/profile" onClick={() => setMoreOpen(false)} className="truncate text-sm text-zinc-600 hover:text-zinc-950">{userName}</Link>
               <SignOutButton />
             </div>
           </DialogContent>

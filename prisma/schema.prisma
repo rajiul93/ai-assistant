@@ -8,24 +8,28 @@ datasource db {
 }
 
 model User {
-  id            String        @id @default(cuid())
-  firebaseUid   String        @unique
-  email         String        @unique
-  name          String?
-  image         String?
+  id               String        @id @default(cuid())
+  firebaseUid      String        @unique
+  email            String        @unique
+  name             String?
+  image            String?
+  /// Bangladesh mobile as +8801XXXXXXXXX (src/lib/phone.ts). Private: only the user and the super admin see it.
+  phone            String?
+  /// Set when the user saves their profile; sign-in then stops replacing `name` with the Google name.
+  profileUpdatedAt DateTime?
   /// USER by default. Only the super admin (a fixed email, see src/server/roles.ts) can change roles.
-  role          UserRole      @default(USER)
+  role             UserRole      @default(USER)
   /// BLOCKED: the super admin shut the account; the user sees only a "blocked" notice.
-  status        AccountStatus @default(ACTIVE)
+  status           AccountStatus @default(ACTIVE)
   /// The super admin paused this user's AI (the plan's days keep running); the rest of the app works.
-  aiPaused      Boolean       @default(false)
+  aiPaused         Boolean       @default(false)
   /// Whether this user may use the AI. New users start without it and ask an admin; admins always have it.
-  aiAccess      AiAccess      @default(NONE)
-  aiRequestedAt DateTime?
+  aiAccess         AiAccess      @default(NONE)
+  aiRequestedAt    DateTime?
   /// Most AI tokens this user may use in total; null = no limit. Admins are never limited.
-  aiTokenLimit  Int?          @default(1000000)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  aiTokenLimit     Int?          @default(1000000)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   studyPlan              StudyPlan?
   subjects               Subject[]
@@ -54,6 +58,9 @@ model User {
   conversationsA         Conversation[]     @relation("ConversationA")
   conversationsB         Conversation[]     @relation("ConversationB")
   messagesSent           Message[]
+  // Group chat (docs/profile-and-group-chat-plan.md §2)
+  groupMemberships       ChatGroupMember[]
+  groupMessagesSent      GroupMessage[]
   applications           JobApplication[]
   notes                  Note[]
   aiUsage                AiUsage[]
@@ -660,6 +667,7 @@ enum NotificationType {
   SHARE_REQUEST
   SHARE_ACCEPTED
   SHARE_REJECTED
+  GROUP_ADDED
 }
 
 /// A friend request. History is kept; the migration adds a partial unique index so only one
@@ -731,6 +739,9 @@ model Notification {
   friendRequest   FriendRequest?   @relation(fields: [friendRequestId], references: [id], onDelete: SetNull)
   shareRequestId  String?
   shareRequest    ShareRequest?    @relation(fields: [shareRequestId], references: [id], onDelete: SetNull)
+  /// GROUP_ADDED: the group you were added to; gone with the group.
+  groupId         String?
+  group           ChatGroup?       @relation(fields: [groupId], references: [id], onDelete: Cascade)
   readAt          DateTime?
   createdAt       DateTime         @default(now())
 
@@ -767,4 +778,61 @@ model Message {
   createdAt      DateTime     @default(now())
 
   @@index([conversationId, createdAt])
+}
+
+/**
+ * ---------- Group chat (docs/profile-and-group-chat-plan.md §2) ----------
+ */
+
+enum GroupRole {
+  ADMIN
+  MEMBER
+}
+
+enum GroupMessageKind {
+  TEXT
+  /// "X joined", "renamed to …": written by the server, shown centred.
+  SYSTEM
+}
+
+/// A chat of 3–20 people. Separate from the 1:1 `Conversation`. Members are added from the adder's
+/// friends; leaving or removal deletes the member row (no access to the history afterwards).
+model ChatGroup {
+  id            String            @id @default(cuid())
+  name          String
+  /// Who made it; kept as plain text so the group outlives that account.
+  createdById   String
+  lastMessageAt DateTime?
+  createdAt     DateTime          @default(now())
+  members       ChatGroupMember[]
+  messages      GroupMessage[]
+  notifications Notification[]
+}
+
+model ChatGroupMember {
+  groupId    String
+  group      ChatGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       GroupRole @default(MEMBER)
+  joinedAt   DateTime  @default(now())
+  lastReadAt DateTime?
+
+  @@id([groupId, userId])
+  @@index([userId])
+}
+
+/// A group message: plain text only, always rendered as text (never HTML).
+model GroupMessage {
+  id        String           @id @default(cuid())
+  groupId   String
+  group     ChatGroup        @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  /// Null for SYSTEM lines, or after the sender's account is deleted.
+  senderId  String?
+  sender    User?            @relation(fields: [senderId], references: [id], onDelete: SetNull)
+  kind      GroupMessageKind @default(TEXT)
+  body      String
+  createdAt DateTime         @default(now())
+
+  @@index([groupId, createdAt])
 }

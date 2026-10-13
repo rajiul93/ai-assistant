@@ -15,7 +15,9 @@ export type LiveEvent =
   | { type: "notify" }
   | { type: "friends" }
   | { type: "message"; conversationId: string; message: { id: string; senderId: string; body: string; createdAt: string } }
-  | { type: "read"; conversationId: string };
+  | { type: "read"; conversationId: string }
+  | { type: "group_message"; groupId: string; message: { id: string; senderId: string | null; kind: "TEXT" | "SYSTEM"; body: string; createdAt: string } }
+  | { type: "group_changed"; groupId: string };
 /** "live": socket connected; "polling": no socket (not configured, or reconnecting). */
 export type LiveStatus = "connecting" | "live" | "polling";
 
@@ -83,6 +85,8 @@ export function LiveProvider({ children }: { children: React.ReactNode }) {
         if (event.type === "notify") for (const key of ["notifications", "shares", "friends"]) void queryClient.invalidateQueries({ queryKey: [key] });
         if (event.type === "friends") for (const key of ["friends", "conversations", "notifications"]) void queryClient.invalidateQueries({ queryKey: [key] });
         if (event.type === "message" || event.type === "read") void queryClient.invalidateQueries({ queryKey: ["conversations"] });
+        if (event.type === "group_message") void queryClient.invalidateQueries({ queryKey: ["groups"] });
+        if (event.type === "group_changed") for (const key of ["groups", "group"]) void queryClient.invalidateQueries({ queryKey: [key] });
         listeners.current.forEach((listener) => listener(event));
       });
     })();

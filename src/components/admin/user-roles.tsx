@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Pagination } from "@/components/pagination";
 import { formatDate } from "@/lib/dayjs";
+import { formatBdPhone } from "@/lib/phone";
 import { cn } from "@/lib/utils";
 import { cancelUserSubscription, setUserAiPaused, setUserBlocked, setUserRole } from "@/server/actions/roles";
 
@@ -23,6 +24,7 @@ type Row = {
   id: string;
   name: string | null;
   email: string;
+  phone: string | null;
   role: UserRole;
   status: AccountStatus;
   aiPaused: boolean;
@@ -68,7 +70,7 @@ function UserRow({ user, onConfirm }: { user: Row; onConfirm: (confirm: Confirm)
           {blocked ? <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-red-100 px-1.5 text-[10px] font-semibold text-red-700"><Ban className="size-3" /> Blocked</span> : null}
           {user.aiPaused ? <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-800"><PauseCircle className="size-3" /> AI off</span> : null}
         </p>
-        <p className="truncate text-xs text-zinc-500">{user.email} · {planText(user)}</p>
+        <p className="truncate text-xs text-zinc-500">{user.email}{user.phone ? ` · ${formatBdPhone(user.phone)}` : ""} · {planText(user)}</p>
       </div>
       {user.superAdmin
         ? <span className={cn("flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold", roleStyle.SUPER_ADMIN)}><Crown className="size-3.5" /> Super admin</span>
