@@ -1,25 +1,26 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Check } from "lucide-react";
+import { Check } from "lucide-react";
 import { MathText } from "@/components/math-text";
 import { SolutionNotes } from "@/components/preliminary/question-set-views";
+import { BankBreadcrumb, examBySlug, sectionHref } from "@/components/question-bank/bank-nav";
 import { SendToPreliminary } from "@/components/question-bank/send-button";
 import { requireUser } from "@/lib/auth";
-import { BANK_EXAMS, BANK_OPTION_LETTERS } from "@/lib/question-bank";
+import { BANK_OPTION_LETTERS } from "@/lib/question-bank";
 import { cn } from "@/lib/utils";
 import { getBankSet } from "@/server/actions/question-bank";
 
-/** One bank set, read-only: every question with its answer, solution and explanation. */
-export default async function BankSetPage(props: PageProps<"/question-bank/[id]">) {
+/** Level 4: one bank set, read-only — every question with its answer, solution and explanation. */
+export default async function BankSetPage(props: PageProps<"/question-bank/[exam]/[section]/[setId]">) {
   await requireUser();
-  const set = await getBankSet((await props.params).id);
-  if (!set) notFound();
-  const exam = BANK_EXAMS.find((item) => item.id === set.exam)!;
+  const params = await props.params;
+  const set = await getBankSet(params.setId);
+  const exam = examBySlug(params.exam);
+  // The set's own exam and section decide the trail, whatever the URL said.
+  if (!set || !exam || exam.id !== set.exam) notFound();
 
   return <div className="mx-auto max-w-3xl space-y-4 pb-24">
     <header className="space-y-2">
-      <Link href={`/question-bank?exam=${exam.slug}`} className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900"><ArrowLeft className="size-4" /> প্রশ্ন ব্যাংক</Link>
-      <p className="text-xs font-medium text-indigo-600">{exam.label} · {set.section}</p>
+      <BankBreadcrumb trail={[{ label: "প্রশ্ন ব্যাংক", href: "/question-bank" }, { label: exam.label, href: `/question-bank/${exam.slug}` }, { label: set.section, href: sectionHref(exam.slug, set.section) }, { label: set.name }]} />
       <h1 className="text-2xl font-semibold leading-tight tracking-tight">{set.name}</h1>
       <p className="text-sm text-zinc-500">{set.questions.length}টি প্রশ্ন · পড়া আর exam-এর জন্য Preliminary-তে পাঠাও।</p>
     </header>

@@ -21,7 +21,17 @@ const idSchema = z.string().min(1).max(64);
 /** Preliminary's own limit for one set. */
 const SET_MAX = 300;
 
-/** The sets of one exam tab with question counts, and whether I already sent each one. */
+/** The first page: how many sets and questions each exam has. */
+export async function bankOverview() {
+  await requireUser();
+  const rows = await prisma.$queryRaw<Array<{ exam: string; sets: bigint; questions: bigint }>>`
+    SELECT s.exam::text AS exam, COUNT(DISTINCT s.id)::bigint AS sets, COUNT(q.id)::bigint AS questions
+    FROM "BankSet" s LEFT JOIN "BankQuestion" q ON q."setId" = s.id
+    GROUP BY s.exam`;
+  return Object.fromEntries(rows.map((row) => [row.exam, { sets: Number(row.sets), questions: Number(row.questions) }])) as Record<string, { sets: number; questions: number } | undefined>;
+}
+
+/** The sets of one exam with question counts, and whether I already sent each one. */
 export async function listBankSets(exam: string) {
   const me = await requireUser();
   const sets = await prisma.bankSet.findMany({

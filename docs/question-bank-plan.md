@@ -59,8 +59,9 @@ Assumed until the owner says otherwise (all in `src/lib/question-bank.ts`, unit-
 - `src/server/actions/question-bank.ts`: `listBankSets`, `getBankSet`,
   `sendBankSetToPreliminary`; super admin `importBankRows` (150 rows per call), `listAllBankSets`,
   `deleteBankSet`.
-- Pages: `/question-bank` (tabs, section chips, search, set cards), `/question-bank/[id]`
-  (read-only set), `/admin/question-bank` (upload + set list). Nav: "প্রশ্ন ব্যাংক" for all,
+- Pages, nested card grids: `/question-bank` (exams) → `/question-bank/[exam]` (sections) →
+  `/question-bank/[exam]/[section]` (sets, with search) → `…/[setId]`
+  (read-only set); `/admin/question-bank` (upload + set list). Nav: "প্রশ্ন ব্যাংক" for all,
   "Bank upload" for the super admin; voice page `question_bank`.
 - Upload: the `.xlsx` is read **in the browser** (`read-excel-file`); every row is checked and
   errors/warnings listed by sheet row before anything is sent; then batches of 150 with progress.
