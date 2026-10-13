@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkAi } from "@/server/ai-access";
+import { isAdminUser } from "@/server/roles";
 import { logUsage } from "@/server/assistant/ai";
 import { fixVoiceText } from "@/server/assistant/voice-fix";
 import { speechHints as hints } from "@/server/speech-hints";
@@ -14,7 +15,8 @@ let availability: { value: boolean; checkedAt: number } | null = null;
 export async function GET() {
   const user = await requireUser();
   // Without AI access (or with the token limit used up) the page uses the browser's own recognizer.
-  if (!(await checkAi(user)).allowed) return Response.json({ available: false });
+  // Voice is admin-only (src/lib/voice-access.ts).
+  if (!(await isAdminUser(user)) || !(await checkAi(user)).allowed) return Response.json({ available: false });
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return Response.json({ available: false });
   if (!availability || Date.now() - availability.checkedAt > 10 * 60_000) {
@@ -33,7 +35,7 @@ type TranscriptionPayload = { text?: string; usage?: { input_tokens?: number; ou
 export async function POST(request: Request) {
   const user = await requireUser();
   // 501 tells the page to switch to the browser's own recognizer.
-  if (!(await checkAi(user)).allowed) return Response.json({ error: "unavailable" }, { status: 501 });
+  if (!(await isAdminUser(user)) || !(await checkAi(user)).allowed) return Response.json({ error: "unavailable" }, { status: 501 });
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return Response.json({ error: "not_configured" }, { status: 501 });
   const params = new URL(request.url).searchParams;

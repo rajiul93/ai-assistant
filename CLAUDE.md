@@ -79,6 +79,11 @@ alone. Record decisions and their reasons; don't restate code.
   (`roleOf`, `isAdminUser`, read fresh from the DB). Admins: no AI limits, admin pages, and they
   edit shared content (vocabulary).
 - AI access is gated by plans/entitlements (`src/server/ai-access.ts` `checkAi`).
+- **No AI without a plan**: every OpenAI call goes through `checkAi` first (no plan, expired, out
+  of tokens or paused → refused; admins always pass). Audited 2026-10-13: 14 entry points, all gated.
+- **Voice is admin-only** (mic, speech-to-text, read-aloud, voice chat, voice forms — including the
+  browser's own recognizer and voice): `src/lib/voice-access.ts` is switched on by `AppShell` for
+  admins only, and `/api/speech`, `/api/transcribe`, `/api/transcribe/live` check `isAdminUser`.
 - Solutions/explanations and sending a bank set to Preliminary need a running plan (admins always):
   `hasPremium` / `gateNotes` in `src/server/premium.ts` — gate on the server, never only in the UI.
 

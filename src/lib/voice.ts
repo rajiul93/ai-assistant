@@ -1,4 +1,5 @@
 import { speechLangs, type AssistantLang } from "@/lib/assistant-i18n";
+import { isVoiceAllowed } from "@/lib/voice-access";
 import { speakableBangla } from "@/lib/bangla-numbers";
 import { speakMath } from "@/lib/math";
 import { createSentenceChunker } from "@/lib/sentence-chunker";
@@ -23,7 +24,8 @@ export type Recognition = {
 type RecognitionConstructor = new () => Recognition;
 
 export function getRecognitionConstructor(): RecognitionConstructor | undefined {
-  if (typeof window === "undefined") return undefined;
+  // Voice is admin-only: for everyone else the browser's recognizer counts as missing too.
+  if (typeof window === "undefined" || !isVoiceAllowed()) return undefined;
   const browserWindow = window as Window & { SpeechRecognition?: RecognitionConstructor; webkitSpeechRecognition?: RecognitionConstructor };
   return browserWindow.SpeechRecognition || browserWindow.webkitSpeechRecognition;
 }
@@ -267,7 +269,8 @@ const STREAM_LOOKAHEAD = 3;
  * never after the whole answer. Starting another reply (or stopSpeaking) cancels it.
  */
 export function createSpeechStream(onDone?: () => void) {
-  if (typeof window === "undefined") return { push() {}, end() { onDone?.(); } };
+  // Reading aloud is admin-only (src/lib/voice-access.ts); for others replies stay silent.
+  if (typeof window === "undefined" || !isVoiceAllowed()) return { push() {}, end() { onDone?.(); } };
   stopCurrent();
   const token = speechToken;
   const lang = useAssistantStore.getState().lang;

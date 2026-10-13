@@ -5,10 +5,12 @@ import { Mic, MicOff, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useBestMic } from "@/lib/use-best-mic";
 import { speak, stopSpeaking } from "@/lib/voice";
+import { useVoiceAllowed } from "@/lib/voice-access";
 
 export type VoiceStep = { key: string; question: string; label: string };
 
 export function VoiceFormAssistant({ title = "Voice form", steps, onComplete, compact }: { title?: string; steps: VoiceStep[]; onComplete: (answers: Record<string, string>) => void; /** Icon-only button, for tight rows. */ compact?: boolean }) {
+  const voiceAllowed = useVoiceAllowed();
   const [open, setOpen] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -32,6 +34,8 @@ export function VoiceFormAssistant({ title = "Voice form", steps, onComplete, co
     if (stepIndex === steps.length - 1) { close(); onComplete(nextAnswers); return; }
     setTranscript(""); setVoiceError(""); setStepIndex((value) => value + 1); speak(steps[stepIndex + 1].question);
   }
+  // Filling a form by voice is admin-only, like every voice feature.
+  if (!voiceAllowed) return null;
   return <>
     {compact
       ? <Button type="button" variant="outline" onClick={begin} aria-label="Voice দিয়ে পূরণ করুন" title="Voice দিয়ে পূরণ করুন" className="size-11 shrink-0 p-0"><Mic /></Button>
