@@ -79,6 +79,8 @@ alone. Record decisions and their reasons; don't restate code.
   (`roleOf`, `isAdminUser`, read fresh from the DB). Admins: no AI limits, admin pages, and they
   edit shared content (vocabulary).
 - AI access is gated by plans/entitlements (`src/server/ai-access.ts` `checkAi`).
+- Solutions/explanations and sending a bank set to Preliminary need a running plan (admins always):
+  `hasPremium` / `gateNotes` in `src/server/premium.ts` — gate on the server, never only in the UI.
 
 ## Folder map
 

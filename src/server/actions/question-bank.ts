@@ -8,6 +8,7 @@ import { now, startOfDay } from "@/lib/dayjs";
 import { prisma } from "@/lib/prisma";
 import { BANK_CHECK_BATCH, BANK_EDITED, BANK_IMPORT_BATCH, placementForSet, questionFingerprint, rowContentHash, rowSetKey } from "@/lib/question-bank";
 import { placeFor } from "@/server/collaboration/share-copy";
+import { gateNotes, hasPremium } from "@/server/premium";
 import { isAdminUser, isSuperAdminEmail } from "@/server/roles";
 
 /**
@@ -43,10 +44,13 @@ export async function listBankSets(exam: string) {
   return sets.map((set) => ({ id: set.id, section: set.section, name: set.name, questionCount: set._count.questions, copyId: set.copies[0]?.id ?? null }));
 }
 
-/** One set with every question, answer, solution and explanation (it's for reading), and whether I may edit it. */
+/**
+ * One set with every question and answer, and whether I may edit it. Solutions and explanations
+ * come only with a paid plan (or to admins); otherwise just whether each has one.
+ */
 export async function getBankSet(id: string) {
   const me = await requireUser();
-  const canEdit = await isAdminUser(me);
+  const [canEdit, premium] = await Promise.all([isAdminUser(me), hasPremium(me)]);
   const set = await prisma.bankSet.findUnique({
     where: { id: idSchema.parse(id) },
     select: {
@@ -56,18 +60,19 @@ export async function getBankSet(id: string) {
     },
   });
   if (!set) return null;
-  const { copies, ...rest } = set;
-  return { ...rest, copyId: copies[0]?.id ?? null, canEdit };
+  const { copies, questions, ...rest } = set;
+  return { ...rest, questions: questions.map((question) => gateNotes(question, premium)), copyId: copies[0]?.id ?? null, canEdit, premium };
 }
 
 /**
- * Copies a bank set into my Preliminary (Todo, dated today), filed under the subject its questions
+ * Copies a bank set into my Preliminary (Todo, dated today) — a paid feature, filed under the subject its questions
  * share (a mixed past paper goes under its section). One copy per user: sending again returns the
  * copy I already have; deleting that copy lets me send it afresh.
  */
 export async function sendBankSetToPreliminary(id: string) {
   const me = await requireUser();
   const bankSetId = idSchema.parse(id);
+  if (!(await hasPremium(me))) throw new Error("Preliminary-তে পাঠাতে একটা চালু plan লাগবে।");
   const existing = await prisma.questionSet.findFirst({ where: { userId: me.id, bankSetId }, select: { id: true } });
   if (existing) return { id: existing.id, alreadySent: true };
 

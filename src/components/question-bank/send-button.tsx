@@ -3,13 +3,16 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, Send } from "lucide-react";
+import { Check, Loader2, Lock, Send } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { sendBankSetToPreliminary } from "@/server/actions/question-bank";
 
-/** "Preliminary-তে পাঠাও", or a link to the copy once it's there (one copy per set). */
-export function SendToPreliminary({ setId, copyId, className }: { setId: string; copyId: string | null; className?: string }) {
+/**
+ * "Preliminary-তে পাঠাও", or a link to the copy once it's there (one copy per set). Sending is a
+ * paid feature: `locked` shows a lock and leads to Plans (the server refuses it anyway).
+ */
+export function SendToPreliminary({ setId, copyId, locked = false, className }: { setId: string; copyId: string | null; locked?: boolean; className?: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [sentId, setSentId] = useState(copyId);
@@ -17,6 +20,12 @@ export function SendToPreliminary({ setId, copyId, className }: { setId: string;
   if (sentId) {
     return <Link href={`/preliminary/${sentId}`} className={cn("flex h-10 items-center justify-center gap-1.5 rounded-xl bg-emerald-50 px-3.5 text-sm font-semibold text-emerald-800 ring-1 ring-emerald-200 hover:bg-emerald-100", className)}>
       <Check className="size-4" /> Preliminary-তে আছে
+    </Link>;
+  }
+
+  if (locked) {
+    return <Link href="/billing" title="Preliminary-তে পাঠাতে একটা চালু plan লাগবে" className={cn("flex h-10 items-center justify-center gap-1.5 rounded-xl bg-amber-50 px-3.5 text-sm font-semibold text-amber-900 ring-1 ring-amber-200 hover:bg-amber-100", className)}>
+      <Lock className="size-4" /> Preliminary-তে পাঠাতে plan লাগবে
     </Link>;
   }
 

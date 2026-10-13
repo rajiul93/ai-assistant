@@ -27,7 +27,7 @@ export default async function BankSetPage(props: PageProps<"/question-bank/[exam
 
     {/* Sending stays in reach while scrolling through the questions. */}
     <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 border-t border-zinc-200 bg-white/90 px-4 py-3 backdrop-blur-xl lg:bottom-0 lg:pl-64">
-      <div className="mx-auto flex max-w-3xl justify-end"><SendToPreliminary setId={set.id} copyId={set.copyId} className="w-full sm:w-auto" /></div>
+      <div className="mx-auto flex max-w-3xl justify-end"><SendToPreliminary setId={set.id} copyId={set.copyId} locked={!set.premium} className="w-full sm:w-auto" /></div>
     </div>
   </div>;
 }

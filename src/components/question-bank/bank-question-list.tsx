@@ -10,8 +10,8 @@ import { BANK_OPTION_LETTERS } from "@/lib/question-bank";
 import { cn } from "@/lib/utils";
 import { updateBankQuestion } from "@/server/actions/question-bank";
 
-type BankQuestion = { id: string; text: string; options: string[]; correctIndex: number; solution: string | null; explanation: string | null; editedAt?: Date | string | null };
-type Draft = Omit<BankQuestion, "editedAt">;
+type BankQuestion = { id: string; text: string; options: string[]; correctIndex: number; solution: string | null; explanation: string | null; hasSolution?: boolean; hasExplanation?: boolean; editedAt?: Date | string | null };
+type Draft = Omit<BankQuestion, "editedAt" | "hasSolution" | "hasExplanation">;
 type BeautifyResponse = { results: Draft[]; skipped: number; originals: Draft[]; error?: string };
 
 const PER_CALL = 4;
@@ -193,7 +193,7 @@ export function BankQuestionList({ questions: initial, canEdit }: { questions: B
             <p className="min-w-0 flex-1 font-medium leading-relaxed"><span className="mr-1.5 text-zinc-400 tabular-nums">{index + 1}.</span>{isEditing ? <span className="text-sm text-violet-700">Edit হচ্ছে</span> : <MathText text={question.text} book />}</p>
             {canEdit && !isEditing && !selecting ? <span className="flex shrink-0 gap-0.5">
               <button type="button" disabled={busy} onClick={() => void aiOne(question)} aria-label={`প্রশ্ন ${index + 1} AI দিয়ে গোছাও`} title="AI দিয়ে গোছাও" className="flex size-8 items-center justify-center rounded-lg text-violet-600 hover:bg-violet-50 disabled:opacity-40">{thinking === question.id ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}</button>
-              <button type="button" disabled={busy} onClick={() => setEditing({ id: question.id, draft: question, aiFilled: false })} aria-label={`প্রশ্ন ${index + 1} edit করো`} title="Edit" className="flex size-8 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 disabled:opacity-40"><Pencil className="size-4" /></button>
+              <button type="button" disabled={busy} onClick={() => setEditing({ id: question.id, draft: { id: question.id, text: question.text, options: question.options, correctIndex: question.correctIndex, solution: question.solution, explanation: question.explanation }, aiFilled: false })} aria-label={`প্রশ্ন ${index + 1} edit করো`} title="Edit" className="flex size-8 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 disabled:opacity-40"><Pencil className="size-4" /></button>
             </span> : null}
           </div>
 
@@ -207,7 +207,7 @@ export function BankQuestionList({ questions: initial, canEdit }: { questions: B
                 </li>;
               })}
             </ul>
-            <SolutionNotes solution={question.solution} explanation={question.explanation} />
+            <SolutionNotes solution={question.solution} explanation={question.explanation} hasSolution={question.hasSolution ?? Boolean(question.solution)} hasExplanation={question.hasExplanation ?? Boolean(question.explanation)} />
           </>}
         </li>;
       })}

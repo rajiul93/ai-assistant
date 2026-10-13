@@ -5,8 +5,9 @@ import { z } from "zod";
 import type { QuestionSetStatus } from "@prisma/client";
 import { requireUser } from "@/lib/auth";
 import { APP_TIMEZONE, dayjs } from "@/lib/dayjs";
-import { withoutDuplicates } from "@/lib/preliminary";
+import { questionKey, withoutDuplicates } from "@/lib/preliminary";
 import { prisma } from "@/lib/prisma";
+import { gateNotes, hasPremium } from "@/server/premium";
 
 /**
  * Preliminary: MCQ sets on a topic, moved Todo → Doing (study, answers shown) → Testing (exam,
@@ -32,7 +33,8 @@ const setSchema = z.object({
 });
 
 export type QuestionSetInput = z.infer<typeof setSchema>;
-export type AttemptDetail = { text: string; options: string[]; correctIndex: number; chosen: number; solution?: string | null };
+/** `hasSolution`: added when read back — the solution itself is sent only with a plan. */
+export type AttemptDetail = { text: string; options: string[]; correctIndex: number; chosen: number; solution?: string | null; hasSolution?: boolean };
 
 const statuses = ["TODO", "DOING", "TESTING", "DONE"] as const;
 
@@ -106,6 +108,16 @@ export async function updateQuestionSet(id: string, input: unknown) {
   const data = setSchema.parse(input);
   const subjectId = await ownedSubject(user.id, data.subjectId);
   const topicId = await ownedTopic(user.id, data.topicId, subjectId);
+  // Without a plan the editor never saw the solutions, so it sends none back: keep the stored ones
+  // (matched by question wording and options) instead of wiping them.
+  if (!(await hasPremium(user))) {
+    const stored = await prisma.question.findMany({ where: { setId: set.id }, select: { text: true, options: true, solution: true, explanation: true } });
+    const notes = new Map(stored.map((question) => [questionKey(question), question]));
+    data.questions = data.questions.map((question) => {
+      const old = notes.get(questionKey(question));
+      return { ...question, solution: old?.solution ?? null, explanation: old?.explanation ?? null };
+    });
+  }
   await prisma.$transaction([
     prisma.question.deleteMany({ where: { setId: set.id } }),
     prisma.questionSet.update({
@@ -199,10 +211,14 @@ export async function getQuestionSet(id: string) {
   });
   if (!set) return null;
   const testing = set.status === "TESTING";
+  // Solutions and explanations are a paid feature; and a solution gives the answer away, so it is hidden during a test.
+  const premium = await hasPremium(user);
   return {
     ...set,
-    // A solution gives the answer away, so it is hidden with it.
-    questions: set.questions.map((question) => (testing ? { id: question.id, text: question.text, options: question.options, correctIndex: null, solution: null, explanation: null } : question)),
+    premium,
+    questions: set.questions.map((question) => (testing
+      ? { id: question.id, text: question.text, options: question.options, correctIndex: null, solution: null, explanation: null, hasSolution: false, hasExplanation: false }
+      : gateNotes(question, premium))),
   };
 }
 
@@ -228,5 +244,6 @@ export async function getAttempt(attemptId: string) {
     select: { id: true, setId: true, total: true, correct: true, details: true, submittedAt: true, set: { select: { topicName: true, status: true, subject: { select: { name: true } } } } },
   });
   if (!attempt) return null;
-  return { ...attempt, details: attempt.details as AttemptDetail[] };
+  const premium = await hasPremium(user);
+  return { ...attempt, premium, details: (attempt.details as AttemptDetail[]).map((detail) => ({ ...detail, solution: premium ? detail.solution : null, hasSolution: Boolean(detail.solution) })) };
 }

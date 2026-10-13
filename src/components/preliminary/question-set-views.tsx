@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, CheckCircle2, ClipboardCheck, Pause, Play, RotateCcw, Timer, X, XCircle } from "lucide-react";
+import { ArrowLeft, Check, CheckCircle2, ClipboardCheck, Lock, Pause, Play, RotateCcw, Timer, X, XCircle } from "lucide-react";
 import { toast } from "sonner";
 // Solutions are shown in the read-only Quill view (BookText).
 import "quill/dist/quill.snow.css";
@@ -48,15 +48,35 @@ function useMove(setId: string) {
   return { pending, move };
 }
 
-/** Solution (always shown with the answer) and explanation (one tap), for Question Bank copies. */
-export function SolutionNotes({ solution, explanation }: { solution?: string | null; explanation?: string | null }) {
-  const [open, setOpen] = useState(false);
-  if (!solution && !explanation) return null;
+type NoteKind = "solution" | "explanation";
+
+/**
+ * Two buttons, "সমাধান" and "ব্যাখ্যা": each opens its own text. Both are a paid feature — without
+ * a plan the server sends only whether one exists (`has…`), and the button shows a lock and the
+ * way to Plans instead.
+ */
+export function SolutionNotes({ solution, explanation, hasSolution, hasExplanation }: { solution?: string | null; explanation?: string | null; hasSolution?: boolean; hasExplanation?: boolean }) {
+  const [open, setOpen] = useState<NoteKind | null>(null);
+  const notes = ([
+    { kind: "solution", label: "সমাধান", text: solution, exists: Boolean(solution) || Boolean(hasSolution), tone: "bg-zinc-50 text-zinc-700" },
+    { kind: "explanation", label: "ব্যাখ্যা", text: explanation, exists: Boolean(explanation) || Boolean(hasExplanation), tone: "bg-sky-50 text-sky-950" },
+  ] as const).filter((note) => note.exists);
+  if (!notes.length) return null;
+  const shown = notes.find((note) => note.kind === open);
+
   return <div className="mt-3 space-y-2 text-sm leading-relaxed">
-    {solution ? <div className="rounded-xl bg-zinc-50 px-3 py-2 text-zinc-700"><p className="text-xs font-semibold text-zinc-900">সমাধান</p><BookText text={solution} /></div> : null}
-    {explanation ? (open
-      ? <div className="rounded-xl bg-sky-50 px-3 py-2 text-sky-950"><p className="text-xs font-semibold">ব্যাখ্যা</p><BookText text={explanation} /></div>
-      : <button type="button" onClick={() => setOpen(true)} className="text-xs font-medium text-sky-700 hover:underline">ব্যাখ্যা দেখো</button>) : null}
+    <div className="flex flex-wrap gap-2">
+      {notes.map((note) => {
+        const locked = !note.text;
+        const active = open === note.kind;
+        return <button key={note.kind} type="button" onClick={() => setOpen(active ? null : note.kind)} aria-expanded={active} className={cn("flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold ring-1 transition", active ? "bg-zinc-950 text-white ring-zinc-950" : "text-zinc-700 ring-zinc-200 hover:bg-zinc-50")}>
+          {locked ? <Lock className="size-3.5" /> : null}{note.label}
+        </button>;
+      })}
+    </div>
+    {shown ? (shown.text
+      ? <div className={cn("rounded-xl px-3 py-2", shown.tone)}><BookText text={shown.text} /></div>
+      : <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl bg-amber-50 px-3 py-2 text-amber-900"><Lock className="size-4 shrink-0" />{shown.label} দেখতে একটা চালু plan লাগবে। <Link href="/billing" className="font-semibold underline underline-offset-2">Plan দেখুন</Link></p>) : null}
   </div>;
 }
 
@@ -90,7 +110,7 @@ export function StudyView({ set }: { set: SetView }) {
               </li>;
             })}
           </ul>
-          {show ? <SolutionNotes solution={question.solution} explanation={question.explanation} /> : null}
+          {show ? <SolutionNotes solution={question.solution} explanation={question.explanation} hasSolution={question.hasSolution} hasExplanation={question.hasExplanation} /> : null}
           {!show ? <button type="button" onClick={() => setRevealed((value) => new Set(value).add(question.id))} className="mt-2 text-xs font-medium text-indigo-600 hover:underline">উত্তর দেখো</button> : null}
         </li>;
       })}
@@ -314,7 +334,7 @@ export function ResultView({ attempt, setId, status, topicName, subjectName }: {
         <thead className="bg-zinc-50 text-xs text-zinc-500"><tr><th className="px-4 py-2.5 font-medium">প্রশ্ন</th><th className="px-3 py-2.5 font-medium">তোমার উত্তর</th><th className="px-3 py-2.5 font-medium">সঠিক উত্তর</th><th className="px-3 py-2.5 font-medium">ফল</th></tr></thead>
         <tbody className="divide-y divide-zinc-100">
           {shown.map((row) => <tr key={row.index} className={row.right ? "" : "bg-red-50/40"}>
-            <td className="px-4 py-3 align-top"><span className="mr-1 text-zinc-400 tabular-nums">{row.index + 1}.</span><MathText text={row.text} book />{!row.right && row.solution ? <p className="mt-1.5 text-xs leading-relaxed text-zinc-500">সমাধান: <MathText text={row.solution} book /></p> : null}</td>
+            <td className="px-4 py-3 align-top"><span className="mr-1 text-zinc-400 tabular-nums">{row.index + 1}.</span><MathText text={row.text} book />{!row.right ? <SolutionNotes solution={row.solution} hasSolution={row.hasSolution} /> : null}</td>
             <td className={cn("px-3 py-3 align-top", row.right ? "text-emerald-700" : "text-red-700")}>{letter(row.chosen)}{row.chosen >= 0 ? <>) <MathText text={row.options[row.chosen]} book /></> : " (বাদ)"}</td>
             <td className="px-3 py-3 align-top font-medium text-emerald-800">{letter(row.correctIndex)}) <MathText text={row.options[row.correctIndex]} book /></td>
             <td className="whitespace-nowrap px-3 py-3 align-top">{row.right ? <span className="inline-flex items-center gap-1 font-medium text-emerald-700"><CheckCircle2 className="size-4" /> Correct</span> : <span className="inline-flex items-center gap-1 font-medium text-red-700"><XCircle className="size-4" /> Wrong</span>}</td>
@@ -342,7 +362,7 @@ export function ResultView({ attempt, setId, status, topicName, subjectName }: {
           })}
         </ul>
         {row.chosen < 0 ? <p className="mt-1.5 text-xs text-red-600">উত্তর দেওয়া হয়নি</p> : null}
-        {!row.right ? <SolutionNotes solution={row.solution} /> : null}
+        {!row.right ? <SolutionNotes solution={row.solution} hasSolution={row.hasSolution} /> : null}
       </li>)}
     </ol>
   </div>;
