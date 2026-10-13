@@ -39,10 +39,17 @@ export async function updateSubject(subjectId: string, input: unknown) {
     where: { id: subjectId, userId: user.id },
   });
   if (!existing) throw new Error("Subject not found.");
-  await prisma.subject.update({
-    where: { id: existing.id },
-    data: { name: data.name },
-  });
+  try {
+    await prisma.subject.update({
+      where: { id: existing.id },
+      data: { name: data.name },
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new Error("এই নামে আরেকটা subject আগে থেকেই আছে।");
+    }
+    throw error;
+  }
   revalidateSubjects();
 }
 
@@ -84,6 +91,16 @@ export async function createTopic(input: unknown) {
       position: (last._max.position ?? -1) + 1,
     },
   });
+  revalidateSubjects();
+}
+
+/** Renames a topic (fixing a typo, say). Tasks made from it keep their own titles. */
+export async function updateTopic(topicId: string, input: unknown) {
+  const user = await requireUser();
+  const { name } = subjectSchema.parse(input);
+  const existing = await prisma.topic.findFirst({ where: { id: topicId, userId: user.id } });
+  if (!existing) throw new Error("Topic not found.");
+  await prisma.topic.update({ where: { id: existing.id }, data: { name } });
   revalidateSubjects();
 }
 
