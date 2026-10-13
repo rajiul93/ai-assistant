@@ -25,6 +25,8 @@ const pageKeywords: Array<{ page: AssistantPage; words: string[] }> = [
   { page: "vocabulary", words: ["vocabulary", "vocab", "ভোকাবুলারি", "ভোকাব", "শব্দভান্ডার", "শব্দভাণ্ডার"] },
   { page: "typing", words: ["typing", "টাইপিং"] },
   { page: "messages", words: ["messages", "message", "মেসেজ", "ম্যাসেজ", "inbox", "ইনবক্স", "friends", "ফ্রেন্ড", "ফ্রেন্ডস", "বন্ধুরা"] },
+  // Before Preliminary/"প্রশ্ন" words: "প্রশ্ন ব্যাংক" must not open another page.
+  { page: "question_bank", words: ["question bank", "questionbank", "প্রশ্ন ব্যাংক", "প্রশ্নব্যাংক", "কোয়েশ্চেন ব্যাংক", "কোশ্চেন ব্যাংক"] },
   { page: "profile", words: ["profile", "প্রোফাইল", "প্রফাইল"] },
   { page: "usage", words: ["usage", "ইউসেজ", "টোকেন", "token", "tokens"] },
   // "plan" alone means the Study plan; buying words open the purchase box instead (buyWords).

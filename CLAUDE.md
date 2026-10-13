@@ -106,6 +106,10 @@ alone. Record decisions and their reasons; don't restate code.
   `src/lib/subject-filter.ts`); items with no (existing) subject show under **Other**.
 - `Confusion` (CONFUSION → CLEAR; old entries may have a free-text `topic`, kept for display). Jobs: `JobApplication`. Billing: `PlanPackage`, `Payment`,
   `Entitlement`, `AiUsage`.
+- Question Bank (shared): `BankSet` (exam + section + session) → `BankQuestion` (4–5 options,
+  solution, explanation, fingerprint). A user's copy is a normal `QuestionSet` with `bankSetId`
+  (one per user per bank set). Preliminary `Question` allows 4–5 options and stores
+  solution/explanation, hidden during a test like the answer.
 - Vocabulary (shared, not per user): `VerbEntry`, `NounEntry`, `AffixEntry` — built-in rows come
   from the seed (no `userId`); admins add more; `VocabLearned` = per-user ticks.
 - Collaboration: `FriendRequest` (history; one PENDING per pair via a partial unique index),
@@ -127,7 +131,7 @@ alone. Record decisions and their reasons; don't restate code.
 | Typing lab (Bijoy engine) | done | |
 | **Collaboration: friends, sharing, notifications, chat (socket.io)** | **built; awaiting integration run + two-browser check** | plan + decisions: [docs/collaboration-plan.md](docs/collaboration-plan.md) |
 | Set audio (TTS MP3 per set on Cloudflare R2) | planned, not started | owner deferred it |
-| Question Bank (BCS / প্রাইমারি / ১১–২০ গ্রেড; shared MCQs, free for all; super admin uploads from Excel) | planned, not started | plan + owner's answers: [docs/question-bank-plan.md](docs/question-bank-plan.md) |
+| **Question Bank** (BCS / প্রাইমারি / ১১–২০ গ্রেড; sets per exam session; "Preliminary-তে পাঠাও" copies a set; super admin uploads .xlsx) | **built; migration applied 2026-10-13; not yet tried with a real sheet** | [docs/question-bank-plan.md](docs/question-bank-plan.md) — sheet assumptions in §2 |
 | **Profile page (name + phone)** | **built; migration applied to Neon 2026-10-13** | [docs/profile-and-group-chat-plan.md](docs/profile-and-group-chat-plan.md) §1. Sign-in no longer overwrites a name the user saved (`profileUpdatedAt`) |
 | **Group chat (3–20 friends)** | **built; migration applied 2026-10-13; integration tests + three-browser check not run** | same doc §2. Separate tables (`ChatGroup`, `ChatGroupMember`, `GroupMessage`); 1:1 chat untouched |
 

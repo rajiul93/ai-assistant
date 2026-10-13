@@ -26,7 +26,8 @@ import { cn } from "@/lib/utils";
 import { deleteQuestionSet, mergeQuestionSets, setQuestionSetStatus, type listQuestionSets } from "@/server/actions/preliminary";
 import { deleteShortQuestionSet, mergeShortQuestionSets, setShortQuestionSetStatus } from "@/server/actions/short-questions";
 
-type SetRow = Awaited<ReturnType<typeof listQuestionSets>>[number];
+// Short Question sets share this board but never come from the Question Bank.
+type SetRow = Omit<Awaited<ReturnType<typeof listQuestionSets>>[number], "bankSetId"> & { bankSetId?: string | null };
 
 /** The board serves both Preliminary (MCQ) and Short Question; only the paths, words and actions differ. */
 export type BoardKind = "mcq" | "short";
@@ -124,7 +125,7 @@ function SetCard({ kind, set, place, onDelete }: { kind: BoardKind; set: SetRow;
   return <article className="rounded-2xl border border-zinc-200 bg-white p-4">
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
-        <p className="truncate text-xs font-medium text-indigo-600">{place}</p>
+        <p className="flex items-center gap-1.5 text-xs font-medium text-indigo-600"><span className="truncate">{place}</span>{set.bankSetId ? <span className="shrink-0 rounded-full bg-sky-50 px-1.5 py-px text-[10px] font-semibold text-sky-700">প্রশ্ন ব্যাংক</span> : null}</p>
         <h2 className="mt-0.5 text-base font-semibold leading-snug"><MathText text={set.topicName} /></h2>
         <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-zinc-500">
           <span className="flex items-center gap-1"><CalendarDays className="size-3.5" />{formatDate(set.date)}</span>

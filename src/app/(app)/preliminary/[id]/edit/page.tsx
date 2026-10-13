@@ -2,7 +2,6 @@ import { notFound, redirect } from "next/navigation";
 import { QuestionSetForm } from "@/components/preliminary/question-set-form";
 import { requireUser } from "@/lib/auth";
 import { APP_TIMEZONE, dayjs } from "@/lib/dayjs";
-import type { DraftQuestion } from "@/lib/preliminary";
 import { getQuestionSet } from "@/server/actions/preliminary";
 import { getSubjects, getTopicNodes } from "@/server/queries";
 
@@ -22,7 +21,7 @@ export default async function EditQuestionSetPage(props: PageProps<"/preliminary
       date: dayjs(set.date).tz(APP_TIMEZONE).format("YYYY-MM-DD"),
       topicName: set.topicName,
       topicId: set.topicId,
-      questions: set.questions.map((question) => ({ text: question.text, options: question.options as DraftQuestion["options"], correctIndex: question.correctIndex ?? -1 })),
+      questions: set.questions.map((question) => ({ text: question.text, options: question.options, correctIndex: question.correctIndex ?? -1, solution: question.solution, explanation: question.explanation })),
     }}
   />;
 }

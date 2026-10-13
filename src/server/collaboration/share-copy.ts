@@ -36,7 +36,7 @@ export async function snapshotForShare(userId: string, type: ShareType, itemId: 
     case "PRELIMINARY_SET": {
       const set = await prisma.questionSet.findFirst({
         where: { id: itemId, userId },
-        select: { topicName: true, date: true, subject: { select: { name: true } }, questions: { orderBy: { position: "asc" }, select: { text: true, options: true, correctIndex: true } } },
+        select: { topicName: true, date: true, subject: { select: { name: true } }, questions: { orderBy: { position: "asc" }, select: { text: true, options: true, correctIndex: true, solution: true, explanation: true } } },
       });
       if (!set || !set.questions.length) return null;
       return { title: set.topicName, payload: { topicName: set.topicName, date: set.date.toISOString(), subjectName: set.subject?.name ?? null, questions: set.questions } };
@@ -52,8 +52,8 @@ export async function snapshotForShare(userId: string, type: ShareType, itemId: 
   }
 }
 
-/** The recipient's subject with this name (any case), created if missing; and their topic under it, if one matches. */
-async function placeFor(tx: Prisma.TransactionClient, userId: string, subjectName: string | null, topicName: string | null) {
+/** The user's subject with this name (any case), created if missing; and their topic under it, if one matches. Also used for Question Bank copies. */
+export async function placeFor(tx: Prisma.TransactionClient, userId: string, subjectName: string | null, topicName: string | null) {
   const name = subjectName?.trim();
   if (!name) return { subjectId: null, topicId: null };
   let subject = await tx.subject.findFirst({ where: { userId, name: { equals: name, mode: "insensitive" } }, select: { id: true } });

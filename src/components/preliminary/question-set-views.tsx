@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, CheckCircle2, ClipboardCheck, Pause, Play, RotateCcw, Timer, X, XCircle } from "lucide-react";
 import { toast } from "sonner";
-import { MathText } from "@/components/math-text";
+// Solutions are shown in the read-only Quill view (BookText).
+import "quill/dist/quill.snow.css";
+import { BookText, MathText } from "@/components/math-text";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,6 +48,18 @@ function useMove(setId: string) {
   return { pending, move };
 }
 
+/** Solution (always shown with the answer) and explanation (one tap), for Question Bank copies. */
+export function SolutionNotes({ solution, explanation }: { solution?: string | null; explanation?: string | null }) {
+  const [open, setOpen] = useState(false);
+  if (!solution && !explanation) return null;
+  return <div className="mt-3 space-y-2 text-sm leading-relaxed">
+    {solution ? <div className="rounded-xl bg-zinc-50 px-3 py-2 text-zinc-700"><p className="text-xs font-semibold text-zinc-900">সমাধান</p><BookText text={solution} /></div> : null}
+    {explanation ? (open
+      ? <div className="rounded-xl bg-sky-50 px-3 py-2 text-sky-950"><p className="text-xs font-semibold">ব্যাখ্যা</p><BookText text={explanation} /></div>
+      : <button type="button" onClick={() => setOpen(true)} className="text-xs font-medium text-sky-700 hover:underline">ব্যাখ্যা দেখো</button>) : null}
+  </div>;
+}
+
 /** Doing / Todo / Done: every question with its right answer marked — for learning. */
 export function StudyView({ set }: { set: SetView }) {
   const { pending, move } = useMove(set.id);
@@ -66,16 +80,17 @@ export function StudyView({ set }: { set: SetView }) {
       {set.questions.map((question, index) => {
         const show = !hidden || revealed.has(question.id);
         return <li key={question.id} className="rounded-2xl border border-zinc-200 bg-white p-4">
-          <p className="font-medium leading-relaxed"><span className="mr-1.5 text-zinc-400 tabular-nums">{index + 1}.</span><MathText text={question.text} /></p>
+          <p className="font-medium leading-relaxed"><span className="mr-1.5 text-zinc-400 tabular-nums">{index + 1}.</span><MathText text={question.text} book /></p>
           <ul className="mt-3 grid gap-2 sm:grid-cols-2">
             {question.options.map((option, optionIndex) => {
               const right = show && question.correctIndex === optionIndex;
               return <li key={optionIndex} className={cn("flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm", right ? "border-emerald-400 bg-emerald-50 font-medium text-emerald-900" : "border-zinc-200")}>
                 <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold", right ? "bg-emerald-600 text-white" : "bg-zinc-100 text-zinc-600")}>{right ? <Check className="size-3.5" strokeWidth={3} /> : OPTION_LETTERS[optionIndex]}</span>
-                <MathText text={option} />
+                <MathText text={option} book />
               </li>;
             })}
           </ul>
+          {show ? <SolutionNotes solution={question.solution} explanation={question.explanation} /> : null}
           {!show ? <button type="button" onClick={() => setRevealed((value) => new Set(value).add(question.id))} className="mt-2 text-xs font-medium text-indigo-600 hover:underline">উত্তর দেখো</button> : null}
         </li>;
       })}
@@ -209,13 +224,13 @@ export function ExamView({ set }: { set: SetView }) {
       </div> : null}
       <ol className={cn("space-y-3", !running && "pointer-events-none select-none")} aria-hidden={!running}>
         {set.questions.map((question, index) => <li key={question.id} className="rounded-2xl border border-zinc-200 bg-white p-4">
-          <p className="font-medium leading-relaxed"><span className="mr-1.5 text-zinc-400 tabular-nums">{index + 1}.</span><MathText text={question.text} /></p>
+          <p className="font-medium leading-relaxed"><span className="mr-1.5 text-zinc-400 tabular-nums">{index + 1}.</span><MathText text={question.text} book /></p>
           <div role="radiogroup" aria-label={`প্রশ্ন ${index + 1}`} className="mt-3 grid gap-2 sm:grid-cols-2">
             {question.options.map((option, optionIndex) => {
               const selected = answers[question.id] === optionIndex;
               return <button key={optionIndex} type="button" role="radio" aria-checked={selected} onClick={() => choose(question.id, optionIndex)} className={cn("flex min-h-11 items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm transition", selected ? "border-indigo-500 bg-indigo-50 font-medium text-indigo-950 ring-2 ring-indigo-200" : "border-zinc-200 hover:bg-zinc-50")}>
                 <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold", selected ? "bg-indigo-600 text-white" : "bg-zinc-100 text-zinc-600")}>{OPTION_LETTERS[optionIndex]}</span>
-                <MathText text={option} />
+                <MathText text={option} book />
               </button>;
             })}
           </div>
@@ -299,9 +314,9 @@ export function ResultView({ attempt, setId, status, topicName, subjectName }: {
         <thead className="bg-zinc-50 text-xs text-zinc-500"><tr><th className="px-4 py-2.5 font-medium">প্রশ্ন</th><th className="px-3 py-2.5 font-medium">তোমার উত্তর</th><th className="px-3 py-2.5 font-medium">সঠিক উত্তর</th><th className="px-3 py-2.5 font-medium">ফল</th></tr></thead>
         <tbody className="divide-y divide-zinc-100">
           {shown.map((row) => <tr key={row.index} className={row.right ? "" : "bg-red-50/40"}>
-            <td className="px-4 py-3 align-top"><span className="mr-1 text-zinc-400 tabular-nums">{row.index + 1}.</span><MathText text={row.text} /></td>
-            <td className={cn("px-3 py-3 align-top", row.right ? "text-emerald-700" : "text-red-700")}>{letter(row.chosen)}{row.chosen >= 0 ? <>) <MathText text={row.options[row.chosen]} /></> : " (বাদ)"}</td>
-            <td className="px-3 py-3 align-top font-medium text-emerald-800">{letter(row.correctIndex)}) <MathText text={row.options[row.correctIndex]} /></td>
+            <td className="px-4 py-3 align-top"><span className="mr-1 text-zinc-400 tabular-nums">{row.index + 1}.</span><MathText text={row.text} book />{!row.right && row.solution ? <p className="mt-1.5 text-xs leading-relaxed text-zinc-500">সমাধান: <MathText text={row.solution} book /></p> : null}</td>
+            <td className={cn("px-3 py-3 align-top", row.right ? "text-emerald-700" : "text-red-700")}>{letter(row.chosen)}{row.chosen >= 0 ? <>) <MathText text={row.options[row.chosen]} book /></> : " (বাদ)"}</td>
+            <td className="px-3 py-3 align-top font-medium text-emerald-800">{letter(row.correctIndex)}) <MathText text={row.options[row.correctIndex]} book /></td>
             <td className="whitespace-nowrap px-3 py-3 align-top">{row.right ? <span className="inline-flex items-center gap-1 font-medium text-emerald-700"><CheckCircle2 className="size-4" /> Correct</span> : <span className="inline-flex items-center gap-1 font-medium text-red-700"><XCircle className="size-4" /> Wrong</span>}</td>
           </tr>)}
         </tbody>
@@ -312,7 +327,7 @@ export function ResultView({ attempt, setId, status, topicName, subjectName }: {
     <ol className="space-y-3 sm:hidden">
       {shown.map((row) => <li key={row.index} className={cn("rounded-2xl border bg-white p-4", row.right ? "border-zinc-200" : "border-red-200")}>
         <div className="flex items-start justify-between gap-2">
-          <p className="font-medium leading-relaxed"><span className="mr-1 text-zinc-400 tabular-nums">{row.index + 1}.</span><MathText text={row.text} /></p>
+          <p className="font-medium leading-relaxed"><span className="mr-1 text-zinc-400 tabular-nums">{row.index + 1}.</span><MathText text={row.text} book /></p>
           {row.right ? <CheckCircle2 className="size-5 shrink-0 text-emerald-600" aria-label="Correct" /> : <XCircle className="size-5 shrink-0 text-red-600" aria-label="Wrong" />}
         </div>
         <ul className="mt-2 space-y-1.5 text-sm">
@@ -321,12 +336,13 @@ export function ResultView({ attempt, setId, status, topicName, subjectName }: {
             const isChosen = optionIndex === row.chosen;
             return <li key={optionIndex} className={cn("flex items-center gap-2 rounded-lg px-2.5 py-1.5", isRight ? "bg-emerald-50 font-medium text-emerald-900" : isChosen ? "bg-red-50 text-red-900" : "text-zinc-600")}>
               <span className="w-5 shrink-0 font-semibold">{OPTION_LETTERS[optionIndex]})</span>
-              <span className="min-w-0 flex-1"><MathText text={option} /></span>
+              <span className="min-w-0 flex-1"><MathText text={option} book /></span>
               {isRight ? <Check className="size-4 shrink-0" /> : isChosen ? <X className="size-4 shrink-0" /> : null}
             </li>;
           })}
         </ul>
         {row.chosen < 0 ? <p className="mt-1.5 text-xs text-red-600">উত্তর দেওয়া হয়নি</p> : null}
+        {!row.right ? <SolutionNotes solution={row.solution} /> : null}
       </li>)}
     </ol>
   </div>;

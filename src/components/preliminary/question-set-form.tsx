@@ -225,7 +225,7 @@ export function QuestionSetForm({ subjects, topics = [], initial }: {
     if (unchecked && !force) { setConfirmUnchecked(true); return; }
     setSaving(true);
     try {
-      const payload = { subjectId, topicId: topicId || null, date, topicName, questions: questions.map(({ text, options, correctIndex }) => ({ text, options, correctIndex })) };
+      const payload = { subjectId, topicId: topicId || null, date, topicName, questions: questions.map(({ text, options, correctIndex, solution, explanation }) => ({ text, options, correctIndex, solution, explanation })) };
       if (initial) { await updateQuestionSet(initial.id, payload); toast.success("Set সেভ হলো"); router.push("/preliminary"); }
       else { await createQuestionSet(payload); toast.success("Set বানানো হলো — Todo-তে আছে"); router.push("/preliminary?status=todo"); }
       router.refresh();
@@ -327,7 +327,7 @@ export function QuestionSetForm({ subjects, topics = [], initial }: {
         {/* The right answer, picked explicitly (tapping an option's letter above does the same). */}
         <div role="radiogroup" aria-label={`প্রশ্ন ${index + 1}-এর সঠিক উত্তর`} className={cn("mt-3 ml-8 flex flex-wrap items-center gap-2 rounded-xl px-3 py-2", question.correctIndex >= 0 ? "bg-emerald-50" : showErrors ? "bg-red-50" : "bg-zinc-50")}>
           <span className={cn("text-sm font-semibold", question.correctIndex >= 0 ? "text-emerald-800" : showErrors ? "text-red-700" : "text-zinc-700")}>সঠিক উত্তর:</span>
-          {OPTION_LETTERS.map((letter, optionIndex) => {
+          {OPTION_LETTERS.slice(0, question.options.length).map((letter, optionIndex) => {
             const on = question.correctIndex === optionIndex;
             return <button key={letter} type="button" role="radio" aria-checked={on} onClick={() => update(index, { correctIndex: optionIndex })} className={cn("flex h-9 min-w-11 items-center justify-center gap-1 rounded-lg px-2.5 text-sm font-semibold ring-1 transition", on ? "bg-emerald-600 text-white ring-emerald-600" : "bg-white text-zinc-700 ring-zinc-200 hover:ring-emerald-400")}>
               {on ? <Check className="size-3.5" strokeWidth={3} /> : null}{letter}
