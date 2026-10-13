@@ -10,7 +10,7 @@ import { SendToPreliminary } from "./send-button";
 type BankSetRow = Awaited<ReturnType<typeof listBankSets>>[number];
 
 /** The set cards of one section, with a search when there are many. */
-export function BankSetGrid({ examSlug, sets }: { examSlug: string; sets: BankSetRow[] }) {
+export function BankSetGrid({ examSlug, sets, locked }: { examSlug: string; sets: BankSetRow[]; locked: boolean }) {
   const [query, setQuery] = useState("");
   const shown = sets.filter((set) => !query.trim() || set.name.toLowerCase().includes(query.trim().toLowerCase()));
 
@@ -30,7 +30,7 @@ export function BankSetGrid({ examSlug, sets }: { examSlug: string; sets: BankSe
           </Link>
           <div className="mt-4 grid gap-2">
             <Link href={href} className="flex h-10 items-center justify-center rounded-xl text-sm font-medium text-zinc-700 ring-1 ring-zinc-200 hover:bg-zinc-50">দেখো</Link>
-            <SendToPreliminary setId={set.id} copyId={set.copyId} />
+            <SendToPreliminary setId={set.id} copyId={set.copyId} locked={locked} />
           </div>
         </article>;
       })}

@@ -3,10 +3,11 @@ import { BankBreadcrumb, examBySlug, sectionFromParam } from "@/components/quest
 import { BankSetGrid } from "@/components/question-bank/bank-set-grid";
 import { requireUser } from "@/lib/auth";
 import { listBankSets } from "@/server/actions/question-bank";
+import { hasPremium } from "@/server/premium";
 
 /** Level 3: the sets (one per exam session) of a section, as cards. */
 export default async function BankSectionPage(props: PageProps<"/question-bank/[exam]/[section]">) {
-  await requireUser();
+  const user = await requireUser();
   const params = await props.params;
   const exam = examBySlug(params.exam);
   if (!exam) notFound();
@@ -17,6 +18,6 @@ export default async function BankSectionPage(props: PageProps<"/question-bank/[
   return <div className="mx-auto max-w-3xl space-y-4">
     <BankBreadcrumb trail={[{ label: "প্রশ্ন ব্যাংক", href: "/question-bank" }, { label: exam.label, href: `/question-bank/${exam.slug}` }, { label: section }]} />
     <h1 className="text-2xl font-semibold tracking-tight">{section}</h1>
-    <BankSetGrid examSlug={exam.slug} sets={sets} />
+    <BankSetGrid examSlug={exam.slug} sets={sets} locked={!(await hasPremium(user))} />
   </div>;
 }

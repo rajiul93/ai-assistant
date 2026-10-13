@@ -92,6 +92,18 @@ three times ("x−1x=1x - \frac{1}{x} = 1x−1=1"). Rules can't untangle that; A
   the row is still recognised and not added twice.
 - Copies already sent to Preliminary keep the text they were sent with.
 
+## 4c. Paid features (owner, 2026-10-13)
+
+- **Solutions and explanations** are for users with a running plan (`getPlanStatus().active`) —
+  in the bank, in Preliminary (study and result) alike. **Sending a set to Preliminary** needs a
+  plan too. Admins and the super admin always have both.
+- One server check, `hasPremium` (`src/server/premium.ts`); `gateNotes` strips the text before it
+  leaves the server and keeps only `hasSolution` / `hasExplanation`, so the page can show a locked
+  button. `sendBankSetToPreliminary` refuses without a plan.
+- Shown as two buttons, **সমাধান** and **ব্যাখ্যা**, closed at first; a tap opens that one. Locked
+  ones show a lock and a link to Plans.
+- Editing a Preliminary set without a plan keeps its stored solutions (the editor never saw them).
+
 ## 5. Not built (from the first plan, dropped or later)
 
 Exam inside the bank, bookmarks, AI explanations, AI math clean-up, CSV upload, column-mapping
