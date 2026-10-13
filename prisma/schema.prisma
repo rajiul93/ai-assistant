@@ -449,7 +449,11 @@ model QuestionSet {
   updatedAt DateTime          @updatedAt
   questions Question[]
   attempts  TestAttempt[]
+  /// Set when this set was sent from the Question Bank; one copy per user per bank set.
+  bankSetId String?
+  bankSet   BankSet?          @relation(fields: [bankSetId], references: [id], onDelete: SetNull)
 
+  @@unique([userId, bankSetId])
   @@index([userId, status])
   @@index([subjectId])
   @@index([topicId])
@@ -461,10 +465,13 @@ model Question {
   set          QuestionSet @relation(fields: [setId], references: [id], onDelete: Cascade)
   position     Int         @default(0)
   text         String
-  /// Always four options, in order ক খ গ ঘ.
+  /// Four options (ক খ গ ঘ), or five (… ঙ) for questions from the Question Bank.
   options      String[]
-  /// 0–3: which option is right. Never sent to the page during a test.
+  /// Which option is right (0-based). Never sent to the page during a test.
   correctIndex Int
+  /// From the Question Bank (or kept through edits); hidden during a test like the answer.
+  solution     String?
+  explanation  String?
 
   @@index([setId, position])
 }
@@ -835,4 +842,56 @@ model GroupMessage {
   createdAt DateTime         @default(now())
 
   @@index([groupId, createdAt])
+}
+
+/**
+ * ---------- Question Bank (docs/question-bank-plan.md) ----------
+ */
+
+/// The three exam tabs of the Question Bank.
+enum BankExam {
+  BCS
+  PRIMARY
+  GRADE_11_20
+}
+
+/// One past paper (or other session) in the shared bank, uploaded by the super admin from a sheet.
+/// Users only read it and send a copy to their own Preliminary; there is no status or exam here.
+model BankSet {
+  id        String         @id @default(cuid())
+  exam      BankExam
+  /// The sheet's "ধরন (Section)", e.g. "বিগত সালের প্রশ্ন".
+  section   String
+  /// The sheet's "সেশন/বিষয়", e.g. "গণপূর্ত অধিদপ্তর (2025)".
+  name      String
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  questions BankQuestion[]
+  copies    QuestionSet[]
+
+  @@unique([exam, section, name])
+}
+
+model BankQuestion {
+  id           String   @id @default(cuid())
+  setId        String
+  set          BankSet  @relation(fields: [setId], references: [id], onDelete: Cascade)
+  /// The sheet's "ক্রম"; questions are shown in this order.
+  serial       Int
+  text         String
+  /// 4 or 5 options (ক–ঘ, plus ঙ from "অতিরিক্ত অপশন").
+  options      String[]
+  correctIndex Int
+  solution     String?
+  explanation  String?
+  /// The sheet's "সব উৎস", kept as written ("A › B ; C › D"); its subject decides where a copy lands.
+  sources      String?
+  /// Hash of the question and its options: the sheet has no ID, so this is how a re-upload finds
+  /// the same question (and updates it) instead of adding it twice.
+  fingerprint  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([setId, fingerprint])
+  @@index([setId, serial])
 }

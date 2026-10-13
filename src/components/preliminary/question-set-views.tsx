@@ -46,6 +46,18 @@ function useMove(setId: string) {
   return { pending, move };
 }
 
+/** Solution (always shown with the answer) and explanation (one tap), for Question Bank copies. */
+export function SolutionNotes({ solution, explanation }: { solution?: string | null; explanation?: string | null }) {
+  const [open, setOpen] = useState(false);
+  if (!solution && !explanation) return null;
+  return <div className="mt-3 space-y-2 text-sm leading-relaxed">
+    {solution ? <p className="whitespace-pre-line rounded-xl bg-zinc-50 px-3 py-2 text-zinc-700"><span className="font-semibold text-zinc-900">সমাধান: </span><MathText text={solution} /></p> : null}
+    {explanation ? (open
+      ? <p className="whitespace-pre-line rounded-xl bg-sky-50 px-3 py-2 text-sky-950"><span className="font-semibold">ব্যাখ্যা: </span><MathText text={explanation} /></p>
+      : <button type="button" onClick={() => setOpen(true)} className="text-xs font-medium text-sky-700 hover:underline">ব্যাখ্যা দেখো</button>) : null}
+  </div>;
+}
+
 /** Doing / Todo / Done: every question with its right answer marked — for learning. */
 export function StudyView({ set }: { set: SetView }) {
   const { pending, move } = useMove(set.id);
@@ -76,6 +88,7 @@ export function StudyView({ set }: { set: SetView }) {
               </li>;
             })}
           </ul>
+          {show ? <SolutionNotes solution={question.solution} explanation={question.explanation} /> : null}
           {!show ? <button type="button" onClick={() => setRevealed((value) => new Set(value).add(question.id))} className="mt-2 text-xs font-medium text-indigo-600 hover:underline">উত্তর দেখো</button> : null}
         </li>;
       })}
@@ -299,7 +312,7 @@ export function ResultView({ attempt, setId, status, topicName, subjectName }: {
         <thead className="bg-zinc-50 text-xs text-zinc-500"><tr><th className="px-4 py-2.5 font-medium">প্রশ্ন</th><th className="px-3 py-2.5 font-medium">তোমার উত্তর</th><th className="px-3 py-2.5 font-medium">সঠিক উত্তর</th><th className="px-3 py-2.5 font-medium">ফল</th></tr></thead>
         <tbody className="divide-y divide-zinc-100">
           {shown.map((row) => <tr key={row.index} className={row.right ? "" : "bg-red-50/40"}>
-            <td className="px-4 py-3 align-top"><span className="mr-1 text-zinc-400 tabular-nums">{row.index + 1}.</span><MathText text={row.text} /></td>
+            <td className="px-4 py-3 align-top"><span className="mr-1 text-zinc-400 tabular-nums">{row.index + 1}.</span><MathText text={row.text} />{!row.right && row.solution ? <p className="mt-1.5 text-xs leading-relaxed text-zinc-500">সমাধান: <MathText text={row.solution} /></p> : null}</td>
             <td className={cn("px-3 py-3 align-top", row.right ? "text-emerald-700" : "text-red-700")}>{letter(row.chosen)}{row.chosen >= 0 ? <>) <MathText text={row.options[row.chosen]} /></> : " (বাদ)"}</td>
             <td className="px-3 py-3 align-top font-medium text-emerald-800">{letter(row.correctIndex)}) <MathText text={row.options[row.correctIndex]} /></td>
             <td className="whitespace-nowrap px-3 py-3 align-top">{row.right ? <span className="inline-flex items-center gap-1 font-medium text-emerald-700"><CheckCircle2 className="size-4" /> Correct</span> : <span className="inline-flex items-center gap-1 font-medium text-red-700"><XCircle className="size-4" /> Wrong</span>}</td>
@@ -327,6 +340,7 @@ export function ResultView({ attempt, setId, status, topicName, subjectName }: {
           })}
         </ul>
         {row.chosen < 0 ? <p className="mt-1.5 text-xs text-red-600">উত্তর দেওয়া হয়নি</p> : null}
+        {!row.right ? <SolutionNotes solution={row.solution} /> : null}
       </li>)}
     </ol>
   </div>;

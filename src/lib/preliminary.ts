@@ -1,6 +1,7 @@
 import type { QuestionSetStatus } from "@prisma/client";
 
-export const OPTION_LETTERS = ["ক", "খ", "গ", "ঘ"] as const;
+/** ক–ঘ; ঙ only for five-option questions that came from the Question Bank. */
+export const OPTION_LETTERS = ["ক", "খ", "গ", "ঘ", "ঙ"] as const;
 
 export const statusInfo: Record<QuestionSetStatus, { label: string; hint: string; tone: string; dot: string }> = {
   TODO: { label: "Todo", hint: "নতুন set, এখনো পড়া শুরু হয়নি", tone: "text-zinc-700", dot: "bg-zinc-400" },
@@ -11,7 +12,8 @@ export const statusInfo: Record<QuestionSetStatus, { label: string; hint: string
 
 export const statusOrder: QuestionSetStatus[] = ["TODO", "DOING", "TESTING", "DONE"];
 
-export type DraftQuestion = { text: string; options: [string, string, string, string]; correctIndex: number };
+/** Four options when made here; five for some Question Bank copies. Solution/explanation ride along through edits. */
+export type DraftQuestion = { text: string; options: string[]; correctIndex: number; solution?: string | null; explanation?: string | null };
 
 const LETTER_INDEX: Record<string, number> = { ক: 0, খ: 1, গ: 2, ঘ: 3, a: 0, b: 1, c: 2, d: 3, "1": 0, "2": 1, "3": 2, "4": 3, "১": 0, "২": 1, "৩": 2, "৪": 3 };
 /** "ক)", "(খ)", "গ.", "ঘ:", "a)", "B." … at the start of a line (or inside one, for options on one line). */

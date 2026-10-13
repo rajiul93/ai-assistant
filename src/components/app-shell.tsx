@@ -23,6 +23,8 @@ import {
   Languages,
   MessageCircle,
   UserRound,
+  Library,
+  LibraryBig,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLive } from "@/components/collaboration/live-provider";
@@ -44,6 +46,7 @@ const links = [
   { href: "/notes", label: "Notes", short: "Notes", icon: NotebookPen },
   { href: "/preliminary", label: "Preliminary", short: "Preliminary", icon: ClipboardCheck },
   { href: "/short-questions", label: "Short Question", short: "Short Q", icon: MessageSquareText },
+  { href: "/question-bank", label: "প্রশ্ন ব্যাংক", short: "প্রশ্ন ব্যাংক", icon: Library },
   { href: "/confusions", label: "Confusion", short: "Confusion", icon: CircleHelp },
   { href: "/vocabulary", label: "Vocabulary", short: "Vocabulary", icon: Languages },
   { href: "/typing", label: "Typing Lab", short: "Typing", icon: Keyboard },
@@ -56,6 +59,7 @@ const links = [
 
 const billingAdminLink = { href: "/admin/billing", label: "Billing", short: "Billing", icon: Receipt };
 const rolesLink = { href: "/admin/users", label: "Users & roles", short: "Users", icon: UsersRound };
+const bankUploadLink = { href: "/admin/question-bank", label: "Bank upload", short: "Bank upload", icon: LibraryBig };
 
 // Phones get the four daily pages in the tab bar; everything else lives under "More".
 // The study timer lives on the Tasks page and in the session bar, so it has no page of its own.
@@ -79,7 +83,7 @@ export function AppShell({
   pendingPayments: number;
 }) {
   const pathname = usePathname();
-  const adminLinks = [...(admin ? [billingAdminLink] : []), ...(superAdmin ? [rolesLink] : [])];
+  const adminLinks = [...(admin ? [billingAdminLink] : []), ...(superAdmin ? [rolesLink, bankUploadLink] : [])];
   const sideLinks = [...links, ...adminLinks];
   const moreLinks = [...baseMoreLinks, ...adminLinks];
   const { counts } = useLive();

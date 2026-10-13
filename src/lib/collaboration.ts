@@ -56,7 +56,13 @@ export const preliminaryPayloadSchema = z.object({
   subjectName: placement.subjectName,
   topicName: z.string().max(160),
   date: z.string().datetime(),
-  questions: z.array(z.object({ text: z.string().max(2000), options: z.array(z.string().max(500)).length(4), correctIndex: z.number().int().min(0).max(3) })).min(1).max(300),
+  questions: z.array(z.object({
+    text: z.string().max(2000),
+    options: z.array(z.string().max(500)).min(4).max(5),
+    correctIndex: z.number().int().min(0).max(4),
+    solution: z.string().max(5000).nullish(),
+    explanation: z.string().max(5000).nullish(),
+  }).refine((question) => question.correctIndex < question.options.length)).min(1).max(300),
 });
 
 export const shortQuestionPayloadSchema = z.object({

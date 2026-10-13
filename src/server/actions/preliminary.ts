@@ -16,9 +16,12 @@ import { prisma } from "@/lib/prisma";
 
 const questionSchema = z.object({
   text: z.string().trim().min(1, "প্রশ্ন লেখো").max(2000),
-  options: z.array(z.string().trim().min(1, "৪টা option-ই লাগবে").max(500)).length(4),
-  correctIndex: z.number().int().min(0).max(3),
-});
+  // Five only for Question Bank copies (an extra ঙ).
+  options: z.array(z.string().trim().min(1, "৪টা option-ই লাগবে").max(500)).min(4).max(5),
+  correctIndex: z.number().int().min(0).max(4),
+  solution: z.string().trim().max(5000).nullish().transform((value) => value || null),
+  explanation: z.string().trim().max(5000).nullish().transform((value) => value || null),
+}).refine((question) => question.correctIndex < question.options.length, { message: "সঠিক উত্তর বেছে নাও" });
 
 const setSchema = z.object({
   subjectId: z.string().min(1, "Subject বেছে নাও"),
@@ -29,7 +32,7 @@ const setSchema = z.object({
 });
 
 export type QuestionSetInput = z.infer<typeof setSchema>;
-export type AttemptDetail = { text: string; options: string[]; correctIndex: number; chosen: number };
+export type AttemptDetail = { text: string; options: string[]; correctIndex: number; chosen: number; solution?: string | null };
 
 const statuses = ["TODO", "DOING", "TESTING", "DONE"] as const;
 
@@ -67,7 +70,7 @@ export async function listQuestionSets() {
     where: { userId: user.id },
     orderBy: [{ date: "asc" }, { createdAt: "desc" }],
     select: {
-      id: true, topicName: true, date: true, status: true, updatedAt: true, subjectId: true, topicId: true,
+      id: true, topicName: true, date: true, status: true, updatedAt: true, subjectId: true, topicId: true, bankSetId: true,
       subject: { select: { name: true } },
       _count: { select: { questions: true, attempts: true } },
       attempts: { orderBy: { submittedAt: "desc" }, take: 1, select: { id: true, correct: true, total: true, submittedAt: true } },
@@ -138,7 +141,7 @@ export async function mergeQuestionSets(input: unknown) {
   const subjectId = await ownedSubject(user.id, data.subjectId);
   const sets = await prisma.questionSet.findMany({
     where: { id: { in: ids }, userId: user.id },
-    select: { id: true, questions: { orderBy: { position: "asc" }, select: { text: true, options: true, correctIndex: true } } },
+    select: { id: true, questions: { orderBy: { position: "asc" }, select: { text: true, options: true, correctIndex: true, solution: true, explanation: true } } },
   });
   if (sets.length !== ids.length) throw new Error("Question set not found.");
   const all = ids.flatMap((id) => sets.find((set) => set.id === id)!.questions);
@@ -190,7 +193,7 @@ export async function getQuestionSet(id: string) {
     select: {
       id: true, topicName: true, date: true, status: true, subjectId: true, topicId: true,
       subject: { select: { name: true } },
-      questions: { orderBy: { position: "asc" }, select: { id: true, text: true, options: true, correctIndex: true } },
+      questions: { orderBy: { position: "asc" }, select: { id: true, text: true, options: true, correctIndex: true, solution: true, explanation: true } },
       attempts: { orderBy: { submittedAt: "desc" }, take: 10, select: { id: true, correct: true, total: true, submittedAt: true } },
     },
   });
@@ -198,7 +201,8 @@ export async function getQuestionSet(id: string) {
   const testing = set.status === "TESTING";
   return {
     ...set,
-    questions: set.questions.map((question) => (testing ? { id: question.id, text: question.text, options: question.options, correctIndex: null } : question)),
+    // A solution gives the answer away, so it is hidden with it.
+    questions: set.questions.map((question) => (testing ? { id: question.id, text: question.text, options: question.options, correctIndex: null, solution: null, explanation: null } : question)),
   };
 }
 
@@ -207,10 +211,10 @@ export async function submitTest(id: string, answers: Record<string, number>) {
   const user = await requireUser();
   const set = await ownedSet(user.id, id);
   if (set.status !== "TESTING") throw new Error("এই set এখন Testing-এ নেই।");
-  const chosen = z.record(z.string(), z.number().int().min(-1).max(3)).parse(answers);
+  const chosen = z.record(z.string(), z.number().int().min(-1).max(4)).parse(answers);
   const questions = await prisma.question.findMany({ where: { setId: set.id }, orderBy: { position: "asc" } });
   if (!questions.length) throw new Error("প্রশ্ন নেই।");
-  const details: AttemptDetail[] = questions.map((question) => ({ text: question.text, options: question.options, correctIndex: question.correctIndex, chosen: chosen[question.id] ?? -1 }));
+  const details: AttemptDetail[] = questions.map((question) => ({ text: question.text, options: question.options, correctIndex: question.correctIndex, chosen: chosen[question.id] ?? -1, solution: question.solution }));
   const correct = details.filter((detail) => detail.chosen === detail.correctIndex).length;
   const attempt = await prisma.testAttempt.create({ data: { setId: set.id, userId: user.id, total: details.length, correct, details } });
   revalidate(set.id);
