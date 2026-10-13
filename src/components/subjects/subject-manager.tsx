@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useMutation } from "@tanstack/react-query";
-import { Check, ChevronDown, CornerDownRight, ListPlus, MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import { Check, ChevronDown, CornerDownRight, ListPlus, MoreHorizontal, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -18,7 +18,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
-import { createSubject, createTopic, deleteSubject, deleteTopic, reorderSubjects, reorderTopics } from "@/server/actions/subjects";
+import { createSubject, createTopic, deleteSubject, deleteTopic, reorderSubjects, reorderTopics, updateSubject, updateTopic } from "@/server/actions/subjects";
 import { createTask } from "@/server/actions/tasks";
 import { SortableList } from "@/components/sortable-list";
 import { VoiceFormAssistant } from "@/components/voice-form-assistant";
@@ -47,6 +47,23 @@ function TopicLevel({ subject, parentId, depth, openTasks, onDelete, path, class
   >
     {(topic, handle) => <TopicRow topic={topic} subject={subject} depth={depth} openTasks={openTasks} onDelete={onDelete} path={path} handle={handle} />}
   </SortableList>;
+}
+
+/** Renaming in place: the name turns into a box; Enter (or ✓) saves, Esc (or ✕) cancels. */
+function RenameForm({ initial, label, onSave, onCancel }: { initial: string; label: string; onSave: (name: string) => Promise<unknown>; onCancel: () => void }) {
+  const router = useRouter();
+  const [name, setName] = useState(initial);
+  const save = useMutation({
+    mutationFn: () => onSave(name.trim()),
+    onSuccess: () => { toast.success("নাম বদলানো হলো"); onCancel(); router.refresh(); },
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const submit = () => { if (!name.trim() || name.trim() === initial) { onCancel(); return; } save.mutate(); };
+  return <form className="flex min-w-0 flex-1 items-center gap-1" onSubmit={(event) => { event.preventDefault(); submit(); }}>
+    <Input value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") onCancel(); }} maxLength={80} autoFocus aria-label={label} className="h-9 min-w-0 flex-1" />
+    <button type="submit" disabled={save.isPending} aria-label="সেভ" className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"><Check className="size-4" /></button>
+    <button type="button" onClick={onCancel} aria-label="বাতিল" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100"><X className="size-4" /></button>
+  </form>;
 }
 
 /** Small inline "name + Add" form, used for new topics and sub-topics. */
@@ -88,6 +105,7 @@ function TopicRow({ topic, subject, depth, openTasks, onDelete, path, handle }: 
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [renaming, setRenaming] = useState(false);
   const inTasks = openTasks[topic.id] ?? 0;
 
   // One tap: the topic becomes a task under its subject and topic, ready on the Tasks page.
@@ -113,7 +131,8 @@ function TopicRow({ topic, subject, depth, openTasks, onDelete, path, handle }: 
     <div className="flex items-center gap-1.5 rounded-xl py-1 pr-1">
       {handle}
       {depth > 0 ? <CornerDownRight className="size-3.5 shrink-0 text-zinc-300" aria-hidden /> : null}
-      <p className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-900" title={topic.name}><MathText text={topic.name} /></p>
+      {renaming ? <RenameForm initial={topic.name} label="Topic-এর নতুন নাম" onSave={(name) => updateTopic(topic.id, { name })} onCancel={() => setRenaming(false)} /> : <>
+      <button type="button" onClick={() => setRenaming(true)} title="নাম বদলাতে চাপুন" className="min-w-0 flex-1 truncate text-left text-sm font-medium text-zinc-900"><MathText text={topic.name} /></button>
       {inTasks ? <Link href="/tasks" className="flex h-9 shrink-0 items-center gap-1 rounded-lg px-2 text-xs font-medium text-emerald-700 hover:bg-emerald-50" title="Already in your tasks">
         <Check className="size-3.5" /> In tasks
       </Link> : null}
@@ -137,11 +156,13 @@ function TopicRow({ topic, subject, depth, openTasks, onDelete, path, handle }: 
         {menuOpen ? <>
           <button type="button" aria-hidden tabIndex={-1} className="fixed inset-0 z-10 cursor-default" onClick={() => setMenuOpen(false)} />
           <div role="menu" className="absolute right-0 top-10 z-20 w-44 overflow-hidden rounded-xl border border-zinc-200 bg-white py-1 shadow-lg">
+            <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setRenaming(true); }} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-zinc-50"><Pencil className="size-4" /> নাম বদলাও</button>
             <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setAdding(true); }} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-zinc-50"><Plus className="size-4" /> Add sub-topic</button>
             <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onDelete({ kind: "topic", id: topic.id, name: topic.name }); }} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-red-600 hover:bg-red-50"><Trash2 className="size-4" /> Delete</button>
           </div>
         </> : null}
       </div>
+      </>}
     </div>
     {adding ? <div className="mb-2 ml-5">
       <AddTopicForm subjectId={subject.id} parentId={topic.id} placeholder={`Sub-topic of ${topic.name}`} onDone={() => setAdding(false)} autoFocus />
@@ -153,11 +174,13 @@ function TopicRow({ topic, subject, depth, openTasks, onDelete, path, handle }: 
 
 function SubjectCard({ subject, openTasks, onDelete, handle }: { subject: Subject; openTasks: Record<string, number>; onDelete: (pending: Pending) => void; handle: ReactNode }) {
   const [open, setOpen] = useState(true);
+  const [renaming, setRenaming] = useState(false);
   const hasRoots = subject.topics.some((topic) => !topic.parentId);
   const inTasks = subject.topics.filter((topic) => openTasks[topic.id]).length;
   return <section className="rounded-2xl border border-zinc-200 bg-white">
     <div className="flex items-center gap-1.5 py-3 pl-2 pr-3">
       {handle}
+      {renaming ? <RenameForm initial={subject.name} label="Subject-এর নতুন নাম" onSave={(name) => updateSubject(subject.id, { name })} onCancel={() => setRenaming(false)} /> : <>
       <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} className="flex min-w-0 flex-1 items-center gap-2 text-left">
         <ChevronDown className={cn("size-4 shrink-0 text-zinc-400 transition-transform", !open && "-rotate-90")} />
         <span className="min-w-0">
@@ -165,9 +188,13 @@ function SubjectCard({ subject, openTasks, onDelete, handle }: { subject: Subjec
           <span className="block text-xs text-zinc-500">{subject.topics.length} topic{subject.topics.length === 1 ? "" : "s"}{inTasks ? ` · ${inTasks} in tasks` : ""}</span>
         </span>
       </button>
+      <button type="button" onClick={() => setRenaming(true)} aria-label={`${subject.name}-এর নাম বদলাও`} title="নাম বদলাও" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-zinc-400 hover:bg-blue-50 hover:text-blue-600">
+        <Pencil className="size-4" />
+      </button>
       <button type="button" onClick={() => onDelete({ kind: "subject", id: subject.id, name: subject.name })} aria-label={`Delete ${subject.name}`} title="Delete subject" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-zinc-400 hover:bg-red-50 hover:text-red-600">
         <Trash2 className="size-4" />
       </button>
+      </>}
     </div>
     {open ? <div className="border-t border-zinc-100 px-3 pb-3 pt-2">
       {hasRoots
