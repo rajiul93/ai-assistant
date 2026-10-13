@@ -1,6 +1,7 @@
 import { Prisma, type TaskStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { endOfDay, startOfDay, startOfMonth, startOfWeek } from "@/lib/dayjs";
+import { APP_TIMEZONE, endOfDay, now, startOfDay, startOfMonth, startOfWeek } from "@/lib/dayjs";
+import { studyStreak } from "@/lib/streak";
 
 const taskInclude = {
   subject: true,
@@ -120,6 +121,16 @@ export async function getStudySecondsInRange(
     _sum: { durationSeconds: true },
   });
   return aggregate._sum.durationSeconds ?? 0;
+}
+
+/** Days in a row with any study, ending today or yesterday (src/lib/streak.ts). */
+export async function getStudyStreak(userId: string) {
+  // Sessions are stored in UTC; the day they count for is the local (APP_TIMEZONE) date.
+  const rows = await prisma.$queryRaw<Array<{ day: string }>>`
+    SELECT DISTINCT to_char(("startedAt" AT TIME ZONE 'UTC') AT TIME ZONE ${APP_TIMEZONE}, 'YYYY-MM-DD') AS day
+    FROM "StudySession"
+    WHERE "userId" = ${userId} AND "startedAt" >= NOW() - INTERVAL '400 days'`;
+  return studyStreak(rows.map((row) => row.day), now().format("YYYY-MM-DD"));
 }
 
 export async function getTodayStudySeconds(userId: string) {

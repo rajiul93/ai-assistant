@@ -9,6 +9,7 @@ import { freshUserFlags } from "@/server/user-flags";
 import {
   getPendingTasks,
   getProgressCounts,
+  getStudyStreak,
   getStudyPlan,
   getTodayPlanStart,
   getTasksToRevise,
@@ -18,7 +19,7 @@ import {
 
 export default async function DashboardPage() {
   const user = await requireUser();
-  const [plan, todayTasks, studiedSeconds, toRevise, counts, planStartedAt, pendingTasks, profile] = await Promise.all([
+  const [plan, todayTasks, studiedSeconds, toRevise, counts, planStartedAt, pendingTasks, profile, streak] = await Promise.all([
     getStudyPlan(user.id),
     getTodayTasks(user.id),
     getTodayStudySeconds(user.id),
@@ -27,6 +28,7 @@ export default async function DashboardPage() {
     getTodayPlanStart(user.id),
     getPendingTasks(user.id),
     freshUserFlags(user.id),
+    getStudyStreak(user.id),
   ]);
   const name = profile?.name ?? user.name;
   const todayMs = now().valueOf();
@@ -56,9 +58,8 @@ export default async function DashboardPage() {
       preparationDeadline={plan?.preparationDeadline ?? null}
       dailyTargetMinutes={plan?.dailyStudyTargetMinutes ?? 180}
       studiedSeconds={studiedSeconds}
+      streak={streak}
       todayTasks={todayTasks}
-      pendingCount={counts.pendingTasks}
-      finishedCount={counts.completedTasks}
       revisionCount={dueRevisionCount(toRevise, todayMs)}
       toRevise={toRevise.slice(0, 5)}
       todayMs={todayMs}

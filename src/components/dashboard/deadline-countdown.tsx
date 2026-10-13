@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useSyncExternalStore } from "react";
+import { Hourglass } from "lucide-react";
 import { birthdayAtAge, countdownParts, diffParts, formatDate } from "@/lib/dayjs";
 import { cn } from "@/lib/utils";
 
@@ -51,10 +52,10 @@ export function DeadlineCountdown({ deadline, dateOfBirth, ageLimitYears }: { de
   const target = dateOfBirth ? birthdayAtAge(dateOfBirth, ageLimitYears).toDate() : deadline ? new Date(deadline) : null;
 
   if (!target) {
-    return <section className="rounded-2xl border border-dashed border-zinc-300 bg-white p-6">
-      <p className="text-sm font-medium text-zinc-500">Age-limit countdown</p>
-      <p className="mt-2 text-lg font-semibold">Add your date of birth to start the countdown</p>
-      <Link href="/plan" className="mt-3 inline-block text-sm font-medium text-zinc-950 underline underline-offset-4">Set it in Study Plan →</Link>
+    return <section className="flex h-full flex-col justify-center rounded-3xl bg-[#eef1fb] p-4 sm:p-6">
+      <p className="flex items-center gap-2 text-sm font-semibold text-slate-700"><Hourglass className="size-5 text-amber-500" /> বয়সের কাউন্টডাউন</p>
+      <p className="mt-2 text-sm text-slate-600 sm:text-base">জন্মতারিখ দিলে চাকরির বয়স শেষ হওয়া পর্যন্ত কত সময় বাকি, এখানে দেখাবে।</p>
+      <Link href="/plan" className="mt-3 text-sm font-semibold text-blue-700 underline underline-offset-4">Study Plan-এ দিন →</Link>
     </section>;
   }
 
@@ -62,33 +63,29 @@ export function DeadlineCountdown({ deadline, dateOfBirth, ageLimitYears }: { de
   const age = now !== null && dateOfBirth ? diffParts(dateOfBirth, now) : null;
   const expired = parts?.expired ?? false;
 
-  return <section
-    aria-labelledby="long-term-countdown"
-    className={cn(
-      "relative overflow-hidden rounded-2xl p-4 text-white shadow-[0_20px_50px_-24px_rgba(0,0,0,0.6)] sm:p-6",
-      expired ? "bg-linear-to-br from-red-700 to-red-900" : "bg-linear-to-br from-zinc-950 via-zinc-900 to-zinc-800",
-    )}
-  >
-    <div aria-hidden className="pointer-events-none absolute -right-16 -top-24 size-64 rounded-full bg-white/5 blur-2xl" />
-    <div className="relative flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-      <h2 id="long-term-countdown" className="text-sm font-medium text-white/70">⏳ {dateOfBirth ? `Until you turn ${ageLimitYears}` : "Long-term deadline"}</h2>
-      <p className="text-sm text-white/60">{formatDate(target)}</p>
+  return <section aria-labelledby="long-term-countdown" className={cn("flex h-full flex-col rounded-3xl p-3 sm:p-5", expired ? "bg-red-50" : "bg-[#eef1fb]")}>
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5">
+      <h2 id="long-term-countdown" className="flex items-center gap-1.5 text-[13px] font-bold text-slate-900 sm:gap-2 sm:text-lg">
+        <Hourglass className="size-4 shrink-0 text-amber-500 sm:size-6" />
+        {dateOfBirth ? `Until you turn ${ageLimitYears}` : "Long-term deadline"}
+      </h2>
+      <p className="text-[11px] text-slate-500 sm:text-sm">{formatDate(target)}</p>
     </div>
 
-    {expired ? <div className="relative mt-4">
-      <p className="text-3xl font-semibold tracking-tight">{dateOfBirth ? `You've reached ${ageLimitYears}` : "Deadline passed"}</p>
-      <p className="mt-1 text-sm text-white/70">The countdown has ended. Update <Link href="/plan" className="underline underline-offset-4">Study Plan</Link> if your goal changed.</p>
+    {expired ? <div className="mt-3">
+      <p className="text-xl font-bold text-red-700 sm:text-2xl">{dateOfBirth ? `You've reached ${ageLimitYears}` : "Deadline passed"}</p>
+      <p className="mt-1 text-sm text-red-800/80">লক্ষ্য বদলালে <Link href="/plan" className="underline underline-offset-4">Study Plan</Link> ঠিক করে নিন।</p>
     </div> : <>
-      <dl className="relative mt-3 grid grid-cols-6 gap-1.5 sm:mt-4 sm:gap-3">
-        {units.map((unit) => <div key={unit.key} className="flex flex-col-reverse rounded-lg bg-white/7 px-0.5 py-2 text-center ring-1 ring-white/10 backdrop-blur-sm sm:rounded-xl sm:px-2 sm:py-3">
-          <dt className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-white/55 sm:mt-1 sm:text-[11px] sm:tracking-wider"><span className="sm:hidden">{unit.short}</span><span className="hidden sm:inline">{unit.label}</span></dt>
-          <dd className="text-xl font-semibold tabular-nums tracking-tight sm:text-4xl">
+      <dl className="mt-2.5 grid grid-cols-6 gap-1 sm:mt-4 sm:gap-2">
+        {units.map((unit) => <div key={unit.key} className="flex min-w-0 flex-col-reverse rounded-xl bg-white/80 py-1.5 text-center shadow-[0_1px_0_rgba(15,23,42,0.04)] sm:rounded-2xl sm:py-3">
+          <dt className="mt-0.5 text-[9px] font-medium uppercase tracking-wide text-slate-500 sm:text-xs">{unit.short}</dt>
+          <dd className="text-[15px] font-bold tabular-nums leading-tight text-slate-900 sm:text-3xl">
             {parts ? String(parts[unit.key]).padStart(unit.key === "years" ? 1 : 2, "0") : "–"}
           </dd>
         </div>)}
       </dl>
       {/* Screen readers get one summary instead of an announcement every second. */}
-      {age ? <p className="relative mt-3 text-xs text-white/60 sm:mt-4 sm:text-sm">Current age: <span className="font-medium tabular-nums text-white/85">{age.years} years, {age.months} months, {age.days} days</span></p> : null}
+      {age ? <p className="mt-auto pt-2.5 text-[11px] leading-snug text-slate-600 sm:pt-4 sm:text-sm">Current age: <span className="font-medium tabular-nums text-slate-800">{age.years} years, {age.months} months, {age.days} days</span></p> : null}
       {parts ? <p className="sr-only">{`${parts.years} years, ${parts.months} months, ${parts.days} days left`}</p> : null}
     </>}
   </section>;
