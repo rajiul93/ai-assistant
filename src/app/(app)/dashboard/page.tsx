@@ -59,6 +59,8 @@ export default async function DashboardPage() {
       dailyTargetMinutes={plan?.dailyStudyTargetMinutes ?? 180}
       studiedSeconds={studiedSeconds}
       streak={streak}
+      pendingCount={counts.pendingTasks}
+      finishedCount={counts.completedTasks}
       todayTasks={todayTasks}
       revisionCount={dueRevisionCount(toRevise, todayMs)}
       toRevise={toRevise.slice(0, 5)}
