@@ -1,7 +1,7 @@
 # Profile page and group chat — plan
 
-Status: **built 2026-10-13 (owner accepted every proposal in §4). Migrations written, not yet
-applied to Neon; integration tests written, not yet run.**
+Status: **built 2026-10-13 (owner accepted every proposal in §4). Migrations applied to Neon 2026-10-13;
+integration tests written, not yet run.**
 Progress goes in `CLAUDE.md` → Feature status.
 
 The owner asked for two things:

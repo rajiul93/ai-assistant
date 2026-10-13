@@ -128,8 +128,8 @@ alone. Record decisions and their reasons; don't restate code.
 | **Collaboration: friends, sharing, notifications, chat (socket.io)** | **built; awaiting integration run + two-browser check** | plan + decisions: [docs/collaboration-plan.md](docs/collaboration-plan.md) |
 | Set audio (TTS MP3 per set on Cloudflare R2) | planned, not started | owner deferred it |
 | Question Bank (BCS / প্রাইমারি / ১১–২০ গ্রেড; shared MCQs, free for all; super admin uploads from Excel) | planned, not started | plan + owner's answers: [docs/question-bank-plan.md](docs/question-bank-plan.md) |
-| **Profile page (name + phone)** | **built; migration `20261016000000_profile` not applied yet** | [docs/profile-and-group-chat-plan.md](docs/profile-and-group-chat-plan.md) §1. Sign-in no longer overwrites a name the user saved (`profileUpdatedAt`) |
-| **Group chat (3–20 friends)** | **built; migration `20261017000000_group_chat` not applied yet; integration tests not run** | same doc §2. Separate tables (`ChatGroup`, `ChatGroupMember`, `GroupMessage`); 1:1 chat untouched |
+| **Profile page (name + phone)** | **built; migration applied to Neon 2026-10-13** | [docs/profile-and-group-chat-plan.md](docs/profile-and-group-chat-plan.md) §1. Sign-in no longer overwrites a name the user saved (`profileUpdatedAt`) |
+| **Group chat (3–20 friends)** | **built; migration applied 2026-10-13; integration tests + three-browser check not run** | same doc §2. Separate tables (`ChatGroup`, `ChatGroupMember`, `GroupMessage`); 1:1 chat untouched |
 
 ### Collaboration progress (update as each step lands)
 
