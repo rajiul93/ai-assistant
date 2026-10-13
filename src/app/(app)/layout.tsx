@@ -16,5 +16,5 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     freshUserFlags(user.id),
   ]);
   // Live counts (bell, Messages badge) for every signed-in page: socket.io if configured, else polling.
-  return <LiveProvider><AppShell userName={flags?.name || user.name || user.email} aiLock={ai.lock} admin={admin} superAdmin={role === "SUPER_ADMIN"} pendingPayments={pendingPayments}>{children}</AppShell></LiveProvider>;
+  return <LiveProvider><AppShell userName={flags?.name || user.name || user.email} userImage={user.image} aiLock={ai.lock} admin={admin} superAdmin={role === "SUPER_ADMIN"} pendingPayments={pendingPayments}>{children}</AppShell></LiveProvider>;
 }
