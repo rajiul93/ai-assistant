@@ -35,7 +35,7 @@ const quickAccess: Array<{ href: string; label: string; icon: LucideIcon; tone: 
   { href: "/confusions", label: "কনফিউশন", icon: CircleHelp, tone: "bg-emerald-50 text-emerald-600" },
   { href: "/notes", label: "নোটস", icon: NotebookPen, tone: "bg-orange-50 text-orange-500" },
   { href: "/plan", label: "স্টাডি প্ল্যান", icon: CalendarCheck, tone: "bg-violet-50 text-violet-600" },
-  { href: "/jobs", label: "চাকরির আবেদন", icon: BriefcaseBusiness, tone: "bg-pink-50 text-pink-500" },
+  { href: "/jobs", label: "চাকরি", icon: BriefcaseBusiness, tone: "bg-pink-50 text-pink-500" },
   { href: "/progress", label: "প্রগতি", icon: ChartColumnIncreasing, tone: "bg-indigo-50 text-indigo-600" },
   { href: "/short-questions", label: "শর্ট প্রশ্ন", icon: FileText, tone: "bg-sky-50 text-sky-600" },
   { href: "/vocabulary", label: "Vocabulary", icon: Languages, tone: "bg-teal-50 text-teal-600" },
@@ -97,20 +97,19 @@ export function DashboardView({
       </div>
 
       {/* Banner */}
-      <section className="relative overflow-hidden rounded-3xl bg-linear-to-br from-blue-500 via-blue-500 to-indigo-400 p-5 text-white shadow-[0_18px_40px_-18px_rgba(37,99,235,0.7)] sm:p-8">
+      {/* Type sizes follow the screen width (clamp), so the banner reads the same on a small phone and a desktop. */}
+      <section className="relative overflow-hidden rounded-[28px] bg-linear-to-br from-[#3f6ef3] via-[#5a87f8] to-[#8fa6fb] px-[clamp(18px,5vw,40px)] py-[clamp(20px,6vw,44px)] text-white shadow-[0_18px_40px_-18px_rgba(37,99,235,0.6)]">
         <div aria-hidden className="pointer-events-none absolute -left-10 -top-16 size-56 rounded-full bg-white/10 blur-2xl" />
-        <div className="relative flex items-center gap-2">
-          <div className="min-w-0 flex-1">
-            <h1 className="whitespace-nowrap text-[22px] font-extrabold leading-tight tracking-tight min-[400px]:text-[25px] sm:text-4xl lg:text-5xl">লক্ষ্য সরকারি চাকরি</h1>
-            <p className="mt-1.5 text-[13px] leading-snug text-white/90 sm:mt-2 sm:text-lg">পরিকল্পিত প্রস্তুতি, নিশ্চিত অগ্রগতি</p>
-            <div className="mt-4 sm:mt-6"><HeroPlanButton startedAt={planStartedAt} firstTask={firstTask} /></div>
-          </div>
-          <HeroIllustration className="w-24 shrink-0 min-[400px]:w-28 sm:w-56 lg:w-72" />
+        <HeroIllustration className="pointer-events-none absolute bottom-[4%] right-[-2%] w-[clamp(132px,40vw,330px)] lg:right-[3%] lg:w-[300px]" />
+        <div className="relative max-w-[66%] lg:max-w-[60%]">
+          <h1 className="whitespace-nowrap text-[clamp(23px,6.9vw,50px)] font-bold leading-[1.15] tracking-tight">লক্ষ্য সরকারি চাকরি</h1>
+          <p className="mt-[clamp(4px,1.4vw,10px)] text-[clamp(12.5px,3.7vw,20px)] leading-snug text-white/90">পরিকল্পিত প্রস্তুতি, নিশ্চিত অগ্রগতি</p>
+          <div className="mt-[clamp(14px,4.4vw,28px)]"><HeroPlanButton startedAt={planStartedAt} firstTask={firstTask} /></div>
         </div>
       </section>
 
       {/* Countdown + today's plan, side by side as in the design (wider countdown). */}
-      <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-3 sm:gap-5">
+      <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-[clamp(10px,3vw,20px)] lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
         <DeadlineCountdown
           deadline={longTermDeadline ? longTermDeadline.toISOString() : null}
           dateOfBirth={dateOfBirth ? dateOfBirth.toISOString() : null}
@@ -128,15 +127,15 @@ export function DashboardView({
       {/* Quick access */}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">Quick Access</h2>
+          <h2 className="text-[clamp(17px,4.9vw,24px)] font-bold tracking-tight text-slate-900">Quick Access</h2>
           <PageFinder trigger="see-all" />
         </div>
-        <nav aria-label="Quick access" className="grid grid-cols-5 gap-2 sm:gap-3">
+        <nav aria-label="Quick access" className="grid grid-cols-5 gap-[clamp(6px,2vw,16px)]">
           {quickAccess.map((item) => {
             const Icon = item.icon;
-            return <Link key={item.href} href={item.href} className={cn(card, "flex flex-col items-center gap-2 px-1 py-2.5 text-center transition hover:-translate-y-0.5 active:scale-95 sm:py-4")}>
-              <span className={cn("flex size-11 items-center justify-center rounded-2xl sm:size-14", item.tone)}><Icon className="size-6 sm:size-7" /></span>
-              <span className="text-[11px] font-medium leading-tight text-slate-700 sm:text-sm">{item.label}</span>
+            return <Link key={item.href} href={item.href} className={cn(card, "flex flex-col items-center gap-[clamp(6px,1.8vw,12px)] px-0.5 py-[clamp(10px,3vw,20px)] text-center transition hover:-translate-y-0.5 active:scale-95")}>
+              <span className={cn("flex size-[clamp(42px,11.6vw,64px)] items-center justify-center rounded-[clamp(12px,3.4vw,20px)]", item.tone)}><Icon className="size-[clamp(21px,5.8vw,30px)]" strokeWidth={2} /></span>
+              <span className="whitespace-nowrap text-[clamp(10.5px,2.95vw,15px)] font-medium leading-tight tracking-tight text-slate-700">{item.label}</span>
             </Link>;
           })}
         </nav>
@@ -148,7 +147,7 @@ export function DashboardView({
       <div className="grid gap-3 sm:grid-cols-2 sm:gap-5">
         <section className="flex flex-col rounded-3xl bg-linear-to-br from-orange-50 to-amber-50/60 p-4 sm:p-5">
           <div className="flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-base font-bold text-slate-900 sm:text-lg"><ListTodo className="size-5 text-orange-500" /> আজকের কাজ</h2>
+            <h2 className="flex items-center gap-2 text-[clamp(15px,4.3vw,20px)] font-bold text-slate-900"><ListTodo className="size-5 text-orange-500" /> আজকের কাজ</h2>
             <Link href="/tasks" className="flex items-center text-sm text-slate-500 hover:text-blue-700">সব <ChevronRight className="size-4" /></Link>
           </div>
           {todayTasks.length ? <ul className="mt-3 space-y-2">
@@ -167,7 +166,7 @@ export function DashboardView({
 
         <section className={cn(card, "p-4 sm:p-5")}>
           <div className="flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-base font-bold text-slate-900 sm:text-lg"><RotateCcw className="size-5 text-blue-600" /> রিভিশন বাকি</h2>
+            <h2 className="flex items-center gap-2 text-[clamp(15px,4.3vw,20px)] font-bold text-slate-900"><RotateCcw className="size-5 text-blue-600" /> রিভিশন বাকি</h2>
             <Link href="/tasks?view=revisions" className="flex items-center text-sm text-slate-500 hover:text-blue-700">সব <ChevronRight className="size-4" /></Link>
           </div>
           {toRevise.length ? <ul className="mt-2 divide-y divide-slate-100">

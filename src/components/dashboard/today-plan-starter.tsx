@@ -45,7 +45,7 @@ export function useStartPlan(firstTask: FirstTask) {
 /** The home banner's button: start today's plan, or go back to studying once it has started. */
 export function HeroPlanButton({ startedAt, firstTask }: { startedAt: string | null; firstTask: FirstTask }) {
   const { start, starting } = useStartPlan(firstTask);
-  const style = "inline-flex h-11 items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-4 text-[13px] font-semibold text-slate-900 shadow-sm transition hover:bg-blue-50 active:scale-95 disabled:opacity-60 sm:h-12 sm:px-6 sm:text-base";
+  const style = "inline-flex h-[clamp(40px,11.4vw,54px)] items-center gap-[clamp(5px,1.5vw,10px)] whitespace-nowrap rounded-full bg-white px-[clamp(14px,4.4vw,28px)] text-[clamp(12.5px,3.7vw,17px)] font-semibold text-slate-900 shadow-sm transition hover:bg-blue-50 active:scale-95 disabled:opacity-60";
   if (startedAt) return <Link href="/tasks" className={style}>পড়া চালিয়ে যান <ArrowRight className="size-4" /></Link>;
   return <button type="button" onClick={start} disabled={starting} className={style}>{starting ? "শুরু হচ্ছে…" : "আজকের প্ল্যান শুরু করুন"} <ArrowRight className="size-4" /></button>;
 }
@@ -70,18 +70,18 @@ export function TodayPlanStarter({
   const paused = useTimerStore((state) => state.paused);
   const elapsed = useLiveTimerSeconds();
 
-  return <section className="flex h-full flex-col rounded-3xl bg-[#e8f8ef] p-3.5 sm:p-5">
-    <h2 className="flex items-center gap-1.5 whitespace-nowrap text-sm font-bold tracking-tight text-slate-900 sm:gap-2 sm:text-lg">
-      {startedAt ? <CheckCircle2 className="size-4 shrink-0 text-emerald-600 sm:size-6" /> : <CalendarCheck2 className="size-4 shrink-0 text-emerald-600 sm:size-6" />}
+  return <section className="flex h-full flex-col rounded-[clamp(18px,5vw,28px)] bg-[#e7f7ee] p-[clamp(11px,3.4vw,24px)]">
+    <h2 className="flex items-center gap-[clamp(4px,1.2vw,10px)] whitespace-nowrap text-[clamp(13px,3.7vw,20px)] font-bold tracking-tight text-slate-900">
+      {startedAt ? <CheckCircle2 className="size-[clamp(15px,4.2vw,26px)] shrink-0 text-emerald-600" /> : <CalendarCheck2 className="size-[clamp(15px,4.2vw,26px)] shrink-0 text-emerald-600" />}
       Today&apos;s Plan
     </h2>
-    <p className="mt-1.5 text-xs leading-relaxed text-slate-500 sm:text-sm">
-      {taskCount} tasks · {revisionCount} revision<br />{formatHoursMinutes(dailyTargetMinutes)} target
+    <p className="mt-[clamp(4px,1.4vw,10px)] text-[clamp(10.5px,2.9vw,15px)] leading-relaxed text-slate-500">
+      <span className="whitespace-nowrap">{taskCount} tasks · {revisionCount} revision</span><br />{formatHoursMinutes(dailyTargetMinutes)} target
       {startedAt ? <><br /><span className="font-medium text-emerald-800">শুরু {dayjs(startedAt).tz(APP_TIMEZONE).format("h:mm A")}</span></> : null}
     </p>
     <div className="mt-auto pt-3">
       {!startedAt
-        ? <button type="button" onClick={start} disabled={starting} className="flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 text-sm font-semibold text-white transition hover:bg-slate-800 active:scale-95 disabled:opacity-60 sm:h-12 sm:text-base">
+        ? <button type="button" onClick={start} disabled={starting} className="flex h-[clamp(38px,11vw,52px)] w-full items-center justify-center gap-[clamp(5px,1.5vw,10px)] whitespace-nowrap rounded-[clamp(12px,3.4vw,18px)] bg-slate-950 text-[clamp(12.5px,3.7vw,17px)] font-semibold text-white transition hover:bg-slate-800 active:scale-95 disabled:opacity-60">
           <Play className="size-4 fill-current" /> {starting ? "Starting…" : "Start Plan"}
         </button>
         : !hydrated ? null : running

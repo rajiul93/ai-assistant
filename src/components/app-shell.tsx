@@ -28,8 +28,8 @@ const baseMoreLinks = links.filter((link) => !tabHrefs.includes(link.href));
 /** "Prep" with its cap, as on the home page design. */
 function Logo() {
   return <Link href="/dashboard" className="block min-w-0">
-    <span className="flex items-center gap-1 text-[22px] font-extrabold leading-none tracking-tight text-slate-950">Prep<GraduationCap className="size-5 -translate-y-1.5 text-blue-600" strokeWidth={2.5} /></span>
-    <span className="mt-1 block truncate text-xs text-slate-500">চাকরির প্রস্তুতি, এখন আরও সহজ</span>
+    <span className="flex items-center gap-1 text-[clamp(22px,6.4vw,28px)] font-extrabold leading-none tracking-tight text-slate-950">Prep<GraduationCap className="size-[clamp(18px,5vw,24px)] -translate-y-1.5 text-blue-600" strokeWidth={2.5} /></span>
+    <span className="mt-1 block text-[clamp(11.5px,3.3vw,14px)] leading-snug text-slate-500 lg:text-xs">চাকরির প্রস্তুতি, এখন আরও সহজ</span>
   </Link>;
 }
 
