@@ -6,7 +6,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { now, startOfDay } from "@/lib/dayjs";
 import { prisma } from "@/lib/prisma";
-import { BANK_IMPORT_BATCH, placementForSet, questionFingerprint } from "@/lib/question-bank";
+import { BANK_CHECK_BATCH, BANK_IMPORT_BATCH, placementForSet, questionFingerprint, rowContentHash, rowSetKey } from "@/lib/question-bank";
 import { placeFor } from "@/server/collaboration/share-copy";
 import { isSuperAdminEmail } from "@/server/roles";
 
@@ -171,6 +171,36 @@ export async function importBankRows(input: unknown) {
   return { created, updated, unchanged };
 }
 
+const checkSchema = z.array(z.object({ exam: examSchema, section: z.string().max(200), session: z.string().max(300), fingerprint: z.string().regex(/^[0-9a-f]{16}$/) })).max(BANK_CHECK_BATCH);
+
+/**
+ * Before an upload: which of these questions are already in the bank, each with a hash of what is
+ * stored, so the page can skip the unchanged ones and update only the edited ones.
+ * Keyed `<set key>|<fingerprint>`.
+ */
+export async function checkBankRows(input: unknown) {
+  await requireSuperAdmin();
+  const rows = checkSchema.parse(input);
+  const bySet = new Map<string, { exam: z.infer<typeof examSchema>; section: string; session: string; prints: string[] }>();
+  for (const row of rows) {
+    const key = rowSetKey(row);
+    const entry = bySet.get(key) ?? { exam: row.exam, section: row.section, session: row.session, prints: [] };
+    entry.prints.push(row.fingerprint);
+    bySet.set(key, entry);
+  }
+  const found: Record<string, string> = {};
+  for (const [key, entry] of bySet) {
+    const set = await prisma.bankSet.findUnique({ where: { exam_section_name: { exam: entry.exam, section: entry.section, name: entry.session } }, select: { id: true } });
+    if (!set) continue;
+    const stored = await prisma.bankQuestion.findMany({
+      where: { setId: set.id, fingerprint: { in: entry.prints } },
+      select: { fingerprint: true, serial: true, text: true, options: true, correctIndex: true, solution: true, explanation: true, sources: true },
+    });
+    for (const question of stored) found[`${key}|${question.fingerprint}`] = rowContentHash(question);
+  }
+  return found;
+}
+
 /** All sets for the admin page, every exam. */
 export async function listAllBankSets() {
   await requireSuperAdmin();
@@ -181,9 +211,11 @@ export async function listAllBankSets() {
   return sets.map(({ _count, ...set }) => ({ ...set, questionCount: _count.questions, copyCount: _count.copies }));
 }
 
-/** Removes a set from the bank. Copies already in people's Preliminary stay theirs. */
-export async function deleteBankSet(id: string) {
+/** Removes sets from the bank (one, or many ticked at once). Copies already in people's Preliminary stay theirs. */
+export async function deleteBankSets(ids: string[]) {
   await requireSuperAdmin();
-  await prisma.bankSet.delete({ where: { id: idSchema.parse(id) } });
+  const which = z.array(idSchema).min(1, "কোনো set বাছা হয়নি").max(5000).parse(ids);
+  const { count } = await prisma.bankSet.deleteMany({ where: { id: { in: which } } });
   revalidatePath("/question-bank");
+  return count;
 }

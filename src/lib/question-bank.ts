@@ -13,6 +13,8 @@ export const BANK_EXAMS: Array<{ id: BankExam; slug: string; label: string }> = 
 
 /** Rows per upload call: keeps each request well under the server action body limit (1 MB). */
 export const BANK_IMPORT_BATCH = 150;
+/** Rows per "already in the bank?" check (only keys travel, so far more fit). */
+export const BANK_CHECK_BATCH = 2000;
 
 export const BANK_OPTION_LETTERS = ["ক", "খ", "গ", "ঘ", "ঙ"] as const;
 
@@ -90,6 +92,33 @@ export function questionFingerprint(text: string, options: string[]) {
     b = Math.imul(b ^ code, 0x5bd1e995) ^ (b >>> 15);
   }
   return `${(a >>> 0).toString(16).padStart(8, "0")}${(b >>> 0).toString(16).padStart(8, "0")}`;
+}
+
+/**
+ * A hash of everything else about a question (order, answer, solution, explanation, sources), so
+ * the upload page can tell "already in the bank, unchanged" from "same question, edited".
+ */
+export function rowContentHash(row: { serial: number; correctIndex: number; solution: string | null; explanation: string | null; sources: string | null; options: string[]; text: string }) {
+  return questionFingerprint(JSON.stringify([row.serial, row.correctIndex, row.solution ?? "", row.explanation ?? "", row.sources ?? "", row.text]), row.options);
+}
+
+/** Where a row goes: its set (exam + section + session) and the question inside it. */
+export const rowSetKey = (row: { exam: string; section: string; session: string }) => JSON.stringify([row.exam, row.section, row.session]);
+
+/**
+ * Marks rows that repeat an earlier row of the same file (same set, same question): only the first
+ * is uploaded. Returns the later rows' positions mapped to the sheet line they repeat.
+ */
+export function repeatsInFile(rows: Array<{ line: number; row: BankRow }>) {
+  const first = new Map<string, number>();
+  const repeats = new Map<number, number>();
+  for (const { line, row } of rows) {
+    const key = `${rowSetKey(row)}|${questionFingerprint(row.text, row.options)}`;
+    const earlier = first.get(key);
+    if (earlier === undefined) first.set(key, line);
+    else repeats.set(line, earlier);
+  }
+  return repeats;
 }
 
 /* ---------- Columns ---------- */

@@ -64,8 +64,15 @@ Assumed until the owner says otherwise (all in `src/lib/question-bank.ts`, unit-
   (read-only set); `/admin/question-bank` (upload + set list). Nav: "প্রশ্ন ব্যাংক" for all,
   "Bank upload" for the super admin; voice page `question_bank`.
 - Upload: the `.xlsx` is read **in the browser** (`read-excel-file`); every row is checked and
-  errors/warnings listed by sheet row before anything is sent; then batches of 150 with progress.
-  Stopping halfway is safe — uploading again continues without duplicates.
+  errors/warnings listed by sheet row before anything is sent.
+- **The same data never goes in twice** (owner, 2026-10-13): before uploading, the page asks the
+  server (`checkBankRows`) which questions the bank already has and compares a hash of the stored
+  row. Each row is shown as new / edited (will update) / already there (skipped); a question
+  repeated inside the same file is taken once. Only new and edited rows are sent (batches of 150);
+  when nothing is new the upload button is replaced by "সব প্রশ্ন আগেই ব্যাংকে আছে". Stopping
+  halfway is safe — uploading again continues without duplicates.
+- Set list on the upload page: filter by exam, tick sets or "সব বাছো", delete the ticked ones
+  together (`deleteBankSets`). Copies already sent to Preliminary stay.
 
 ## 5. Not built (from the first plan, dropped or later)
 

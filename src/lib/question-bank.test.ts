@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkRow, cleanSolution, examFromText, letterIndex, mapColumns, placementForSet, questionFingerprint, subjectFromSources } from "./question-bank";
+import { checkRow, cleanSolution, examFromText, letterIndex, mapColumns, placementForSet, questionFingerprint, repeatsInFile, rowContentHash, subjectFromSources, type BankRow } from "./question-bank";
 
 const headers = ["#", "পরীক্ষা (Exam)", "ধরন (Section)", "সেশন/বিষয় (Session/Subject)", "প্রশ্নের ধরন", "ক্রম (Serial)", "প্রশ্ন (Question)", "ক", "খ", "গ", "ঘ", "অতিরিক্ত অপশন", "সঠিক উত্তর (Letter)", "সঠিক উত্তর (Answer)", "সমাধান (Solution)", "ব্যাখ্যা (Explanation)", "সব উৎস (All sources)"];
 const sample = ["1", "Grade 11-20 Govt Jobs (General)", "বিগত সালের প্রশ্ন", "গণপূর্ত অধিদপ্তর (2025)", "বহুনির্বাচনি প্রশ্ন", "1", "Gulliver's travels _____ a famous book.", "is", "are", "has", "have", "", "ক", "is",
@@ -85,5 +85,22 @@ describe("helpers", () => {
     expect(questionFingerprint(" Gulliver's travels _____ a famous book ", ["is", "are", "has", "have"])).toBe(a);
     expect(questionFingerprint("Gulliver's travels _____ a famous book.", ["is", "are", "has", "had"])).not.toBe(a);
     expect(a).toMatch(/^[0-9a-f]{16}$/);
+  });
+});
+
+describe("uploading the same data twice", () => {
+  const { map } = mapColumns(headers);
+  const row = checkRow(sample, map, 2).row as BankRow;
+
+  it("finds a question repeated inside one file, but not the same question in another set", () => {
+    const otherSet = { ...row, session: "খাদ্য অধিদপ্তর (2024)" };
+    const repeats = repeatsInFile([{ line: 2, row }, { line: 3, row: otherSet }, { line: 9, row: { ...row, serial: 5 } }]);
+    expect([...repeats]).toEqual([[9, 2]]);
+  });
+
+  it("tells an unchanged question from an edited one", () => {
+    expect(rowContentHash({ ...row })).toBe(rowContentHash(row));
+    expect(rowContentHash({ ...row, solution: "নতুন সমাধান" })).not.toBe(rowContentHash(row));
+    expect(rowContentHash({ ...row, correctIndex: 1 })).not.toBe(rowContentHash(row));
   });
 });
