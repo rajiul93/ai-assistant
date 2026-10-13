@@ -278,3 +278,6 @@ html {
 .rich-view.ql-editor h3 { font-size: 0.9rem; font-weight: 600; margin: 0.75rem 0 0.25rem; color: var(--color-zinc-900); }
 .rich-view.ql-editor > :first-child { margin-top: 0; }
 .rich-view.ql-editor li { padding-left: 1.25em; }
+/* Solutions and explanations (BookText): the box around them already pads, and they keep its colour. */
+.book-text .rich-view.ql-editor { padding: 0.125rem 0 0; color: inherit; font-size: inherit; }
+.book-text .rich-view.ql-editor p + p { margin-top: 0.375rem; }

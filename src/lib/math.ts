@@ -83,6 +83,41 @@ export function renderFormulaHtml(html: string) {
   return replaceFormulaSpans(html, (latex) => (latex ? `<span class="ql-formula" data-value="${escapeHtml(latex)}">${renderLatex(latex)}</span>` : ""));
 }
 
+/* ---------- Plain-text math from sheets ---------- */
+
+const NUM = "[0-9০-৯]+(?:\\.[0-9০-৯]+)?";
+const VAR = "(?<![A-Za-z])[A-Za-z](?![A-Za-z])";
+const SUPERSCRIPTS: Record<string, string> = { "⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4", "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9", "⁻": "-", "⁺": "+", "ⁿ": "n" };
+const unwrap = (group: string) => (group.startsWith("(") && group.endsWith(")")) || (group.startsWith("{") && group.endsWith("}")) ? group.slice(1, -1) : group;
+
+/** Roots, then fractions, then powers — each found piece becomes `$…$`. */
+const PLAIN_MATH = new RegExp([
+  // √3, √(x+1), ∛8
+  `(?<root>[√∛])\\s*(?<radicand>\\([^()]*\\)|${NUM}|${VAR})`,
+  // 1/2, ৩/৪, a/b — but not dates (12/03/2024), "and/or" or km/h
+  `(?<![\\w০-৯/.])(?<num>${NUM}|${VAR})\\s*/\\s*(?<den>${NUM}|${VAR})(?![\\w০-৯/])`,
+  // x^2, 10^(n+1), a^{-1}
+  `(?<base>${NUM}|${VAR}|\\))\\^(?<exp>\\{[^}]*\\}|\\([^()]*\\)|-?${NUM}|${VAR})`,
+  // x², 10³, a⁻¹
+  `(?<sbase>${NUM}|${VAR}|\\))(?<sup>[⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺ⁿ]+)`,
+].join("|"), "g");
+
+/**
+ * Sheets write math as plain text (`1/2`, `√3`, `x²`, `x^2`). This finds those pieces and wraps them
+ * as LaTeX between dollar signs, so `MathText` / the read-only Quill view draw them like a textbook
+ * (a stacked fraction, a root sign over the number, a raised power). Math already in `$…$` and
+ * everything else is left alone.
+ */
+export function plainMathToLatex(text: string) {
+  return splitMath(text).map((part) => (part.type === "math" ? (part.display ? `$$${part.value}$$` : `$${part.value}$`) : part.value.replace(PLAIN_MATH, (...args) => {
+    const groups = args.at(-1) as Record<string, string | undefined>;
+    if (groups.root) return `$${groups.root === "∛" ? "\\sqrt[3]" : "\\sqrt"}{${unwrap(groups.radicand!)}}$`;
+    if (groups.num) return `$\\frac{${groups.num}}{${groups.den}}$`;
+    if (groups.base) return `$${groups.base}^{${unwrap(groups.exp!)}}$`;
+    return `$${groups.sbase}^{${[...groups.sup!].map((mark) => SUPERSCRIPTS[mark]).join("")}}$`;
+  }))).join("");
+}
+
 /* ---------- Saying math out loud ---------- */
 
 const bnDigits = (text: string) => text.replace(/\d/g, (digit) => "০১২৩৪৫৬৭৮৯"[Number(digit)]);

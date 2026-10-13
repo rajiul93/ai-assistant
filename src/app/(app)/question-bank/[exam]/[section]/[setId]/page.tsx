@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 import { Check } from "lucide-react";
+// Solutions are shown in the read-only Quill view (BookText).
+import "quill/dist/quill.snow.css";
 import { MathText } from "@/components/math-text";
 import { SolutionNotes } from "@/components/preliminary/question-set-views";
 import { BankBreadcrumb, examBySlug, sectionHref } from "@/components/question-bank/bank-nav";
@@ -27,13 +29,13 @@ export default async function BankSetPage(props: PageProps<"/question-bank/[exam
 
     <ol className="space-y-3">
       {set.questions.map((question, index) => <li key={question.id} className="rounded-2xl border border-zinc-200 bg-white p-4">
-        <p className="font-medium leading-relaxed"><span className="mr-1.5 text-zinc-400 tabular-nums">{index + 1}.</span><MathText text={question.text} /></p>
+        <p className="font-medium leading-relaxed"><span className="mr-1.5 text-zinc-400 tabular-nums">{index + 1}.</span><MathText text={question.text} book /></p>
         <ul className="mt-3 grid gap-2 sm:grid-cols-2">
           {question.options.map((option, optionIndex) => {
             const right = question.correctIndex === optionIndex;
             return <li key={optionIndex} className={cn("flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm", right ? "border-emerald-400 bg-emerald-50 font-medium text-emerald-900" : "border-zinc-200")}>
               <span className={cn("flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold", right ? "bg-emerald-600 text-white" : "bg-zinc-100 text-zinc-600")}>{right ? <Check className="size-3.5" strokeWidth={3} /> : BANK_OPTION_LETTERS[optionIndex]}</span>
-              <MathText text={option} />
+              <MathText text={option} book />
             </li>;
           })}
         </ul>
