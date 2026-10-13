@@ -144,11 +144,10 @@ export async function upsertUserFromToken(
     throw new Error("Google account email is required.");
   }
 
-  return prisma.user.upsert({
+  const user = await prisma.user.upsert({
     where: { firebaseUid },
     update: {
       email,
-      name: name ?? null,
       image: picture ?? null,
     },
     create: {
@@ -158,6 +157,14 @@ export async function upsertUserFromToken(
       image: picture ?? null,
     },
   });
+  // The Google name keeps flowing in only until the user saves their own on the profile page;
+  // this runs on every token check, so writing it unconditionally would undo their edit.
+  const googleName = name ?? null;
+  if (!user.profileUpdatedAt && user.name !== googleName) {
+    await prisma.user.updateMany({ where: { id: user.id, profileUpdatedAt: null }, data: { name: googleName } });
+    return { ...user, name: googleName };
+  }
+  return user;
 }
 
 /** An ID token, or a 5-day Firebase session cookie from before the refresh-token login. */

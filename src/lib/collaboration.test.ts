@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { conversationSide, displayName, isUnread, maskEmail, normalizeEmail, orderPair, sharedItemPath, sharePreview } from "./collaboration";
+import { conversationSide, displayName, GROUP_MAX, isUnread, maskEmail, membersToAdd, nextGroupAdmin, normalizeEmail, orderPair, sharedItemPath, sharePreview } from "./collaboration";
 
 describe("orderPair", () => {
   it("puts the smaller id first, whichever way round it is given", () => {
@@ -45,5 +45,19 @@ describe("chat unread", () => {
     expect(conversationSide({ userAId: "a", userBId: "b" }, "a")).toEqual({ mine: "userALastReadAt", otherId: "b" });
     expect(conversationSide({ userAId: "a", userBId: "b" }, "b")).toEqual({ mine: "userBLastReadAt", otherId: "a" });
     expect(conversationSide({ userAId: "a", userBId: "b" }, "c")).toBeNull();
+  });
+});
+
+describe("group chat", () => {
+  it("hands admin to whoever joined first, ties by id", () => {
+    const at = (minutes: number) => new Date(Date.UTC(2026, 9, 13, 10, minutes));
+    expect(nextGroupAdmin([{ userId: "c", joinedAt: at(5) }, { userId: "b", joinedAt: at(1) }, { userId: "a", joinedAt: at(1) }])).toBe("a");
+    expect(nextGroupAdmin([])).toBeNull();
+  });
+  it("adds only new people, never me, and keeps the size limit", () => {
+    expect(membersToAdd(["x", "x", "me", "a"], "me", ["me", "a"])).toEqual(["x"]);
+    const full = Array.from({ length: GROUP_MAX - 1 }, (_, index) => `u${index}`);
+    expect(membersToAdd(["new"], "me", full)).toEqual(["new"]);
+    expect(membersToAdd(["new", "other"], "me", full)).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 /**
- * End-to-end checks of friends, sharing, notifications and chat against the Neon test branch
+ * End-to-end checks of friends, sharing, notifications, chat, group chat and the profile against the Neon test branch
  * (pnpm test:integration; see vitest.integration.config.mts). The real server actions run with
  * only sign-in replaced: `requireUser` returns whichever test user is "signed in".
  */
@@ -18,9 +18,14 @@ const { prisma } = await import("@/lib/prisma");
 const friends = await import("@/server/actions/friends");
 const shares = await import("@/server/actions/shares");
 const messages = await import("@/server/actions/messages");
+const groups = await import("@/server/actions/groups");
+const profile = await import("@/server/actions/profile");
+const realAuth = await vi.importActual<typeof import("@/lib/auth")>("@/lib/auth");
 const notifications = await import("@/server/actions/notifications");
 const { liveCounts } = await import("@/server/collaboration/live");
 const { messagePage } = await import("@/server/collaboration/conversations");
+const { groupMessagePage } = await import("@/server/collaboration/groups");
+const { orderPair } = await import("@/lib/collaboration");
 
 const run = `itest-${Date.now()}`;
 type TestUser = { id: string; email: string; name: string | null };
@@ -39,6 +44,9 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Groups outlive their creator by design, so they're removed by hand.
+  const ids = (await prisma.user.findMany({ where: { email: { endsWith: `-${run}@example.test` } }, select: { id: true } })).map((user) => user.id);
+  await prisma.chatGroup.deleteMany({ where: { createdById: { in: ids } } });
   // Everything else belongs to these users and goes with them (cascade).
   await prisma.user.deleteMany({ where: { email: { endsWith: `-${run}@example.test` } } });
   await prisma.$disconnect();
@@ -226,5 +234,107 @@ describe("chat", () => {
     expect(latest.hasOlder).toBe(true);
     const older = await messagePage(id, { before: latest.messages[0].id });
     expect([...older.messages, ...latest.messages].map((message) => message.body)).toEqual(Array.from({ length: 35 }, (_, index) => `m${index}`));
+  });
+});
+
+describe("group chat", () => {
+  let dave: TestUser, erin: TestUser, finn: TestUser, gina: TestUser;
+  let groupId: string;
+  const befriend = (a: TestUser, b: TestUser) => {
+    const [userAId, userBId] = orderPair(a.id, b.id);
+    return prisma.friendship.create({ data: { userAId, userBId } });
+  };
+
+  beforeAll(async () => {
+    [dave, erin, finn, gina] = await Promise.all(["Dave", "Erin", "Finn", "Gina"].map(makeUser));
+    // Dave is friends with everyone; Erin and Finn aren't friends with each other.
+    await Promise.all([befriend(dave, erin), befriend(dave, finn), befriend(dave, gina)]);
+  });
+
+  it("needs at least two friends, and only friends", async () => {
+    as(dave);
+    await expect(groups.createGroup({ name: "একা", memberIds: [erin.id] })).rejects.toThrow();
+    as(erin);
+    await expect(groups.createGroup({ name: "অচেনা", memberIds: [dave.id, finn.id] })).rejects.toThrow();
+  });
+
+  it("creating adds everyone, notifies them, and members need not be friends with each other", async () => {
+    as(dave);
+    groupId = await groups.createGroup({ name: "পড়ার দল", memberIds: [erin.id, finn.id] });
+    as(erin);
+    expect((await notifications.listNotifications()).find((item) => item.type === "GROUP_ADDED")?.group?.id).toBe(groupId);
+    const details = await groups.groupDetails(groupId);
+    expect(details?.members.map((member) => member.name)).toEqual(["Dave", "Erin", "Finn"]);
+    expect(details?.isAdmin).toBe(false);
+    // Finn isn't Erin's friend: no email shown.
+    expect(details?.members.find((member) => member.name === "Finn")?.email).toBeNull();
+  });
+
+  it("messages reach every member and count unread from when they joined", async () => {
+    as(erin);
+    await groups.sendGroupMessage({ groupId, body: "সবাইকে সালাম" });
+    expect((await liveCounts(finn.id)).messagesUnread).toBe(1);
+    expect((await liveCounts(erin.id)).messagesUnread).toBe(0);
+    as(finn);
+    await groups.markGroupRead(groupId);
+    expect((await liveCounts(finn.id)).messagesUnread).toBe(0);
+    const list = await groups.listGroups();
+    expect(list[0]).toMatchObject({ id: groupId, memberCount: 3, unread: 0 });
+  });
+
+  it("only the admin renames, adds and removes; outsiders see nothing", async () => {
+    as(erin);
+    await expect(groups.renameGroup({ groupId, name: "নতুন" })).rejects.toThrow();
+    await expect(groups.addGroupMembers({ groupId, memberIds: [gina.id] })).rejects.toThrow();
+    await expect(groups.removeGroupMember({ groupId, userId: finn.id })).rejects.toThrow();
+    as(gina);
+    expect(await groups.groupDetails(groupId)).toBeNull();
+    await expect(groups.sendGroupMessage({ groupId, body: "ঢুকতে চাই" })).rejects.toThrow();
+    as(dave);
+    await groups.addGroupMembers({ groupId, memberIds: [gina.id, gina.id] });
+    expect(await prisma.chatGroupMember.count({ where: { groupId } })).toBe(4);
+    // Gina joined after Erin's message: it isn't unread for her.
+    expect((await liveCounts(gina.id)).messagesUnread).toBe(0);
+  });
+
+  it("a removed member loses access to the group", async () => {
+    as(dave);
+    await groups.removeGroupMember({ groupId, userId: gina.id });
+    as(gina);
+    expect(await groups.groupDetails(groupId)).toBeNull();
+    expect(await groups.listGroups()).toHaveLength(0);
+  });
+
+  it("when the admin leaves, the earliest member takes over; the last one out deletes the group", async () => {
+    as(dave);
+    await groups.leaveGroup(groupId);
+    as(erin);
+    const details = await groups.groupDetails(groupId);
+    expect(details?.members.filter((member) => member.role === "ADMIN").map((member) => member.name)).toEqual([expect.stringMatching(/Erin|Finn/)]);
+    const page = await groupMessagePage(groupId, {});
+    expect(page.messages.at(-1)?.body).toContain("এখন admin");
+    await groups.leaveGroup(groupId);
+    as(finn);
+    await groups.leaveGroup(groupId);
+    expect(await prisma.chatGroup.count({ where: { id: groupId } })).toBe(0);
+  });
+});
+
+describe("profile", () => {
+  it("saves name and a normalized phone, and sign-in keeps the user's own name", async () => {
+    as(alice);
+    await expect(profile.updateProfile({ name: "Alice Rahman", phone: "12345" })).rejects.toThrow();
+    await profile.updateProfile({ name: "Alice Rahman", phone: "০১৭১২-৩৪৫৬৭৮" });
+    const row = await prisma.user.findUniqueOrThrow({ where: { id: alice.id }, select: { name: true, phone: true, firebaseUid: true } });
+    expect(row).toMatchObject({ name: "Alice Rahman", phone: "+8801712345678" });
+    // A token check with the Google name must not undo the edit.
+    const after = await realAuth.upsertUserFromToken(row.firebaseUid, alice.email, "Alice From Google");
+    expect(after.name).toBe("Alice Rahman");
+  });
+
+  it("before any edit, sign-in still follows the Google name", async () => {
+    const row = await prisma.user.findUniqueOrThrow({ where: { id: carol.id }, select: { firebaseUid: true } });
+    const after = await realAuth.upsertUserFromToken(row.firebaseUid, carol.email, "Carol New");
+    expect(after.name).toBe("Carol New");
   });
 });

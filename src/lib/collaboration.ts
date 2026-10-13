@@ -122,3 +122,26 @@ export function conversationSide(conversation: { userAId: string; userBId: strin
   if (conversation.userBId === me) return { mine: "userBLastReadAt" as const, otherId: conversation.userAId };
   return null;
 }
+
+/* ---------- Group chat (docs/profile-and-group-chat-plan.md §2) ---------- */
+
+/** A group is 3–20 people including its creator; two people use the 1:1 chat. */
+export const GROUP_MIN = 3;
+export const GROUP_MAX = 20;
+export const GROUP_NAME_MAX = 60;
+
+/**
+ * Who becomes admin when the admin leaves: the member who joined first (ties by id, so every
+ * server picks the same one). Null when nobody is left.
+ */
+export function nextGroupAdmin(members: Array<{ userId: string; joinedAt: Date }>) {
+  const [first] = [...members].sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime() || a.userId.localeCompare(b.userId));
+  return first?.userId ?? null;
+}
+
+/** The people being added, cleaned: no repeats, not me, not already in; null if it breaks the size limit. */
+export function membersToAdd(requested: string[], me: string, existing: string[]) {
+  const have = new Set(existing);
+  const adding = [...new Set(requested)].filter((id) => id !== me && !have.has(id));
+  return have.size + adding.length > GROUP_MAX ? null : adding;
+}

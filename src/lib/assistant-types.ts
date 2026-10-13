@@ -102,6 +102,7 @@ export const assistantPages = {
   notifications: "/notifications",
   usage: "/usage",
   billing: "/billing",
+  profile: "/profile",
 } as const;
 
 export type AssistantPage = keyof typeof assistantPages;

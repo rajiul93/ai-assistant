@@ -13,12 +13,14 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
   const params = await searchParams;
   const q = readQuery(params);
   const { limit, page: requested } = readPagination(params);
-  const where = q ? { OR: [{ email: { contains: q, mode: "insensitive" as const } }, { name: { contains: q, mode: "insensitive" as const } }] } : {};
+  // A number searched as 017… matches the stored +88017…; short digit runs would match everyone.
+  const digits = q.replace(/\D/g, "");
+  const where = q ? { OR: [{ email: { contains: q, mode: "insensitive" as const } }, { name: { contains: q, mode: "insensitive" as const } }, ...(digits.length >= 4 ? [{ phone: { contains: digits } }] : [])] } : {};
   const [total, blocked] = await Promise.all([prisma.user.count({ where }), prisma.user.count({ where: { status: "BLOCKED" } })]);
   const page = Math.min(requested, lastPage(total, limit));
   const users = await prisma.user.findMany({
     where,
-    select: { id: true, name: true, email: true, role: true, status: true, aiPaused: true, createdAt: true },
+    select: { id: true, name: true, email: true, phone: true, role: true, status: true, aiPaused: true, createdAt: true },
     orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     skip: (page - 1) * limit,
     take: limit,

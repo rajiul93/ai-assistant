@@ -28,6 +28,7 @@ function describe(item: Item): { text: string; href: string } {
     case "SHARE_REQUEST": return { text: `${who} আপনার সাথে ${thing} share করেছে`, href: "/messages?tab=requests" };
     case "SHARE_ACCEPTED": return { text: `${who} আপনার ${thing} নিয়েছে`, href: "/messages?tab=requests" };
     case "SHARE_REJECTED": return { text: `${who} আপনার ${thing} নেয়নি`, href: "/messages?tab=requests" };
+    case "GROUP_ADDED": return { text: `${who} আপনাকে “${item.group?.name ?? "একটা"}” গ্রুপে যোগ করেছে`, href: item.group ? `/messages?tab=chats&group=${item.group.id}` : "/messages" };
   }
 }
 

@@ -7,7 +7,12 @@ export type RealtimeEvent =
   | { type: "notify" }
   | { type: "message"; conversationId: string; message: { id: string; senderId: string; body: string; createdAt: string } }
   | { type: "read"; conversationId: string }
-  | { type: "friends" };
+  | { type: "friends" }
+  | { type: "group_message"; groupId: string; message: GroupMessageEvent }
+  /** Members, name or admin changed (or I was added/removed): refetch the group list and details. */
+  | { type: "group_changed"; groupId: string };
+
+export type GroupMessageEvent = { id: string; senderId: string | null; kind: "TEXT" | "SYSTEM"; body: string; createdAt: string };
 
 export async function emitTo(userIds: string[], event: RealtimeEvent) {
   const url = process.env.REALTIME_URL;
