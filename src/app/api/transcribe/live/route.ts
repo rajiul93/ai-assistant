@@ -2,6 +2,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkAi } from "@/server/ai-access";
+import { isAdminUser } from "@/server/roles";
 import { logUsage } from "@/server/assistant/ai";
 import { speechHints } from "@/server/speech-hints";
 
@@ -19,7 +20,8 @@ const TOKENS_PER_SECOND = 10;
  */
 export async function POST(request: Request) {
   const user = await requireUser();
-  if (!(await checkAi(user)).allowed) return Response.json({ error: "unavailable" }, { status: 501 });
+  // Voice is admin-only (src/lib/voice-access.ts).
+  if (!(await isAdminUser(user)) || !(await checkAi(user)).allowed) return Response.json({ error: "unavailable" }, { status: 501 });
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return Response.json({ error: "not_configured" }, { status: 501 });
   const lang = new URL(request.url).searchParams.get("lang") === "en" ? "en" : "bn";

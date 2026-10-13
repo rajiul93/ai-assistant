@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { subscribeVoiceAllowed } from "@/lib/voice-access";
 import { speechLangs } from "@/lib/assistant-i18n";
 import { useAssistantStore } from "@/store/assistant";
 import { getRecognitionConstructor, isAssistantSpeaking, isFatalVoiceError, isMobileDevice, onAssistantSpeak, stopSpeaking, voiceErrorMessage, type Recognition, type VoiceError } from "@/lib/voice";
@@ -19,11 +20,11 @@ type Options = {
   onError?: (error: VoiceError) => void;
 };
 
-const noopSubscribe = () => () => {};
 
 export function useSpeechRecognition({ continuous = false, onResult, onInterim, onError }: Options) {
   const lang = speechLangs[useAssistantStore((state) => state.lang)];
-  const supported = useSyncExternalStore(noopSubscribe, () => Boolean(getRecognitionConstructor()), () => false);
+  // Re-checked when the admin-only voice switch changes (src/lib/voice-access.ts).
+  const supported = useSyncExternalStore(subscribeVoiceAllowed, () => Boolean(getRecognitionConstructor()), () => false);
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<Recognition | null>(null);
   const wantedRef = useRef(false);

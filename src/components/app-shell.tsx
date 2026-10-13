@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -27,6 +27,7 @@ import {
   LibraryBig,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { setVoiceAllowed } from "@/lib/voice-access";
 import { useLive } from "@/components/collaboration/live-provider";
 import { NotificationBell } from "@/components/collaboration/notification-bell";
 import type { AiLock } from "@/lib/ai-limits";
@@ -83,6 +84,8 @@ export function AppShell({
   pendingPayments: number;
 }) {
   const pathname = usePathname();
+  // Voice features are admin-only; switched on here, in the browser only (never shared on the server).
+  useEffect(() => { setVoiceAllowed(admin); }, [admin]);
   const adminLinks = [...(admin ? [billingAdminLink] : []), ...(superAdmin ? [rolesLink, bankUploadLink] : [])];
   const sideLinks = [...links, ...adminLinks];
   const moreLinks = [...baseMoreLinks, ...adminLinks];

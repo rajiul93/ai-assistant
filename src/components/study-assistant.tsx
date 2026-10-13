@@ -15,6 +15,7 @@ import { interruptReply, useAssistant } from "@/lib/use-assistant";
 import { useVoiceChat } from "@/lib/use-voice-chat";
 import { cn } from "@/lib/utils";
 import { isVoicePlaying, speak, subscribeVoicePlaying } from "@/lib/voice";
+import { useVoiceAllowed } from "@/lib/voice-access";
 import type { AiLock } from "@/lib/ai-limits";
 import { useAssistantStore, type AssistantEntry } from "@/store/assistant";
 
@@ -148,6 +149,8 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
   const typedBefore = useRef<string | null>(null);
   const setBox = (value: string) => { questionRef.current = value; setQuestion(value); };
   const join = (before: string, spoken: string) => [before.trim(), spoken.trim()].filter(Boolean).join(" ");
+  // Voice is admin-only: everyone else gets no mic and no read-aloud (src/lib/voice-access.ts).
+  const voiceAllowed = useVoiceAllowed();
   const voice = useVoiceChat({
     // Live typing: the box shows the words while they are being said.
     onDraft: (text) => {
@@ -311,7 +314,7 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
               </figure> : null}
               {entry.streaming ? <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse rounded-sm bg-zinc-400 align-middle" aria-hidden /> : null}
               {entry.interrupted ? <p className="mt-1 flex items-center gap-1 text-[11px] font-medium text-zinc-400"><Square className="size-2.5 fill-current" /> {t.interruptedLabel}</p> : null}
-              {entry.action || entry.streaming ? null : <button type="button" onClick={() => speak(entry.text)} className="mt-1 -ml-1 flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium text-zinc-500 transition hover:bg-white hover:text-zinc-900"><Volume2 className="size-3" /> {t.listenAgain}</button>}
+              {entry.action || entry.streaming || !voiceAllowed ? null : <button type="button" onClick={() => speak(entry.text)} className="mt-1 -ml-1 flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium text-zinc-500 transition hover:bg-white hover:text-zinc-900"><Volume2 className="size-3" /> {t.listenAgain}</button>}
             </div>
             {entry.action ? <ActionCard action={entry.action} state={entry.draftState} t={t} onConfirm={() => void confirmAction()} onCancel={() => cancelAction()} /> : null}
           </div>)}
@@ -367,7 +370,7 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
             title={t.attach}
             className="flex size-10 shrink-0 items-center justify-center rounded-xl sm:size-9 text-zinc-500 transition hover:bg-zinc-200/70 hover:text-zinc-900 disabled:opacity-40"
           ><Paperclip className="size-4" /></button>
-          <button
+          {voiceAllowed ? <button
             type="button"
             onClick={toggleListening}
             disabled={!voice.supported}
@@ -375,7 +378,7 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
             aria-pressed={voice.listening}
             title={!voice.supported ? t.noVoiceSupport : voice.listening ? t.voiceStopButton : t.speakButton}
             className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl sm:size-9 transition disabled:opacity-40", voice.listening ? "bg-rose-500 text-white shadow-[0_0_0_4px_rgba(244,63,94,0.15)]" : "text-zinc-500 hover:bg-zinc-200/70 hover:text-zinc-900")}
-          >{voice.listening ? <VoiceWave className="h-3.5" /> : <Mic className="size-4" />}</button>
+          >{voice.listening ? <VoiceWave className="h-3.5" /> : <Mic className="size-4" />}</button> : null}
           {/* Nothing typed while an answer is coming or being spoken: the button stops it instead. */}
           {(busy || voicePlaying) && !question.trim() && !attachment ? <button
             type="button"
@@ -392,7 +395,7 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
           ><ArrowUp className="size-4" /></button>}
         </div>
         {voice.listening ? <p className="mt-2 flex items-center gap-1.5 px-1 text-[11px] text-rose-600"><VoiceWave className="h-3" /> {t.voiceChatOn}</p> : null}
-        {!voice.supported ? <p className="mt-2 px-1 text-[11px] text-zinc-500">{t.noVoiceSupport}</p> : null}
+        {voiceAllowed && !voice.supported ? <p className="mt-2 px-1 text-[11px] text-zinc-500">{t.noVoiceSupport}</p> : null}
       </div>
     </section> : null}
   </>;

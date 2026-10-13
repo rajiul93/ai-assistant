@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { checkAi } from "@/server/ai-access";
+import { isAdminUser } from "@/server/roles";
 import { logUsage } from "@/server/assistant/ai";
 import { audioFromEvents } from "@/server/speech-stream";
 
@@ -22,8 +23,8 @@ const instructions = {
  * fetching a clip ahead of time. The browser's own voice is the fallback when this fails.
  */
 async function speech(user: { id: string; email: string }, input: unknown) {
-  // Without AI access (or with the token limit used up) the page falls back to the device's own voice.
-  if (!(await checkAi(user)).allowed) return new Response(null, { status: 403 });
+  // Voice is admin-only (src/lib/voice-access.ts); admins always pass checkAi, which stays as the plan check.
+  if (!(await isAdminUser(user)) || !(await checkAi(user)).allowed) return new Response(null, { status: 403 });
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return new Response(null, { status: 503 });
   const parsed = requestSchema.safeParse(input);
