@@ -78,14 +78,19 @@ alone. Record decisions and their reasons; don't restate code.
 - Roles: `USER`, `ADMIN`, and one **super admin** fixed by email in `src/server/roles.ts`
   (`roleOf`, `isAdminUser`, read fresh from the DB). Admins: no AI limits, admin pages, and they
   edit shared content (vocabulary).
-- AI access is gated by plans/entitlements (`src/server/ai-access.ts` `checkAi`).
+- AI access is gated by plans/entitlements (`src/server/ai-access.ts` `checkAi(user, kind, ref)`):
+  pass the kind (`message` / `scan` / `suggestion`) for anything the user starts, so it counts toward
+  the tier's per-day limit; automatic follow-ups (the spell check after a scan) pass none.
 - **No AI without a plan**: every OpenAI call goes through `checkAi` first (no plan, expired, out
   of tokens or paused → refused; admins always pass). Audited 2026-10-13: 14 entry points, all gated.
 - **Voice is admin-only** (mic, speech-to-text, read-aloud, voice chat, voice forms — including the
   browser's own recognizer and voice): `src/lib/voice-access.ts` is switched on by `AppShell` for
   admins only, and `/api/speech`, `/api/transcribe`, `/api/transcribe/live` check `isAdminUser`.
-- Solutions/explanations and sending a bank set to Preliminary need a running plan (admins always):
-  `hasPremium` / `gateNotes` in `src/server/premium.ts` — gate on the server, never only in the UI.
+- Solutions/explanations need a running plan (admins always): `hasPremium` / `gateNotes` in
+  `src/server/premium.ts`. Question-bank content (and copies of bank sets) is per exam:
+  `canOpenExam` (`src/server/pricing.ts`) / `premiumForSet`. Gate on the server, never only in the UI.
+- Prices are never stored per plan or taken from the client: `src/lib/pricing.ts` computes them
+  from `PricingSettings` + `AiTier` + `ExamTrack` + `PlanDuration`; only the super admin edits those.
 
 ## Folder map
 
@@ -111,6 +116,8 @@ alone. Record decisions and their reasons; don't restate code.
   `topicId` (a `Topic`; `QuestionSet.topicName` is the set's own name, not a topic). Boards filter by
   subject → topic (a topic includes its sub-topics; URL `?subject=&topic=`, logic in
   `src/lib/subject-filter.ts`); items with no (existing) subject show under **Other**.
+- `StudyVideo` (per user): a saved YouTube video id + title/channel from oEmbed, optional subject;
+  unique per user+video.
 - `Confusion` (CONFUSION → CLEAR; old entries may have a free-text `topic`, kept for display). Jobs: `JobApplication`. Billing: `PlanPackage`, `Payment`,
   `Entitlement`, `AiUsage`.
 - Question Bank (shared): `BankSet` (exam + section + session) → `BankQuestion` (4–5 options,
@@ -137,6 +144,8 @@ alone. Record decisions and their reasons; don't restate code.
 | Vocabulary (verbs, persons, singular/plural, prefix/suffix; admin-only adding; per-user learned ticks) | done | data via `pnpm db:seed-vocabulary` |
 | Typing lab (Bijoy engine) | done | |
 | **Collaboration: friends, sharing, notifications, chat (socket.io)** | **built; awaiting integration run + two-browser check** | plan + decisions: [docs/collaboration-plan.md](docs/collaboration-plan.md) |
+| **Subscription pricing** (System + AI tier + exam, "all exams" discount, durations, per-day AI limits, super-admin pricing panel, SSLCommerz beside bKash/Nagad) | **phase 1 built; migration applied 2026-10-14; Plans page/admin panel not yet tried signed in; SSLCommerz untested** | [docs/subscription-plan.md](docs/subscription-plan.md) — phases 2 (security) and 3 (mobile API) not started |
+| **Video library** (`/videos`: paste a YouTube link, watch it in the app; free 5, a running plan no limit) | **built; migration `20261020000000_study_videos` not yet applied** | Player: youtube-nocookie embed, `rel=0`, our own cover while paused/ended (hides YouTube's "More videos" and end screen); title strip blocked so taps don't leave the app. Limit checked in `addVideo`; videos stay playable after a plan ends |
 | Set audio (TTS MP3 per set on Cloudflare R2) | planned, not started | owner deferred it |
 | **Question Bank** (BCS / প্রাইমারি / ১১–২০ গ্রেড; sets per exam session; "Preliminary-তে পাঠাও" copies a set; super admin uploads .xlsx) | **built; migration applied 2026-10-13; not yet tried with a real sheet** | [docs/question-bank-plan.md](docs/question-bank-plan.md) — sheet assumptions in §2 |
 | **Profile page (name + phone)** | **built; migration applied to Neon 2026-10-13** | [docs/profile-and-group-chat-plan.md](docs/profile-and-group-chat-plan.md) §1. Sign-in no longer overwrites a name the user saved (`profileUpdatedAt`) |
@@ -146,7 +155,7 @@ alone. Record decisions and their reasons; don't restate code.
 
 - [x] M0 — this file + plan answers recorded
 - [x] M1 — schema + migration `20261014000000_collaboration` (applied to Neon 2026-10-14)
-- [x] M2 — friends (`src/server/actions/friends.ts`, Messages → Friends/Requests)
+- [x] M2 — friends (`src/server/actions/friends.ts`; on Messages: “Friend” dialog to add, the chat’s ⋮ menu to remove, Requests chip; friends show in the chat list, no separate friend list)
 - [x] M3 — notifications + live updates (`/api/live`, bell, dashboard requests card, `LiveProvider`)
 - [x] M4 — sharing: note, task, Preliminary set, Short Question set (`shares.ts`, `share-copy.ts`, `ShareButton`)
 - [x] M5 — messages + socket.io server (`messages.ts`, `chat-panel.tsx`, `realtime/`)
