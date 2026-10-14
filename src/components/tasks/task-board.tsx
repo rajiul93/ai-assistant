@@ -13,9 +13,6 @@ import { dueRevisionCount } from "@/lib/revisions";
 import { htmlToPlainText, isRichHtml, toEditorHtml } from "@/lib/note-html";
 import { MathText, RichHtml } from "@/components/math-text";
 import "quill/dist/quill.snow.css";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { NativeSelect } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -30,20 +27,20 @@ import { TaskForm } from "@/components/tasks/task-form";
 import { deleteTask, reorderTasks, updateTaskStatus } from "@/server/actions/tasks";
 import { SortableList } from "@/components/sortable-list";
 import { listMyTasks } from "@/server/actions/list-tasks";
-import { APP_TIMEZONE, dayjs, formatDateTime, startOfDay } from "@/lib/dayjs";
+import { APP_TIMEZONE, dayjs, startOfDay } from "@/lib/dayjs";
 import { cn } from "@/lib/utils";
 import { useTimerStore } from "@/store/timer";
 import { useTimerStartStore } from "@/store/timer-start";
 import type { TaskWithRelations } from "@/server/queries";
 
 const filters = [
-  { id: "ALL", label: "All" },
-  { id: "TODAY", label: "Today" },
-  { id: "OVERDUE", label: "Overdue" },
-  { id: "NOT_STARTED", label: "Not Started" },
-  { id: "IN_PROGRESS", label: "In Progress" },
-  { id: "FINISHED", label: "Finished" },
-  { id: "REVISION", label: "Revision" },
+  { id: "ALL", label: "সব" },
+  { id: "TODAY", label: "আজ" },
+  { id: "OVERDUE", label: "দেরি" },
+  { id: "NOT_STARTED", label: "শুরু হয়নি" },
+  { id: "IN_PROGRESS", label: "চলছে" },
+  { id: "FINISHED", label: "শেষ" },
+  { id: "REVISION", label: "রিভিশন" },
 ] as const;
 
 type FilterId = (typeof filters)[number]["id"];
@@ -61,29 +58,32 @@ function matchesFilter(task: TaskWithRelations, filter: FilterId, todayStart: nu
   return task.status === filter;
 }
 
-/** "Today, 5:00 PM", "Tomorrow", "Overdue · 3 Oct" — short enough for a phone's meta line. */
+/** "আজ 5:00 PM", "কাল", "দেরি · 3 Oct" — short enough for a phone's one meta line. */
 function dueLabel(dueDate: Date, todayStart: number, now: number, finished: boolean) {
   const due = dayjs(dueDate).tz(APP_TIMEZONE);
   const at = due.valueOf();
-  const time = due.format("h:mm A") === "12:00 AM" ? "" : `, ${due.format("h:mm A")}`;
-  if (!finished && at < now) return { text: `Overdue · ${due.format("D MMM")}${time}`, tone: "text-red-600 font-medium" };
-  if (at >= todayStart && at < todayStart + DAY_MS) return { text: `Today${time}`, tone: "text-amber-700 font-medium" };
-  if (at >= todayStart + DAY_MS && at < todayStart + 2 * DAY_MS) return { text: `Tomorrow${time}`, tone: "text-zinc-600" };
-  return { text: formatDateTime(dueDate), tone: "text-zinc-500" };
+  const time = due.format("h:mm A") === "12:00 AM" ? "" : ` ${due.format("h:mm A")}`;
+  if (!finished && at < now) return { text: `দেরি · ${due.format("D MMM")}`, tone: "text-red-600 font-semibold" };
+  if (at >= todayStart && at < todayStart + DAY_MS) return { text: `আজ${time}`, tone: "text-amber-700 font-medium" };
+  if (at >= todayStart + DAY_MS && at < todayStart + 2 * DAY_MS) return { text: `কাল${time}`, tone: "text-slate-600" };
+  return { text: due.format("D MMM"), tone: "text-slate-500" };
 }
 
 const statusOptions: Array<{ value: TaskStatus; label: string }> = [
-  { value: "NOT_STARTED", label: "Not started" },
-  { value: "IN_PROGRESS", label: "In progress" },
-  { value: "FINISHED", label: "Finished" },
-  { value: "REVISION", label: "Revision" },
+  { value: "NOT_STARTED", label: "শুরু হয়নি" },
+  { value: "IN_PROGRESS", label: "চলছে" },
+  { value: "FINISHED", label: "শেষ" },
+  { value: "REVISION", label: "রিভিশন" },
 ];
-const statusDot: Record<TaskStatus, string> = { NOT_STARTED: "bg-zinc-300", IN_PROGRESS: "bg-amber-400", FINISHED: "bg-emerald-500", REVISION: "bg-rose-400" };
-const priorityStyle = { HIGH: "bg-red-50 text-red-700 ring-red-100", MEDIUM: "bg-amber-50 text-amber-800 ring-amber-100", LOW: "bg-zinc-50 text-zinc-600 ring-zinc-200" } as const;
+const statusDot: Record<TaskStatus, string> = { NOT_STARTED: "bg-slate-300", IN_PROGRESS: "bg-amber-400", FINISHED: "bg-emerald-500", REVISION: "bg-rose-400" };
+/** Priority is a coloured bar on the card's left edge, not another chip. */
+const priorityBar = { HIGH: "before:bg-red-500", MEDIUM: "before:bg-amber-400", LOW: "before:bg-slate-200" } as const;
+const priorityLabel = { HIGH: "জরুরি", MEDIUM: "মাঝারি", LOW: "কম" } as const;
 
 /**
- * One task, compact enough for phones: tap the circle to finish it, ▶ to study it, and everything
- * else (status, edit, delete) lives in the ⋯ menu.
+ * One task, made for phones: the circle finishes it, ▶ studies it, ⋯ holds status, edit, share and
+ * delete. One meta line (status when it isn't plain, due, minutes, subject); priority is the
+ * coloured edge.
  */
 function TaskCard({ task, todayStart, now, timerRunning, onStart, onStatus, onEdit, onDelete, handle }: {
   task: TaskWithRelations;
@@ -103,62 +103,62 @@ function TaskCard({ task, todayStart, now, timerRunning, onStart, onStatus, onEd
   const finished = task.status === "FINISHED";
   const description = task.description ? (isRichHtml(task.description) ? htmlToPlainText(task.description) : task.description).trim() : "";
   const due = task.dueDate ? dueLabel(task.dueDate, todayStart, now, finished) : null;
-  const status = statusOptions.find((option) => option.value === task.status)!;
-  return <article className={cn("rounded-2xl border bg-white p-3 transition sm:p-4", handle && "pl-1 sm:pl-2", finished ? "border-zinc-100" : "border-zinc-200")}>
-    <div className={cn("flex items-start", handle ? "gap-1.5 sm:gap-2" : "gap-3")}>
-      {handle ? <div className="-my-1">{handle}</div> : null}
+  return <article className={cn(
+    "relative rounded-2xl bg-white py-2.5 pr-1.5 shadow-[0_4px_18px_-12px_rgba(15,23,42,0.25)] before:absolute before:inset-y-3 before:left-0 before:w-1 before:rounded-r-full",
+    handle ? "pl-0.5" : "pl-3",
+    finished ? "before:bg-emerald-300" : priorityBar[task.priority],
+  )}>
+    <div className="flex items-start gap-1.5">
+      {handle ? <div className="-my-0.5">{handle}</div> : null}
       <button
         type="button"
         onClick={() => onStatus(finished ? "NOT_STARTED" : "FINISHED")}
-        aria-label={finished ? `Mark “${task.title}” not done` : `Mark “${task.title}” done`}
-        title={finished ? "Mark not done" : "Mark done"}
-        className={cn("mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border-2 transition active:scale-90", finished ? "border-emerald-500 bg-emerald-500 text-white" : "border-zinc-300 text-transparent hover:border-emerald-500 hover:text-emerald-500")}
-      ><Check className="size-4" strokeWidth={3} /></button>
+        aria-label={finished ? `“${task.title}” শেষ না` : `“${task.title}” শেষ`}
+        title={finished ? "শেষ না" : "শেষ হয়েছে"}
+        className={cn("mt-px flex size-6 shrink-0 items-center justify-center rounded-full border-2 transition active:scale-90", finished ? "border-emerald-500 bg-emerald-500 text-white" : task.status === "IN_PROGRESS" ? "border-amber-400 text-transparent hover:text-amber-500" : "border-slate-300 text-transparent hover:border-emerald-500 hover:text-emerald-500")}
+      ><Check className="size-3.5" strokeWidth={3} /></button>
 
-      <div className="min-w-0 flex-1">
-        <h2 className={cn("line-clamp-2 text-[15px] font-semibold leading-snug", finished && "text-zinc-400 line-through")}><MathText text={task.title} /></h2>
-        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-zinc-500">
-          <span className="flex items-center gap-1"><span className={cn("size-2 rounded-full", statusDot[task.status])} aria-hidden />{status.label}</span>
-          <span className={cn("rounded-full px-1.5 py-px text-[11px] font-medium ring-1", priorityStyle[task.priority])}>{task.priority.charAt(0) + task.priority.slice(1).toLowerCase()}</span>
-          <span className="flex items-center gap-1"><Clock className="size-3" aria-hidden />{task.estimatedMinutes}m</span>
-          {due ? <span className={due.tone}>{due.text}</span> : null}
+      <div className="min-w-0 flex-1 pl-1">
+        <h2 className={cn("line-clamp-2 text-[15px] font-semibold leading-snug text-slate-900", finished && "text-slate-400 line-through")}><MathText text={task.title} /></h2>
+        <p className="mt-0.5 flex items-center gap-x-2 overflow-hidden whitespace-nowrap text-[12px] text-slate-500">
+          {task.status === "IN_PROGRESS" || task.status === "REVISION" ? <span className={cn("flex shrink-0 items-center gap-1 font-medium", task.status === "IN_PROGRESS" ? "text-amber-700" : "text-rose-600")}><span className={cn("size-1.5 rounded-full", statusDot[task.status])} aria-hidden />{statusOptions.find((option) => option.value === task.status)!.label}</span> : null}
+          {due ? <span className={cn("shrink-0", due.tone)}>{due.text}</span> : null}
+          <span className="flex shrink-0 items-center gap-0.5"><Clock className="size-3" aria-hidden />{task.estimatedMinutes}m</span>
+          {task.subject ? <span className="min-w-0 truncate text-blue-700">{task.subject.name}{task.topic ? ` › ${task.topic.name}` : ""}</span> : null}
         </p>
-        {task.subject || task.topic ? <p className="mt-1 truncate text-xs text-zinc-500">{task.subject?.name ?? "No subject"}{task.topic ? ` › ${task.topic.name}` : ""}</p> : null}
-        {description ? detailsOpen
-          ? <RichHtml html={toEditorHtml(task.description)} className="mt-1.5 rounded-lg bg-zinc-50" />
-          : <p className="mt-1.5 line-clamp-2 text-sm text-zinc-600"><MathText text={description} /></p> : null}
-        {task.notes.length ? <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {task.notes.map(({ note }) => <Link key={note.id} href={`/notes?id=${encodeURIComponent(note.id)}`} className="flex max-w-full items-center gap-1 rounded-full bg-zinc-100 px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-200">
-            <FileText className="size-3.5 shrink-0 text-zinc-500" /><span className="truncate"><MathText text={note.title || "Untitled note"} /></span>
+        {description && detailsOpen ? <RichHtml html={toEditorHtml(task.description)} className="mt-1.5 rounded-lg bg-slate-50" /> : null}
+        {task.notes.length || description ? <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          {task.notes.map(({ note }) => <Link key={note.id} href={`/notes?id=${encodeURIComponent(note.id)}`} className="flex max-w-full items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-[11.5px] text-orange-700 hover:bg-orange-100">
+            <FileText className="size-3 shrink-0" /><span className="truncate"><MathText text={note.title || "শিরোনাম নেই"} /></span>
           </Link>)}
+          {description ? <button type="button" onClick={() => setDetailsOpen((open) => !open)} aria-expanded={detailsOpen} className="rounded-full px-1 text-[11.5px] font-medium text-slate-500 hover:text-slate-900">{detailsOpen ? "কম ▴" : "বিস্তারিত ▾"}</button> : null}
         </div> : null}
-        {description ? <button type="button" onClick={() => setDetailsOpen((open) => !open)} aria-expanded={detailsOpen} className="mt-1 text-xs font-medium text-zinc-500 hover:text-zinc-900">{detailsOpen ? "কম দেখাও ▴" : "বিস্তারিত ▾"}</button> : null}
       </div>
 
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex shrink-0 items-center">
         {!finished ? <button
           type="button"
           onClick={onStart}
           disabled={timerRunning}
-          aria-label={`Start studying “${task.title}”`}
-          title="Start a study session"
-          className="flex h-9 items-center gap-1 rounded-lg bg-zinc-950 px-2.5 text-xs font-semibold text-white transition hover:bg-zinc-800 active:scale-95 disabled:opacity-40"
-        ><Play className="size-3.5" /><span className="hidden sm:inline">Start</span></button> : null}
+          aria-label={`“${task.title}” পড়া শুরু`}
+          title="পড়া শুরু"
+          className="flex size-9 items-center justify-center rounded-full bg-blue-600 text-white shadow-[0_6px_14px_-8px_rgba(37,99,235,0.9)] transition hover:bg-blue-700 active:scale-95 disabled:opacity-40"
+        ><Play className="size-4 translate-x-px fill-current" /></button> : null}
         <div className="relative">
-          <button type="button" onClick={() => setMenuOpen((open) => !open)} aria-label={`More for “${task.title}”`} aria-expanded={menuOpen} className="flex size-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900">
+          <button type="button" onClick={() => setMenuOpen((open) => !open)} aria-label={`“${task.title}”-এর আরও`} aria-expanded={menuOpen} className="flex h-9 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-900">
             <MoreHorizontal className="size-4" />
           </button>
           {menuOpen ? <>
             <button type="button" aria-hidden tabIndex={-1} className="fixed inset-0 z-10 cursor-default" onClick={() => setMenuOpen(false)} />
-            <div role="menu" className="absolute right-0 top-10 z-20 w-48 overflow-hidden rounded-xl border border-zinc-200 bg-white py-1 shadow-lg">
-              <p className="px-3 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wide text-zinc-400">Status</p>
-              {statusOptions.map((option) => <button key={option.value} type="button" role="menuitemradio" aria-checked={task.status === option.value} onClick={() => { setMenuOpen(false); if (option.value !== task.status) onStatus(option.value); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-zinc-50">
-                <span className={cn("size-2 rounded-full", statusDot[option.value])} aria-hidden />{option.label}{task.status === option.value ? <Check className="ml-auto size-4 text-zinc-500" /> : null}
+            <div role="menu" className="absolute right-0 top-10 z-20 w-48 overflow-hidden rounded-2xl bg-white py-1 shadow-lg ring-1 ring-slate-200">
+              <p className="px-3.5 pb-1 pt-1.5 text-[11px] font-medium text-slate-400">অবস্থা · priority: {priorityLabel[task.priority]}</p>
+              {statusOptions.map((option) => <button key={option.value} type="button" role="menuitemradio" aria-checked={task.status === option.value} onClick={() => { setMenuOpen(false); if (option.value !== task.status) onStatus(option.value); }} className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-sm hover:bg-slate-50">
+                <span className={cn("size-2 rounded-full", statusDot[option.value])} aria-hidden />{option.label}{task.status === option.value ? <Check className="ml-auto size-4 text-blue-600" /> : null}
               </button>)}
-              <div className="my-1 border-t border-zinc-100" />
-              <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onEdit(); }} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-zinc-50"><Pencil className="size-4" /> Edit</button>
-              <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setShareOpen(true); }} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-zinc-50"><Share2 className="size-4" /> Share</button>
-              <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onDelete(); }} className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-red-600 hover:bg-red-50"><Trash2 className="size-4" /> Delete</button>
+              <div className="my-1 border-t border-slate-100" />
+              <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onEdit(); }} className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-sm hover:bg-slate-50"><Pencil className="size-4" /> বদলান</button>
+              <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setShareOpen(true); }} className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-sm hover:bg-slate-50"><Share2 className="size-4" /> Share</button>
+              <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onDelete(); }} className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left text-sm text-red-600 hover:bg-red-50"><Trash2 className="size-4" /> মুছুন</button>
             </div>
           </> : null}
           {shareOpen ? <ShareDialog type="TASK" itemId={task.id} title={task.title} onClose={() => setShareOpen(false)} /> : null}
@@ -253,7 +253,7 @@ export function TaskBoard({
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: TaskStatus }) => updateTaskStatus(id, status),
     onSuccess: async () => {
-      toast.success("Status updated");
+      toast.success("অবস্থা বদলানো হলো");
       await queryClient.invalidateQueries({ queryKey: ["tasks"] });
       router.refresh();
     },
@@ -265,7 +265,7 @@ export function TaskBoard({
   /** Study a task: pick/confirm its subject and a goal, then the session bar takes over. */
   function startStudying(task?: TaskWithRelations) {
     if (useTimerStore.getState().running) {
-      toast.info("A study session is already running — save it from the bar at the bottom first.");
+      toast.info("একটা পড়ার session চলছে — আগে নিচের bar থেকে সেটা সেভ করুন।");
       return;
     }
     useTimerStartStore.getState().open({
@@ -282,7 +282,7 @@ export function TaskBoard({
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteTask(id),
     onSuccess: async () => {
-      toast.success("Task deleted");
+      toast.success("Task মুছে ফেলা হলো");
       setDeleting(null);
       await queryClient.invalidateQueries({ queryKey: ["tasks"] });
       router.refresh();
@@ -290,122 +290,98 @@ export function TaskBoard({
     onError: (error: Error) => toast.error(error.message),
   });
 
-  return (
-    <div className="space-y-3 sm:space-y-5">
-      {/* Phones: the tab row is the heading, so the title and blurb only show from sm up. */}
-      <div className="sr-only sm:not-sr-only">
-        <h1 className="text-2xl font-semibold tracking-tight">Tasks</h1>
-        <p className="mt-1 text-sm text-zinc-500">{view === "tasks" ? "Create, filter, and finish your preparation work." : "Finished tasks to revise — tap + each time you revise one."}</p>
-      </div>
+  // Today's tasks done, for the header's progress line.
+  const todayTasks = (tasksQuery.data ?? []).filter((task) => matchesFilter(task, "TODAY", todayStart, now));
+  const todayDone = todayTasks.filter((task) => task.status === "FINISHED").length;
 
-      <div className="flex items-center gap-2">
-        <div role="tablist" aria-label="Tasks or revisions" className="grid min-w-0 flex-1 grid-cols-2 gap-1 rounded-xl bg-zinc-100 p-1 sm:w-80 sm:flex-none">
-          {([
-            { id: "tasks", label: "Tasks", icon: ListTodo, count: openTaskCount },
-            { id: "revisions", label: "Revisions", icon: RefreshCcw, count: dueRevisions },
-          ] as const).map((tab) => {
-            const Icon = tab.icon;
-            const active = view === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setView(tab.id)}
-                className={cn("flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-lg text-sm font-medium transition", active ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-500 hover:text-zinc-800")}
-              >
+  return (
+    <div className="space-y-3">
+      {/* One slim header in the home page's blue: tabs, start and add, search and sort, today's progress. */}
+      <section className="rounded-3xl bg-linear-to-br from-[#3f6ef3] via-[#5a87f8] to-[#8fa6fb] p-3 text-white shadow-[0_14px_32px_-18px_rgba(37,99,235,0.6)]">
+        <div className="flex items-center gap-2">
+          <div role="tablist" aria-label="Tasks or revisions" className="grid min-w-0 flex-1 grid-cols-2 gap-1 rounded-full bg-white/15 p-1 ring-1 ring-white/20 sm:max-w-80">
+            {([
+              { id: "tasks", label: "Tasks", icon: ListTodo, count: openTaskCount },
+              { id: "revisions", label: "রিভিশন", icon: RefreshCcw, count: dueRevisions },
+            ] as const).map((tab) => {
+              const Icon = tab.icon;
+              const active = view === tab.id;
+              return <button key={tab.id} type="button" role="tab" aria-selected={active} onClick={() => setView(tab.id)} className={cn("flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-full text-[13.5px] font-semibold transition", active ? "bg-white text-blue-700 shadow-sm" : "text-white/90")}>
                 <Icon className="hidden size-4 shrink-0 min-[380px]:block" />
                 <span className="truncate">{tab.label}</span>
-                {tab.count ? (
-                  <span className={cn("min-w-5 rounded-full px-1.5 text-[11px] font-semibold tabular-nums", tab.id === "revisions" ? "bg-amber-100 text-amber-800" : "bg-zinc-200 text-zinc-700")}>{tab.count}</span>
-                ) : null}
-              </button>
-            );
-          })}
+                {tab.count ? <span className={cn("min-w-5 rounded-full px-1.5 text-[11px] font-bold tabular-nums", active ? (tab.id === "revisions" ? "bg-amber-100 text-amber-800" : "bg-blue-100 text-blue-700") : "bg-white/25 text-white")}>{tab.count}</span> : null}
+              </button>;
+            })}
+          </div>
+          {view === "tasks" ? <>
+            <button type="button" onClick={() => startStudying()} disabled={timerRunning} aria-label="পড়ার session শুরু" title="পড়ার session শুরু" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/20 ring-1 ring-white/30 transition hover:bg-white/30 active:scale-95 disabled:opacity-50"><Play className="size-4 translate-x-px fill-current" /></button>
+            <button type="button" onClick={() => setCreateOpen(true)} className="flex h-10 shrink-0 items-center gap-1 rounded-full bg-white px-3.5 text-[13.5px] font-semibold text-blue-700 shadow-sm transition active:scale-95"><Plus className="size-4" /> নতুন</button>
+          </> : null}
         </div>
-        {view === "tasks" ? <div className="flex shrink-0 gap-2 sm:ml-auto">
-          <Button variant="secondary" onClick={() => startStudying()} disabled={timerRunning} aria-label="Start a study session" title="Start a study session" className="h-11 w-11 px-0 sm:w-auto sm:px-4">
-            <Play className="size-4" />
-            <span className="hidden sm:inline">Start session</span>
-          </Button>
-          <Button onClick={() => setCreateOpen(true)} className="h-11 px-3.5 sm:px-4">
-            <Plus className="size-4" />
-            Add<span className="hidden sm:inline"> Task</span>
-          </Button>
-        </div> : null}
-      </div>
+
+        {view === "tasks" ? <>
+          <div className="mt-2.5 flex gap-2">
+            <label className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" aria-hidden />
+              <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Task, subject বা topic খুঁজুন" aria-label="Task খুঁজুন" className="h-10 w-full rounded-full bg-white pl-10 pr-4 text-[15px] text-slate-900 outline-none placeholder:text-slate-400 focus:ring-4 focus:ring-white/30" />
+            </label>
+            {/* The ⇅ opens the phone's own picker (an invisible select on top). */}
+            <label className="relative flex size-10 shrink-0 items-center justify-center rounded-full bg-white/20 ring-1 ring-white/30" title="সাজান">
+              <span className="sr-only">সাজান</span>
+              <ArrowUpDown className="pointer-events-none size-4" aria-hidden />
+              <select value={sort} onChange={(event) => setSort(event.target.value as typeof sort)} className="absolute inset-0 cursor-pointer opacity-0" aria-label="সাজান">
+                <option value="manual">আমার সাজানো</option>
+                <option value="dueDate">তারিখ অনুযায়ী</option>
+                <option value="priority">জরুরি আগে</option>
+                <option value="createdAt">নতুন আগে</option>
+              </select>
+            </label>
+          </div>
+          {todayTasks.length ? <div className="mt-2.5 flex items-center gap-2.5 px-1">
+            <span className="shrink-0 text-[12.5px] font-semibold">আজ {todayDone}/{todayTasks.length} শেষ</span>
+            <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/25"><span className="block h-full rounded-full bg-white" style={{ width: `${Math.round((todayDone / todayTasks.length) * 100)}%` }} /></span>
+          </div> : null}
+        </> : null}
+      </section>
 
       {view === "tasks" ? <>
-      <div className="space-y-3">
-        <div className="flex gap-2">
-          <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" aria-hidden />
-            <Input
-              placeholder="Search tasks, subjects, topics"
-              aria-label="Search tasks"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              className="h-11 pl-9"
-            />
-          </div>
-          {/* Phones: just a ⇅ button (the invisible select on top opens the native picker); sm+: a labelled select. */}
-          <label className="relative flex size-11 shrink-0 items-center justify-center rounded-md border border-zinc-200 bg-white sm:size-auto sm:border-0 sm:bg-transparent" title="Sort">
-            <span className="sr-only">Sort</span>
-            <ArrowUpDown className="pointer-events-none size-4 text-zinc-600 sm:absolute sm:left-3 sm:text-zinc-500" aria-hidden />
-            <NativeSelect
-              className="absolute inset-0 h-11 w-11 cursor-pointer opacity-0 sm:static sm:w-auto sm:pl-9 sm:pr-7 sm:opacity-100"
-              value={sort}
-              onChange={(event) => setSort(event.target.value as typeof sort)}
-            >
-              <option value="manual">My order</option>
-              <option value="dueDate">Due date</option>
-              <option value="priority">Priority</option>
-              <option value="createdAt">Newest</option>
-            </NativeSelect>
-          </label>
+        {/* One scrollable chip row; counts tell which are worth a tap. */}
+        <div role="tablist" aria-label="Task ছাঁকুন" className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
+          {filters.map((item) => <button
+            key={item.id}
+            type="button"
+            role="tab"
+            aria-selected={filter === item.id}
+            onClick={() => setFilter(item.id)}
+            className={cn("flex h-8 shrink-0 items-center gap-1 rounded-full px-3 text-[13px] font-semibold transition", filter === item.id ? "bg-blue-600 text-white" : "bg-white text-slate-600 shadow-[0_2px_8px_-4px_rgba(15,23,42,0.2)]")}
+          >
+            {item.label}
+            <span className={cn("text-[11.5px] tabular-nums", filter === item.id ? "text-white/80" : item.id === "OVERDUE" && filterCounts.OVERDUE ? "font-bold text-red-600" : "text-slate-400")}>{filterCounts[item.id]}</span>
+          </button>)}
         </div>
-        {/* One scrollable row on phones instead of three wrapped rows of buttons. */}
-        <div role="tablist" aria-label="Filter tasks" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden">
-          {filters.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              aria-selected={filter === item.id}
-              onClick={() => setFilter(item.id)}
-              className={cn(
-                "flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition",
-                filter === item.id ? "border-zinc-950 bg-zinc-950 text-white" : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300",
-              )}
-            >
-              {item.label}
-              <span className={cn("text-xs tabular-nums", filter === item.id ? "text-white/70" : item.id === "OVERDUE" && filterCounts.OVERDUE ? "font-semibold text-red-600" : "text-zinc-400")}>{filterCounts[item.id]}</span>
-            </button>
-          ))}
-        </div>
-      </div>
 
-      {visible.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-zinc-200 bg-white px-6 py-16 text-center">
-          <p className="font-medium">No tasks found</p>
-          <p className="mt-1 text-sm text-zinc-500">Create a task to start tracking today&apos;s work.</p>
-        </div>
-      ) : (
-        <SortableList items={visible} enabled={sort === "manual"} className="space-y-2.5" onReorder={saveOrder}>
-          {(task, handle) => <TaskCard
-            handle={handle}
-            task={task}
-            todayStart={todayStart}
-            now={now}
-            timerRunning={timerRunning}
-            onStart={() => startStudying(task)}
-            onStatus={(status) => statusMutation.mutate({ id: task.id, status })}
-            onEdit={() => setEditing(task)}
-            onDelete={() => setDeleting(task)}
-          />}
-        </SortableList>
-      )}
+        {visible.length === 0 ? (
+          <div className="rounded-3xl bg-white px-6 py-10 text-center shadow-[0_6px_24px_-12px_rgba(15,23,42,0.15)]">
+            <span className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-blue-50"><ListTodo className="size-6 text-blue-600" /></span>
+            <p className="font-semibold text-slate-800">{(tasksQuery.data ?? []).length ? "এখানে কোনো task নেই" : "এখনো কোনো task নেই"}</p>
+            <p className="mt-1 text-sm text-slate-500">{(tasksQuery.data ?? []).length ? "অন্য filter বেছে দেখুন।" : "আজ কী পড়বেন, একটা task লিখে শুরু করুন।"}</p>
+            {(tasksQuery.data ?? []).length ? null : <button type="button" onClick={() => setCreateOpen(true)} className="mt-3 inline-flex h-10 items-center gap-1 rounded-full bg-blue-600 px-4 text-sm font-semibold text-white"><Plus className="size-4" /> নতুন task</button>}
+          </div>
+        ) : (
+          <SortableList items={visible} enabled={sort === "manual"} className="space-y-2" onReorder={saveOrder}>
+            {(task, handle) => <TaskCard
+              handle={handle}
+              task={task}
+              todayStart={todayStart}
+              now={now}
+              timerRunning={timerRunning}
+              onStart={() => startStudying(task)}
+              onStatus={(status) => statusMutation.mutate({ id: task.id, status })}
+              onEdit={() => setEditing(task)}
+              onDelete={() => setDeleting(task)}
+            />}
+          </SortableList>
+        )}
       </> : (
         <RevisionManager tasks={tasksQuery.data} todayMs={now} />
       )}
@@ -413,7 +389,7 @@ export function TaskBoard({
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add task</DialogTitle>
+            <DialogTitle>নতুন task</DialogTitle>
           </DialogHeader>
           <TaskForm
             subjects={subjects}
@@ -426,7 +402,7 @@ export function TaskBoard({
       <Dialog open={Boolean(editing)} onOpenChange={(open) => !open && setEditing(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit task</DialogTitle>
+            <DialogTitle>Task বদলান</DialogTitle>
           </DialogHeader>
           {editing ? (
             <TaskForm
@@ -441,14 +417,15 @@ export function TaskBoard({
 
       <AlertDialog open={Boolean(deleting)} onOpenChange={(open) => !open && setDeleting(null)}>
         <AlertDialogContent>
-          <AlertDialogTitle>Delete this task?</AlertDialogTitle>
-          <AlertDialogDescription>This cannot be undone.</AlertDialogDescription>
+          <AlertDialogTitle>Task মুছে ফেলবেন?</AlertDialogTitle>
+          <AlertDialogDescription>“{deleting?.title}” মুছে গেলে আর ফেরানো যাবে না।</AlertDialogDescription>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>রাখুন</AlertDialogCancel>
             <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
               onClick={() => deleting && deleteMutation.mutate(deleting.id)}
             >
-              Delete
+              মুছে ফেলুন
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
