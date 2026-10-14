@@ -56,7 +56,7 @@ export function ShareDialog({ type, itemId, title, onClose }: { type: ShareType;
       <div className="max-h-72 space-y-1.5 overflow-y-auto">
         {targets.isLoading ? [0, 1].map((index) => <div key={index} className="h-12 animate-pulse rounded-xl bg-zinc-100" />) : null}
         {targets.isError ? <p className="text-sm text-red-600">Friend list আনা গেল না। <button type="button" onClick={() => void targets.refetch()} className="underline">আবার চেষ্টা করো</button></p> : null}
-        {targets.data && !targets.data.length ? <p className="rounded-xl border border-dashed border-zinc-300 px-3 py-6 text-center text-sm text-zinc-500">এখনো কোনো friend নেই। <Link href="/messages?tab=friends" onClick={onClose} className="font-medium text-indigo-700 underline">Friend যোগ করো</Link></p> : null}
+        {targets.data && !targets.data.length ? <p className="rounded-xl border border-dashed border-zinc-300 px-3 py-6 text-center text-sm text-zinc-500">এখনো কোনো friend নেই। <Link href="/messages?add=friend" onClick={onClose} className="font-medium text-indigo-700 underline">Friend যোগ করো</Link></p> : null}
         {targets.data?.map((friend) => {
           const on = picked.includes(friend.id);
           return <button key={friend.id} type="button" disabled={friend.pending} onClick={() => toggle(friend.id)} aria-pressed={on} className={cn("flex w-full items-center gap-3 rounded-xl border p-2.5 text-left transition", on ? "border-indigo-400 bg-indigo-50" : "border-zinc-200 hover:border-zinc-300", friend.pending && "opacity-60")}>

@@ -1,13 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type UIEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Loader2, RotateCcw, Send, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { MESSAGE_MAX } from "@/lib/collaboration";
-import { formatDateTime } from "@/lib/dayjs";
-import { cn } from "@/lib/utils";
 import { groupDetails, markGroupRead, sendGroupMessage } from "@/server/actions/groups";
+import { Bubble, ChatAvatar, ChatFrame, ChatHeader, ChatTitle, Composer, ComposerNote, DayDivider, liveLabel, MessageScroller, ScrollerNotice, startsNewDay, SystemLine } from "./chat-ui";
 import { GroupInfoDialog } from "./group-dialogs";
 import { useLive, type LiveEvent } from "./live-provider";
 
@@ -171,53 +169,42 @@ export function GroupChatPanel({ me, groupId, initialName, onBack, onRead, onLef
   }
 
   const title = details.data?.name ?? initialName;
-  return <section className="flex h-[calc(100dvh-13rem)] min-h-96 flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white lg:h-[calc(100dvh-10rem)]">
-    <header className="flex items-center gap-3 border-b border-zinc-100 px-3 py-2.5">
-      <button type="button" onClick={onBack} aria-label="Chat list-এ ফিরে যাও" className="flex size-9 items-center justify-center rounded-lg text-zinc-600 hover:bg-zinc-100 lg:hidden"><ArrowLeft className="size-5" /></button>
-      <button type="button" disabled={gone} onClick={() => setInfoOpen(true)} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left hover:bg-zinc-50 disabled:hover:bg-transparent">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-800"><UsersRound className="size-4" /></span>
-        <span className="min-w-0">
-          <span className="block truncate font-semibold">{title}</span>
-          <span className="block truncate text-xs text-zinc-500">{details.data ? `${details.data.members.length} জন · সদস্য দেখতে চাপুন` : status === "live" ? "সরাসরি সংযুক্ত" : "গ্রুপ"}</span>
-        </span>
+  const onScroll = (event: UIEvent<HTMLDivElement>) => { const box = event.currentTarget; stickToBottom.current = box.scrollHeight - box.scrollTop - box.clientHeight < 80; };
+  return <ChatFrame>
+    <ChatHeader onBack={onBack}>
+      <button type="button" disabled={gone} onClick={() => setInfoOpen(true)} className="flex min-w-0 flex-1 items-center gap-1.5 rounded-full py-0.5 pr-2 hover:bg-white/10 disabled:hover:bg-transparent">
+        <ChatTitle avatar={<ChatAvatar name={title} group className="size-10 bg-white/20 text-white ring-2 ring-white/40" />} title={title} subtitle={details.data ? `${details.data.members.length} জন · সদস্য দেখতে চাপুন` : liveLabel(status)} />
       </button>
-    </header>
+    </ChatHeader>
 
-    <div ref={scroller} onScroll={(event) => { const box = event.currentTarget; stickToBottom.current = box.scrollHeight - box.scrollTop - box.clientHeight < 80; }} className="flex-1 space-y-2 overflow-y-auto px-3 py-4">
-      {state === "loading" ? <div className="flex justify-center py-10 text-zinc-400"><Loader2 className="size-6 animate-spin" /></div> : null}
-      {state === "error" ? <p className="py-10 text-center text-sm text-red-600">গ্রুপ খোলা গেল না। <button type="button" onClick={reload} className="underline">আবার চেষ্টা করো</button></p> : null}
-      {state === "ready" && hasOlder ? <div className="flex justify-center"><button type="button" disabled={loadingOlder} onClick={() => void loadOlder()} className="rounded-full px-3 py-1 text-xs font-medium text-zinc-600 ring-1 ring-zinc-200 hover:bg-zinc-50 disabled:opacity-50">{loadingOlder ? "আনা হচ্ছে…" : "আগের message দেখো"}</button></div> : null}
+    <MessageScroller scrollRef={scroller} onScroll={onScroll}>
+      <ScrollerNotice state={state} onRetry={reload} errorText="গ্রুপ খোলা গেল না।" hasOlder={hasOlder} loadingOlder={loadingOlder} onLoadOlder={() => void loadOlder()} empty={false} />
       {messages.map((message, index) => {
-        if (message.kind === "SYSTEM") return <p key={message.id} className="mx-auto w-fit max-w-[90%] rounded-full bg-zinc-100 px-3 py-1 text-center text-xs text-zinc-500">{message.body}</p>;
+        const newDay = startsNewDay(messages, index);
+        if (message.kind === "SYSTEM") return <Fragment key={message.id}>{newDay ? <DayDivider date={message.createdAt} /> : null}<SystemLine>{message.body}</SystemLine></Fragment>;
         const mine = message.senderId === me;
         const previous = messages[index - 1];
-        // The sender's name only where a run of their messages starts.
-        const showName = !mine && message.senderId && (previous?.senderId !== message.senderId || previous?.kind === "SYSTEM");
-        return <div key={message.id} className={cn("flex flex-col", mine ? "items-end" : "items-start")}>
-          {showName ? <p className="mb-0.5 px-1 text-xs font-medium text-emerald-700">{nameOf(message.senderId!)}</p> : null}
-          <p className={cn("max-w-[80%] whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-[15px] leading-relaxed", mine ? "rounded-br-md bg-zinc-950 text-white" : "rounded-bl-md bg-zinc-100 text-zinc-900", message.pending && "opacity-60", message.failed && "bg-red-100 text-red-900")}>{message.body}</p>
-          <p className="mt-0.5 px-1 text-[11px] text-zinc-400">
-            {message.failed ? <button type="button" onClick={() => retry(message)} className="inline-flex items-center gap-1 text-red-600 hover:underline"><RotateCcw className="size-3" /> যায়নি — আবার পাঠাও</button>
-              : message.pending ? "পাঠানো হচ্ছে…" : formatDateTime(new Date(message.createdAt))}
-          </p>
-        </div>;
+        // A run of one sender's messages starts here: tail, extra space, and their name.
+        const first = newDay || previous?.senderId !== message.senderId || previous?.kind === "SYSTEM";
+        return <Fragment key={message.id}>
+          {newDay ? <DayDivider date={message.createdAt} /> : null}
+          <Bubble
+            mine={mine}
+            first={first}
+            sender={!mine && first && message.senderId ? nameOf(message.senderId) : null}
+            body={message.body}
+            createdAt={message.createdAt}
+            pending={message.pending}
+            failed={message.failed}
+            onRetry={() => retry(message)}
+          />
+        </Fragment>;
       })}
-    </div>
+    </MessageScroller>
 
-    {gone ? <p className="border-t border-zinc-100 bg-zinc-50 px-4 py-3 text-center text-sm text-zinc-500">আপনি আর এই গ্রুপে নেই।</p>
-      : <form onSubmit={(event) => { event.preventDefault(); send(); }} className="flex items-end gap-2 border-t border-zinc-100 p-2.5">
-        <textarea
-          value={draft}
-          onChange={(event) => setDraft(event.target.value.slice(0, MESSAGE_MAX))}
-          onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send(); } }}
-          rows={1}
-          placeholder="গ্রুপে লেখো… (Enter = পাঠাও, Shift+Enter = নতুন লাইন)"
-          aria-label="Message"
-          className="max-h-32 min-h-11 flex-1 resize-none rounded-xl border border-zinc-200 px-3 py-2.5 text-[15px] outline-none focus:border-zinc-400"
-        />
-        <button type="submit" disabled={!draft.trim() || state !== "ready"} aria-label="পাঠাও" className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-zinc-950 text-white hover:bg-zinc-800 disabled:opacity-40"><Send className="size-4" /></button>
-      </form>}
+    {gone ? <ComposerNote>আপনি আর এই গ্রুপে নেই।</ComposerNote>
+      : <Composer value={draft} onChange={setDraft} onSend={send} canSend={Boolean(draft.trim()) && state === "ready"} placeholder="গ্রুপে লেখো…" maxLength={MESSAGE_MAX} />}
 
     <GroupInfoDialog groupId={groupId} open={infoOpen} onOpenChange={setInfoOpen} onLeft={onLeft} />
-  </section>;
+  </ChatFrame>;
 }
