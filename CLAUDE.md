@@ -140,7 +140,7 @@ alone. Record decisions and their reasons; don't restate code.
 |---|---|---|
 | Core study app (tasks, notes, subjects, plan, timer, revisions, progress) | done | |
 | Preliminary / Short Question sets (AI read from photos twice + spellcheck, paste, voice, merge without duplicates, exam, results) | done | |
-| Confusions (photo → text) | done | |
+| Confusions (photo → text) | done | Confusion + clarification are Quill rich text (math via the fx formula button, live preview) since 2026-10-14; older rows are plain text, shown via `toEditorHtml` |
 | Vocabulary (verbs, persons, singular/plural, prefix/suffix; admin-only adding; per-user learned ticks) | done | data via `pnpm db:seed-vocabulary` |
 | Typing lab (Bijoy engine) | done | |
 | **Collaboration: friends, sharing, notifications, chat (socket.io)** | **built; awaiting integration run + two-browser check** | plan + decisions: [docs/collaboration-plan.md](docs/collaboration-plan.md) |
