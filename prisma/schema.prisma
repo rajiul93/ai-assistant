@@ -42,6 +42,7 @@ model User {
   shortQuestionSets      ShortQuestionSet[]
   shortTestAttempts      ShortTestAttempt[]
   confusions             Confusion[]
+  studyVideos            StudyVideo[]
   verbEntries            VerbEntry[]
   affixEntries           AffixEntry[]
   nounEntries            NounEntry[]
@@ -98,6 +99,7 @@ model Subject {
   questionSets      QuestionSet[]
   shortQuestionSets ShortQuestionSet[]
   confusions        Confusion[]
+  studyVideos       StudyVideo[]
   studySessions     StudySession[]
 
   @@unique([userId, name])
@@ -553,6 +555,25 @@ enum ConfusionStatus {
 }
 
 /// Confusion: a doubt noted down to ask in class, then marked Clear with what was learned.
+/// A YouTube video a user saved to watch inside the app, away from YouTube's suggestions. Free users
+/// keep up to 5; a running plan (or admin) removes the limit. Only the video id is stored.
+model StudyVideo {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId String?
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  /// The 11-character YouTube video id.
+  videoId   String
+  title     String
+  channel   String?
+  createdAt DateTime @default(now())
+
+  @@unique([userId, videoId])
+  @@index([userId, createdAt])
+  @@index([subjectId])
+}
+
 model Confusion {
   id            String          @id @default(cuid())
   userId        String
