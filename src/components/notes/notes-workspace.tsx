@@ -16,7 +16,6 @@ import {
   AlertDialogFooter,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
 import { APP_TIMEZONE, dayjs } from "@/lib/dayjs";
 import { ShareButton } from "@/components/collaboration/share-button";
 import { cn } from "@/lib/utils";
@@ -94,45 +93,45 @@ function NoteEditor({ noteId, subjects, topics, onSaved, onDeleted, onBack }: { 
     }
   }
 
-  if (noteQuery.isPending) return <div className="space-y-3 p-6"><div className="h-9 w-2/3 animate-pulse rounded-lg bg-zinc-100" /><div className="h-64 animate-pulse rounded-xl bg-zinc-100" /></div>;
-  if (!note) return <p className="p-6 text-sm text-zinc-500">This note couldn&apos;t be loaded.</p>;
+  if (noteQuery.isPending) return <div className="space-y-3 p-6"><div className="h-9 w-2/3 animate-pulse rounded-lg bg-slate-100" /><div className="h-64 animate-pulse rounded-xl bg-slate-100" /></div>;
+  if (!note) return <p className="p-6 text-sm text-slate-500">নোটটা খোলা গেল না।</p>;
 
-  const saveLabel = { saved: "Saved", saving: "Saving…", unsaved: "Unsaved changes", error: "Couldn't save — retrying on next edit" }[saveState];
+  const saveLabel = { saved: "সেভ হয়েছে", saving: "সেভ হচ্ছে…", unsaved: "সেভ বাকি", error: "সেভ হয়নি — পরের লেখায় আবার চেষ্টা" }[saveState];
 
   return <div className="flex h-full flex-col">
     {/* Phones: this is the top bar of a full-screen editor (with room for the notch). */}
-    <div className="flex items-center gap-1 border-b border-zinc-100 px-2 pb-1.5 pt-[calc(0.375rem+env(safe-area-inset-top))] lg:gap-2 lg:px-4 lg:py-2.5">
-      <button type="button" onClick={onBack} className="flex h-10 items-center gap-0.5 rounded-lg pl-1 pr-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 lg:hidden" aria-label="Back to notes"><ChevronLeft className="size-5" /> Notes</button>
-      <p className={cn("ml-1 truncate text-xs", saveState === "error" ? "text-red-600" : "text-zinc-400")} aria-live="polite">{saveLabel}</p>
-      <div className="ml-auto flex shrink-0 items-center gap-1">
-        <button type="button" onClick={() => setAiOpen(!aiOpen)} className={cn("flex h-10 items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition lg:h-8 lg:px-2.5", aiOpen ? "bg-indigo-50 text-indigo-700" : "text-zinc-600 hover:bg-zinc-100")}>
-          <Sparkles className="size-4" /> <span className="lg:hidden">AI</span><span className="hidden lg:inline">Write with AI</span>
+    <div className="flex items-center gap-1 border-b border-slate-100 px-1.5 pb-1 pt-[calc(0.25rem+env(safe-area-inset-top))] lg:gap-2 lg:px-4 lg:py-2.5">
+      <button type="button" onClick={onBack} className="flex size-10 items-center justify-center rounded-full text-slate-700 hover:bg-slate-100 lg:hidden" aria-label="নোটের তালিকায় ফিরুন"><ChevronLeft className="size-6" /></button>
+      <p className={cn("truncate text-xs", saveState === "error" ? "text-red-600" : "text-slate-400")} aria-live="polite">{saveLabel}</p>
+      <div className="ml-auto flex shrink-0 items-center gap-0.5">
+        <button type="button" onClick={() => setAiOpen(!aiOpen)} className={cn("flex h-9 items-center gap-1.5 rounded-full px-3 text-sm font-semibold transition lg:h-8", aiOpen ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-700 hover:bg-blue-100")}>
+          <Sparkles className="size-4" /> AI<span className="hidden lg:inline"> দিয়ে লিখুন</span>
         </button>
-        <ShareButton type="NOTE" itemId={noteId} title={shownTitle} label={false} className="size-10 justify-center text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 lg:size-8" />
-        <button type="button" onClick={() => setConfirmDelete(true)} className="flex size-10 items-center justify-center rounded-lg text-zinc-500 hover:bg-red-50 hover:text-red-700 lg:size-8" aria-label="Delete note"><Trash2 className="size-4" /></button>
+        <ShareButton type="NOTE" itemId={noteId} title={shownTitle} label={false} className="size-10 justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-900 lg:size-8" />
+        <button type="button" onClick={() => setConfirmDelete(true)} className="flex size-10 items-center justify-center rounded-full text-slate-500 hover:bg-red-50 hover:text-red-700 lg:size-8" aria-label="নোট মুছুন"><Trash2 className="size-4" /></button>
       </div>
     </div>
 
-    {aiOpen ? <form className="flex flex-col gap-2 border-b border-indigo-100 bg-indigo-50/50 px-4 py-3 sm:flex-row" onSubmit={(event) => { event.preventDefault(); void writeWithAi(); }}>
+    {aiOpen ? <form className="flex gap-2 border-b border-blue-100 bg-blue-50/60 px-3 py-2.5" onSubmit={(event) => { event.preventDefault(); void writeWithAi(); }}>
       <input
         autoFocus
         value={instruction}
         onChange={(event) => setInstruction(event.target.value)}
-        placeholder={lang === "en" ? "e.g. Explain Newton's 3 laws with examples" : "যেমন: Newton-এর ৩টি সূত্র উদাহরণসহ বুঝিয়ে লেখো"}
-        className="h-10 min-w-0 flex-1 rounded-lg border border-indigo-200 bg-white px-3 text-sm outline-none focus:border-indigo-400"
+        placeholder={lang === "en" ? "e.g. Explain Newton's 3 laws with examples" : "যেমন: Newton-এর ৩টি সূত্র উদাহরণসহ লেখো"}
+        className="h-10 min-w-0 flex-1 rounded-full border border-blue-200 bg-white px-3.5 text-sm outline-none focus:border-blue-400"
       />
-      <Button type="submit" disabled={writing || !instruction.trim()} className="gap-2">
-        <Sparkles className="size-4" /> {writing ? "Writing…" : "Write"}
-      </Button>
+      <button type="submit" disabled={writing || !instruction.trim()} className="flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+        <Sparkles className="size-4" /> {writing ? "লিখছে…" : "লেখো"}
+      </button>
     </form> : null}
 
-    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-4 lg:px-6 lg:pb-6">
+    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-3 lg:px-6 lg:pb-6 lg:pt-4">
       <input
         value={shownTitle}
         onChange={(event) => { setTitle(event.target.value); scheduleSave({ title: event.target.value }); }}
-        placeholder="Title"
+        placeholder="শিরোনাম"
         maxLength={200}
-        className="mb-2 w-full bg-transparent text-2xl font-semibold tracking-tight outline-none placeholder:text-zinc-300"
+        className="mb-1.5 w-full bg-transparent text-xl font-bold tracking-tight outline-none placeholder:text-slate-300 lg:text-2xl"
       />
       <NoteLinks
         key={`${note.subjectId}:${note.topicId}`}
@@ -155,16 +154,16 @@ function NoteEditor({ noteId, subjects, topics, onSaved, onDeleted, onBack }: { 
     <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
       <AlertDialogContent>
         <div className="space-y-1">
-          <AlertDialogTitle>Delete this note?</AlertDialogTitle>
-          <AlertDialogDescription>“{shownTitle || "Untitled note"}” will be removed permanently.</AlertDialogDescription>
+          <AlertDialogTitle>নোটটা মুছে ফেলবেন?</AlertDialogTitle>
+          <AlertDialogDescription>“{shownTitle || "শিরোনাম নেই"}” পুরোপুরি মুছে যাবে।</AlertDialogDescription>
         </div>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>রাখুন</AlertDialogCancel>
           <AlertDialogAction onClick={() => {
             clearTimeout(timer.current);
             timer.current = undefined;
-            void deleteNote(noteId).then(() => { toast.success("Note deleted"); onDeleted(); }).catch((error: Error) => toast.error(error.message));
-          }}>Delete</AlertDialogAction>
+            void deleteNote(noteId).then(() => { toast.success("নোট মুছে ফেলা হলো"); onDeleted(); }).catch((error: Error) => toast.error(error.message));
+          }} className="bg-red-600 hover:bg-red-700">মুছে ফেলুন</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -236,54 +235,63 @@ export function NotesWorkspace({ initialNotes, subjects, topics }: { initialNote
     }
   }
 
-  return <div className="space-y-4">
-    <div className="flex items-end justify-between gap-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Notes</h1>
-        <p className="mt-1 text-sm text-zinc-500">
-          <span className="lg:hidden">{notes.length} note{notes.length === 1 ? "" : "s"}</span>
-          <span className="hidden lg:inline">Write and keep your study notes. Ask the AI to write or expand them.</span>
-        </p>
+  // Filter chips only for subjects that have notes (and "no subject" when some have none).
+  const filedSubjects = subjects.filter((subject) => notes.some((note) => note.subjectId === subject.id));
+  const hasUnfiled = notes.some((note) => !note.subjectId);
+  const chips = filedSubjects.length ? [{ id: "", name: "সব" }, ...filedSubjects, ...(hasUnfiled ? [{ id: "none", name: "Subject ছাড়া" }] : [])] : [];
+
+  return <div className="space-y-3">
+    {/* One slim header in the home page's blue: title, count, new note, and search. */}
+    <section className="rounded-3xl bg-linear-to-br from-[#3f6ef3] via-[#5a87f8] to-[#8fa6fb] p-3 text-white shadow-[0_14px_32px_-18px_rgba(37,99,235,0.6)] lg:hidden">
+      <div className="flex items-center gap-2 pl-1">
+        <h1 className="text-xl font-bold tracking-tight">নোটস</h1>
+        <span className="rounded-full bg-white/20 px-2 py-0.5 text-[11.5px] font-semibold tabular-nums ring-1 ring-white/25">{notes.length}</span>
+        <button type="button" onClick={() => void newNote()} disabled={creating} className="ml-auto flex h-9 items-center gap-1 rounded-full bg-white px-3.5 text-[13px] font-semibold text-blue-700 shadow-sm transition active:scale-95 disabled:opacity-70"><Plus className="size-4" /> নতুন</button>
       </div>
-      <Button onClick={() => void newNote()} disabled={creating} className="h-10 gap-1.5 rounded-xl"><Plus className="size-4" /> New<span className="hidden sm:inline"> note</span></Button>
+      <label className="relative mt-2.5 block">
+        <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="নোট খুঁজুন" aria-label="নোট খুঁজুন" className="h-10 w-full rounded-full bg-white pl-10 pr-4 text-[15px] text-slate-900 outline-none placeholder:text-slate-400 focus:ring-4 focus:ring-white/30" />
+      </label>
+    </section>
+
+    <div className="hidden items-center justify-between gap-4 lg:flex">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">নোটস</h1>
+        <p className="mt-0.5 text-sm text-slate-500">পড়ার নোট লিখে রাখুন; AI দিয়ে লেখাতে বা বাড়াতে পারেন।</p>
+      </div>
+      <button type="button" onClick={() => void newNote()} disabled={creating} className="flex h-10 items-center gap-1.5 rounded-full bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"><Plus className="size-4" /> নতুন নোট</button>
     </div>
 
-    <div className="lg:grid lg:h-[calc(100dvh-13rem)] lg:min-h-[32rem] lg:grid-cols-[18rem_1fr] lg:overflow-hidden lg:rounded-2xl lg:border lg:border-zinc-200 lg:bg-white">
+    <div className="lg:grid lg:h-[calc(100dvh-13rem)] lg:min-h-[32rem] lg:grid-cols-[19rem_1fr] lg:overflow-hidden lg:rounded-3xl lg:bg-white lg:shadow-[0_6px_24px_-12px_rgba(15,23,42,0.15)]">
       {/* Phones: the list is the page; desktop: the left column. */}
-      <aside className="flex min-h-0 flex-col lg:border-r lg:border-zinc-200">
-        <div className="space-y-2 pb-3 lg:border-b lg:border-zinc-100 lg:p-3">
-          <label className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 lg:rounded-lg lg:border-0 lg:bg-zinc-100">
-            <Search className="size-4 shrink-0 text-zinc-400" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search notes" aria-label="Search notes" className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none lg:h-9" />
+      <aside className="flex min-h-0 flex-col lg:border-r lg:border-slate-100">
+        <div className="hidden p-3 lg:block">
+          <label className="flex items-center gap-2 rounded-full bg-slate-100 px-3">
+            <Search className="size-4 shrink-0 text-slate-400" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="নোট খুঁজুন" aria-label="নোট খুঁজুন" className="h-9 min-w-0 flex-1 bg-transparent text-sm outline-none" />
           </label>
-          {subjects.length ? <select value={subjectFilter} onChange={(event) => setSubjectFilter(event.target.value)} aria-label="Filter by subject" className="h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-zinc-400 lg:h-9 lg:rounded-lg">
-            <option value="">All subjects</option>
-            {subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
-            <option value="none">No subject</option>
-          </select> : null}
         </div>
-        <ul className="min-h-0 flex-1 space-y-2 lg:space-y-0 lg:overflow-y-auto lg:p-2">
-          {visible.length === 0 ? <li className="rounded-2xl border border-dashed border-zinc-300 px-4 py-12 text-center text-sm text-zinc-500 lg:border-0">
-            <FileText className="mx-auto mb-2 size-7 text-zinc-300" />
-            {notes.length === 0 ? "No notes yet. Tap “New” to write one, or ask the assistant." : "No notes match."}
+        {chips.length ? <nav aria-label="Subject" className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-2.5 [scrollbar-width:none] lg:mx-0 lg:px-3">
+          {chips.map((chip) => <button key={chip.id || "all"} type="button" aria-pressed={subjectFilter === chip.id} onClick={() => setSubjectFilter(chip.id)} className={cn("h-8 shrink-0 rounded-full px-3 text-[13px] font-semibold transition", subjectFilter === chip.id ? "bg-blue-600 text-white" : "bg-white text-slate-600 shadow-[0_2px_8px_-4px_rgba(15,23,42,0.2)] lg:bg-slate-100 lg:shadow-none")}>{chip.name}</button>)}
+        </nav> : null}
+
+        <ul className="min-h-0 flex-1 divide-y divide-slate-100 overflow-hidden rounded-3xl bg-white shadow-[0_6px_24px_-12px_rgba(15,23,42,0.15)] lg:overflow-y-auto lg:rounded-none lg:shadow-none">
+          {visible.length === 0 ? <li className="px-4 py-10 text-center text-sm text-slate-500">
+            <span className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-orange-50"><FileText className="size-6 text-orange-500" /></span>
+            {notes.length === 0 ? "এখনো কোনো নোট নেই। “নতুন” চাপুন, বা assistant-কে বলুন।" : "কোনো নোট মেলেনি।"}
           </li> : null}
           {visible.map((note) => {
             const active = isDesktop && note.id === selectedId;
             return <li key={note.id}>
-              <button
-                type="button"
-                onClick={() => openNote(note.id)}
-                className={cn(
-                  "w-full rounded-2xl border px-4 py-3.5 text-left transition active:scale-[0.99] lg:rounded-xl lg:border-0 lg:px-3 lg:py-2.5",
-                  active ? "border-transparent bg-zinc-950 text-white" : "border-zinc-200 bg-white hover:bg-zinc-50",
-                )}
-              >
+              <button type="button" onClick={() => openNote(note.id)} className={cn("block w-full px-3.5 py-2.5 text-left transition active:bg-slate-50", active ? "bg-blue-50" : "hover:bg-slate-50")}>
                 <span className="flex items-baseline justify-between gap-3">
-                  <span className="truncate font-semibold lg:text-sm lg:font-medium"><MathText text={note.title || "Untitled note"} /></span>
-                  <span className={cn("shrink-0 text-xs lg:text-[11px]", active ? "text-white/60" : "text-zinc-400")}>{updatedLabel(note.updatedAt)}</span>
+                  <span className={cn("truncate text-[15px] font-semibold", active ? "text-blue-800" : "text-slate-900")}><MathText text={note.title || "শিরোনাম নেই"} /></span>
+                  <span className="shrink-0 text-[11px] text-slate-400">{updatedLabel(note.updatedAt)}</span>
                 </span>
-                {note.subject ? <span className={cn("mt-1 block truncate text-xs font-medium lg:mt-0.5 lg:text-[11px]", active ? "text-white/80" : "text-indigo-600")}>{note.subject.name}{note.topic ? ` › ${note.topic.name}` : ""}</span> : null}
-                <span className={cn("mt-1 line-clamp-2 text-sm leading-snug lg:mt-0.5 lg:text-xs", active ? "text-white/70" : "text-zinc-500")}>{note.plainText ? <MathText text={note.plainText.replace(/\s+/g, " ")} /> : "Empty note"}</span>
+                <span className="mt-0.5 flex items-center gap-1.5 text-[12.5px] leading-snug">
+                  {note.subject ? <span className="max-w-[45%] shrink-0 truncate rounded-full bg-blue-50 px-1.5 py-px text-[11px] font-medium text-blue-700">{note.subject.name}{note.topic ? ` › ${note.topic.name}` : ""}</span> : null}
+                  <span className="min-w-0 flex-1 truncate text-slate-500">{note.plainText ? <MathText text={note.plainText.replace(/\s+/g, " ")} /> : "ফাঁকা নোট"}</span>
+                </span>
               </button>
             </li>;
           })}
@@ -307,8 +315,8 @@ export function NotesWorkspace({ initialNotes, subjects, topics }: { initialNote
           />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 p-10 text-center text-sm text-zinc-500">
-            <FileText className="size-8 text-zinc-300" />
-            Pick a note, or create a new one.
+            <FileText className="size-8 text-slate-300" />
+            একটা নোট বেছে নিন, বা নতুন লিখুন।
           </div>
         )}
       </section>
