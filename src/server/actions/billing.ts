@@ -6,7 +6,13 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isAdminUser } from "@/server/roles";
-import { approvePayment, getPlanStatus, listActivePackages, listPaymentAccounts, rejectPayment } from "@/server/billing";
+import { headers } from "next/headers";
+import { normalizeBdPhone } from "@/lib/phone";
+import { quoteLabel, tokensForDays } from "@/lib/pricing";
+import { aiToday } from "@/server/ai-access";
+import { approvePayment, getPlanStatus, listPaymentAccounts, rejectPayment } from "@/server/billing";
+import { allQuotes, loadCatalog, loadSettings, priceChoice, runningSubscriptions } from "@/server/pricing";
+import { createSession, gatewayConfigured, newTransactionId } from "@/server/sslcommerz";
 
 function revalidateBilling() {
   revalidatePath("/", "layout");
@@ -18,64 +24,120 @@ async function requireAdmin() {
   return user;
 }
 
-/** Everything the plan picker needs, from the database: packages and prices, where to pay, and the user's plan. */
+/**
+ * Everything the Plans page (and the purchase inside the chat) needs: every price — computed here,
+ * never on the client — the tiers' daily AI limits, where to pay, and the user's own plans.
+ */
 export async function getBillingOverview() {
   const user = await requireUser();
-  const [packages, accounts, plan, payments] = await Promise.all([
-    listActivePackages(),
+  const [catalog, tiers, accounts, plan, payments, running, today, me] = await Promise.all([
+    loadCatalog(),
+    prisma.aiTier.findMany({ where: { active: true }, orderBy: { priceBdt: "asc" }, select: { planType: true, name: true, messagesPerDay: true, scansPerDay: true, suggestionsPerDay: true, tokensPerMonth: true } }),
     listPaymentAccounts(),
     getPlanStatus(user.id),
-    prisma.payment.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 20 }),
+    prisma.payment.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 20, select: { id: true, planType: true, packageName: true, amountBdt: true, method: true, transactionId: true, status: true, source: true, adminNote: true, createdAt: true } }),
+    runningSubscriptions(user.id),
+    aiToday(user.id),
+    prisma.user.findUnique({ where: { id: user.id }, select: { phone: true } }),
   ]);
-  return { packages, accounts, plan, payments };
+  return {
+    catalog: { tiers: catalog.tiers, tracks: catalog.tracks, durations: catalog.durations, allTracksDiscountPct: catalog.allTracksDiscountPct, systemPriceBdt: catalog.systemPriceBdt },
+    quotes: allQuotes(catalog),
+    // Customers see AI use relative to the Student tier, never raw token counts.
+    tiers: tiers.map(({ tokensPerMonth, ...tier }) => ({ ...tier, aiTimes: Math.round((tokensPerMonth / Math.max(1, Math.min(...tiers.map((item) => item.tokensPerMonth)))) * 10) / 10 })),
+    accounts,
+    gateway: catalog.gatewayEnabled && gatewayConfigured(),
+    phone: me?.phone ?? null,
+    plan,
+    running,
+    today,
+    payments,
+  };
 }
 
-const paymentSchema = z.object({
-  packageId: z.string().min(1),
-  method: z.enum(["BKASH", "NAGAD"]),
-  // Bangladeshi mobile number: 01XXXXXXXXX (spaces, dashes and +88 are ignored).
-  senderNumber: z.string().transform((value) => value.replace(/[\s-]/g, "").replace(/^\+?88/, "")).refine((value) => /^01[3-9]\d{8}$/.test(value), "Enter the 11-digit number you sent money from, e.g. 017XXXXXXXX."),
-  transactionId: z.string().trim().toUpperCase().refine((value) => /^[A-Z0-9]{6,20}$/.test(value), "Enter the Transaction ID from the payment SMS (letters and numbers)."),
+const choiceSchema = z.object({
+  planType: z.enum(["STUDENT", "PROFESSIONAL"]),
+  track: z.string().min(1).max(64),
+  durationId: z.string().min(1).max(64),
   source: z.enum(["page", "chat"]).default("page"),
 });
 
+const paymentSchema = choiceSchema.extend({
+  method: z.enum(["BKASH", "NAGAD"]),
+  // Bangladeshi mobile number: 01XXXXXXXXX (spaces, dashes and +88 are ignored).
+  senderNumber: z.string().transform((value) => value.replace(/[\s-]/g, "").replace(/^\+?88/, "")).refine((value) => /^01[3-9]\d{8}$/.test(value), "যে নম্বর থেকে পাঠিয়েছেন সেটা ১১ সংখ্যায় দিন, যেমন 017XXXXXXXX।"),
+  transactionId: z.string().trim().toUpperCase().refine((value) => /^[A-Z0-9]{6,20}$/.test(value), "Payment SMS-এর Transaction ID দিন (অক্ষর আর সংখ্যা)।"),
+}).strict();
+
+/** The payment row for a choice: the server's price and everything it buys, copied in now. */
+async function paymentData(choice: z.infer<typeof choiceSchema>) {
+  const { quote, tier } = await priceChoice(choice);
+  return {
+    planType: quote.planType,
+    packageName: quoteLabel(quote),
+    durationDays: quote.days,
+    tokens: tokensForDays(tier.tokensPerMonth, quote.days),
+    amountBdt: quote.total,
+    trackIds: quote.trackIds,
+    allTracks: quote.allTracks,
+    breakdown: quote,
+    source: choice.source,
+  };
+}
+
 /**
- * A user reports a Send Money payment. The package's current price, days and tokens are copied
- * into the payment now, so a later price change never alters it. An admin then approves it.
+ * A user reports a Send Money payment for the plan they picked. The client sends only the choice;
+ * the price, days, AI allowance and exams are worked out here and kept on the payment, so a later
+ * price change never alters it. An admin then approves it.
  */
 export async function submitPayment(input: unknown) {
   const user = await requireUser();
   const parsed = paymentSchema.safeParse(input);
-  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Please check the payment details.");
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Payment-এর তথ্য দেখে আবার দিন।");
   const data = parsed.data;
-  const [pkg, account] = await Promise.all([
-    prisma.planPackage.findFirst({ where: { id: data.packageId, active: true } }),
-    prisma.paymentAccount.findFirst({ where: { method: data.method, enabled: true } }),
-  ]);
-  if (!pkg) throw new Error("That package isn't available any more. Please choose again.");
-  if (!account) throw new Error("That payment method isn't available right now.");
+  const account = await prisma.paymentAccount.findFirst({ where: { method: data.method, enabled: true } });
+  if (!account) throw new Error("এই payment পদ্ধতি এখন বন্ধ আছে।");
   try {
     const payment = await prisma.payment.create({
-      data: {
-        userId: user.id,
-        packageId: pkg.id,
-        planType: pkg.planType,
-        packageName: pkg.name,
-        durationDays: pkg.durationDays,
-        tokens: pkg.tokens,
-        amountBdt: pkg.priceBdt,
-        method: data.method,
-        senderNumber: data.senderNumber,
-        transactionId: data.transactionId,
-        source: data.source,
-      },
+      data: { userId: user.id, ...(await paymentData(data)), method: data.method, senderNumber: data.senderNumber, transactionId: data.transactionId },
     });
     revalidateBilling();
-    return { id: payment.id, amountBdt: payment.amountBdt };
+    return { id: payment.id, amountBdt: payment.amountBdt, label: payment.packageName };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      throw new Error("This Transaction ID has already been submitted.");
+      throw new Error("এই Transaction ID আগেই জমা দেওয়া হয়েছে।");
     }
+    throw error;
+  }
+}
+
+const onlineSchema = choiceSchema.extend({
+  phone: z.string().transform((value) => normalizeBdPhone(value)).refine((value): value is string => Boolean(value), "আপনার মোবাইল নম্বর দিন, যেমন 017XXXXXXXX।"),
+}).strict();
+
+/**
+ * Starts an online payment through SSLCommerz: a pending payment with our own transaction id, then
+ * the gateway's page to send the customer to. It is approved only when SSLCommerz confirms it.
+ */
+export async function startOnlinePayment(input: unknown) {
+  const user = await requireUser();
+  const parsed = onlineSchema.safeParse(input);
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "তথ্য দেখে আবার দিন।");
+  const settings = await loadSettings();
+  if (!settings.gatewayEnabled || !gatewayConfigured()) throw new Error("Online payment এখন বন্ধ আছে। bKash বা Nagad দিয়ে দিন।");
+  const data = await paymentData(parsed.data);
+  const tranId = newTransactionId();
+  const payment = await prisma.payment.create({ data: { userId: user.id, ...data, method: "SSLCOMMERZ", senderNumber: parsed.data.phone, transactionId: tranId } });
+  // Where SSLCommerz sends the customer and its notices back: APP_URL when set, else this request's host.
+  const head = await headers();
+  const host = head.get("x-forwarded-host") ?? head.get("host");
+  const proto = head.get("x-forwarded-proto") ?? (host?.startsWith("localhost") ? "http" : "https");
+  const appUrl = process.env.APP_URL?.replace(/\/$/, "") || `${proto}://${host}`;
+  try {
+    const url = await createSession({ tranId, amount: payment.amountBdt, product: payment.packageName, customer: { name: user.name ?? "", email: user.email, phone: parsed.data.phone.replace(/^\+88/, "") }, appUrl });
+    return { url };
+  } catch (error) {
+    await prisma.payment.updateMany({ where: { id: payment.id, status: "PENDING" }, data: { status: "REJECTED", adminNote: "Gateway session খোলা যায়নি", reviewedAt: new Date(), reviewedBy: "sslcommerz" } });
     throw error;
   }
 }
@@ -105,23 +167,6 @@ export async function reviewPayment(input: unknown) {
   const { paymentId, approve, note } = z.object({ paymentId: z.string().min(1), approve: z.boolean(), note: z.string().trim().max(300).optional() }).parse(input);
   if (approve) await approvePayment(paymentId, admin.email, note);
   else await rejectPayment(paymentId, admin.email, note);
-  revalidateBilling();
-}
-
-const packageSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().trim().min(1).max(40),
-  priceBdt: z.coerce.number().int().min(1, "Price must be at least ৳1").max(1_000_000),
-  durationDays: z.coerce.number().int().min(1).max(3650),
-  tokens: z.coerce.number().int().min(1_000).max(1_000_000_000),
-  active: z.boolean(),
-});
-
-/** New prices apply to new payments only; payments already submitted keep the price they had. */
-export async function updatePackage(input: unknown) {
-  await requireAdmin();
-  const { id, ...data } = packageSchema.parse(input);
-  await prisma.planPackage.update({ where: { id }, data });
   revalidateBilling();
 }
 

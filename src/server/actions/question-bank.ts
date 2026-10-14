@@ -8,7 +8,8 @@ import { now, startOfDay } from "@/lib/dayjs";
 import { prisma } from "@/lib/prisma";
 import { BANK_CHECK_BATCH, BANK_EDITED, BANK_IMPORT_BATCH, placementForSet, questionFingerprint, rowContentHash, rowSetKey } from "@/lib/question-bank";
 import { placeFor } from "@/server/collaboration/share-copy";
-import { gateNotes, hasPremium } from "@/server/premium";
+import { gateNotes } from "@/server/premium";
+import { canOpenExam } from "@/server/pricing";
 import { isAdminUser, isSuperAdminEmail } from "@/server/roles";
 
 /**
@@ -50,7 +51,6 @@ export async function listBankSets(exam: string) {
  */
 export async function getBankSet(id: string) {
   const me = await requireUser();
-  const [canEdit, premium] = await Promise.all([isAdminUser(me), hasPremium(me)]);
   const set = await prisma.bankSet.findUnique({
     where: { id: idSchema.parse(id) },
     select: {
@@ -60,6 +60,8 @@ export async function getBankSet(id: string) {
     },
   });
   if (!set) return null;
+  // Solutions open with a running plan that includes this exam.
+  const [canEdit, premium] = await Promise.all([isAdminUser(me), canOpenExam(me, set.exam)]);
   const { copies, questions, ...rest } = set;
   return { ...rest, questions: questions.map((question) => gateNotes(question, premium)), copyId: copies[0]?.id ?? null, canEdit, premium };
 }
@@ -72,7 +74,8 @@ export async function getBankSet(id: string) {
 export async function sendBankSetToPreliminary(id: string) {
   const me = await requireUser();
   const bankSetId = idSchema.parse(id);
-  if (!(await hasPremium(me))) throw new Error("Preliminary-তে পাঠাতে একটা চালু plan লাগবে।");
+  const target = await prisma.bankSet.findUnique({ where: { id: bankSetId }, select: { exam: true } });
+  if (target && !(await canOpenExam(me, target.exam))) throw new Error("Preliminary-তে পাঠাতে এই পরীক্ষাসহ একটা চালু plan লাগবে।");
   const existing = await prisma.questionSet.findFirst({ where: { userId: me.id, bankSetId }, select: { id: true } });
   if (existing) return { id: existing.id, alreadySent: true };
 

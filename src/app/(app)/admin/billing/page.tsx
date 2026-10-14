@@ -4,7 +4,9 @@ import { requireUser } from "@/lib/auth";
 import { readPagination } from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
 import { listPaymentsForAdmin } from "@/server/actions/billing";
-import { isAdminUser } from "@/server/roles";
+import { getPricingAdmin } from "@/server/actions/pricing";
+import { isAdminUser, roleOf } from "@/server/roles";
+import { gatewayConfigured } from "@/server/sslcommerz";
 
 export default async function AdminBillingPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const user = await requireUser();
@@ -15,10 +17,11 @@ export default async function AdminBillingPage({ searchParams }: { searchParams:
   const statusParam = typeof params.status === "string" ? params.status.toUpperCase() : "";
   // Pending is the default view: what needs an admin now.
   const status = (["ALL", "APPROVED", "REJECTED"] as const).find((value) => value === statusParam) ?? "PENDING";
-  const [payments, packages, accounts] = await Promise.all([
+  const superAdmin = (await roleOf(user)) === "SUPER_ADMIN";
+  const [payments, pricing, accounts] = await Promise.all([
     listPaymentsForAdmin({ page, limit, status }),
-    prisma.planPackage.findMany({ orderBy: [{ planType: "asc" }, { sortOrder: "asc" }] }),
+    superAdmin ? getPricingAdmin() : null,
     prisma.paymentAccount.findMany(),
   ]);
-  return <AdminBilling payments={payments.rows} status={status} pendingCount={payments.pending} page={payments.page} limit={limit} total={payments.total} packages={packages} accounts={accounts} />;
+  return <AdminBilling payments={payments.rows} status={status} pendingCount={payments.pending} page={payments.page} limit={limit} total={payments.total} pricing={pricing} gatewayConfigured={gatewayConfigured()} accounts={accounts} />;
 }

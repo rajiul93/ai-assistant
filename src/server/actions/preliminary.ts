@@ -7,7 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { APP_TIMEZONE, dayjs } from "@/lib/dayjs";
 import { questionKey, withoutDuplicates } from "@/lib/preliminary";
 import { prisma } from "@/lib/prisma";
-import { gateNotes, hasPremium } from "@/server/premium";
+import { gateNotes, premiumForSet } from "@/server/premium";
 
 /**
  * Preliminary: MCQ sets on a topic, moved Todo → Doing (study, answers shown) → Testing (exam,
@@ -110,7 +110,7 @@ export async function updateQuestionSet(id: string, input: unknown) {
   const topicId = await ownedTopic(user.id, data.topicId, subjectId);
   // Without a plan the editor never saw the solutions, so it sends none back: keep the stored ones
   // (matched by question wording and options) instead of wiping them.
-  if (!(await hasPremium(user))) {
+  if (!(await premiumForSet(user, set.bankSetId))) {
     const stored = await prisma.question.findMany({ where: { setId: set.id }, select: { text: true, options: true, solution: true, explanation: true } });
     const notes = new Map(stored.map((question) => [questionKey(question), question]));
     data.questions = data.questions.map((question) => {
@@ -203,7 +203,7 @@ export async function getQuestionSet(id: string) {
   const set = await prisma.questionSet.findFirst({
     where: { id, userId: user.id },
     select: {
-      id: true, topicName: true, date: true, status: true, subjectId: true, topicId: true,
+      id: true, topicName: true, date: true, status: true, subjectId: true, topicId: true, bankSetId: true,
       subject: { select: { name: true } },
       questions: { orderBy: { position: "asc" }, select: { id: true, text: true, options: true, correctIndex: true, solution: true, explanation: true } },
       attempts: { orderBy: { submittedAt: "desc" }, take: 10, select: { id: true, correct: true, total: true, submittedAt: true } },
@@ -212,7 +212,7 @@ export async function getQuestionSet(id: string) {
   if (!set) return null;
   const testing = set.status === "TESTING";
   // Solutions and explanations are a paid feature; and a solution gives the answer away, so it is hidden during a test.
-  const premium = await hasPremium(user);
+  const premium = await premiumForSet(user, set.bankSetId);
   return {
     ...set,
     premium,
@@ -241,9 +241,9 @@ export async function getAttempt(attemptId: string) {
   const user = await requireUser();
   const attempt = await prisma.testAttempt.findFirst({
     where: { id: attemptId, userId: user.id },
-    select: { id: true, setId: true, total: true, correct: true, details: true, submittedAt: true, set: { select: { topicName: true, status: true, subject: { select: { name: true } } } } },
+    select: { id: true, setId: true, total: true, correct: true, details: true, submittedAt: true, set: { select: { topicName: true, status: true, bankSetId: true, subject: { select: { name: true } } } } },
   });
   if (!attempt) return null;
-  const premium = await hasPremium(user);
+  const premium = await premiumForSet(user, attempt.set.bankSetId);
   return { ...attempt, premium, details: (attempt.details as AttemptDetail[]).map((detail) => ({ ...detail, solution: premium ? detail.solution : null, hasSolution: Boolean(detail.solution) })) };
 }
