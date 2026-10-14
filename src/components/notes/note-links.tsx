@@ -15,9 +15,10 @@ export type TopicOption = { id: string; name: string; subjectId: string; parentN
 
 type LinkedTask = { id: string; title: string; status: string };
 
-const selectClass = "h-9 min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-2 text-sm outline-none focus:border-zinc-400 disabled:opacity-50 sm:flex-none sm:max-w-52";
+// Pills, so subject, topic and the linked tasks share one line on a phone.
+const selectClass = "h-8 min-w-0 max-w-[46%] rounded-full border-0 bg-blue-50 pl-3 pr-7 text-[12.5px] font-medium text-blue-800 outline-none focus:ring-2 focus:ring-blue-200 disabled:opacity-50 sm:max-w-52";
 
-/** Under the note title: its subject and topic, and the tasks it is attached to. */
+/** Under the note title, on one wrapping line: its subject and topic, and the tasks it is attached to. */
 export function NoteLinks({ noteId, subjectId, topicId, tasks, subjects, topics }: {
   noteId: string;
   subjectId: string | null;
@@ -90,26 +91,23 @@ export function NoteLinks({ noteId, subjectId, topicId, tasks, subjects, topics 
     }
   }
 
-  return <div className="mb-3 space-y-2">
-    <div className="flex flex-wrap items-center gap-2">
-      <select aria-label="Subject" value={subject} disabled={savingSubject} onChange={(event) => void saveSubject(event.target.value, "")} className={cn(selectClass, !subject && "text-zinc-400")}>
-        <option value="">No subject</option>
+  return <div className="mb-2.5">
+    <div className="flex flex-wrap items-center gap-1.5">
+      <select aria-label="Subject" value={subject} disabled={savingSubject} onChange={(event) => void saveSubject(event.target.value, "")} className={cn(selectClass, !subject && "bg-slate-100 text-slate-500")}>
+        <option value="">Subject নেই</option>
         {subjects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
       </select>
-      <select aria-label="Topic" value={topic} disabled={savingSubject || !subject || subjectTopics.length === 0} onChange={(event) => void saveSubject(subject, event.target.value)} className={cn(selectClass, !topic && "text-zinc-400")}>
-        <option value="">{subject && subjectTopics.length === 0 ? "No topics yet" : "No topic"}</option>
+      {subject && subjectTopics.length ? <select aria-label="Topic" value={topic} disabled={savingSubject} onChange={(event) => void saveSubject(subject, event.target.value)} className={cn(selectClass, !topic && "bg-slate-100 text-slate-500")}>
+        <option value="">Topic নেই</option>
         {subjectTopics.map((item) => <option key={item.id} value={item.id}>{item.parentName ? `${item.parentName} › ${item.name}` : item.name}</option>)}
-      </select>
-    </div>
-
-    <div className="flex flex-wrap items-center gap-1.5">
-      {tasks.map((task) => <span key={task.id} className="flex max-w-full items-center gap-1 rounded-full bg-zinc-100 py-0.5 pl-2.5 pr-1 text-xs text-zinc-700">
+      </select> : null}
+      {tasks.map((task) => <span key={task.id} className="flex max-w-full items-center gap-1 rounded-full bg-slate-100 py-0.5 pl-2.5 pr-1 text-xs text-slate-700">
         <ListTodo className="size-3.5 shrink-0 text-zinc-500" />
         <Link href="/tasks" className={cn("truncate hover:underline", task.status === "FINISHED" && "line-through text-zinc-400")}><MathText text={task.title} /></Link>
         <button type="button" disabled={busyId === task.id} onClick={() => void toggleTask(task.id, false)} aria-label={`Remove from “${task.title}”`} className="flex size-6 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-white hover:text-zinc-900 disabled:opacity-50"><X className="size-3.5" /></button>
       </span>)}
-      <button type="button" onClick={() => setPickerOpen(true)} className="flex h-8 items-center gap-1 rounded-full border border-dashed border-zinc-300 px-3 text-xs font-medium text-zinc-600 hover:border-zinc-400 hover:bg-zinc-50">
-        <Plus className="size-3.5" /> {tasks.length ? "Task" : "Task-এ যোগ করো"}
+      <button type="button" onClick={() => setPickerOpen(true)} className="flex h-8 items-center gap-1 rounded-full border border-dashed border-slate-300 px-3 text-xs font-medium text-slate-600 hover:border-blue-300 hover:text-blue-700">
+        <Plus className="size-3.5" /> Task
       </button>
     </div>
 

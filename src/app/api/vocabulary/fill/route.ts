@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
+import { aiBlockedMessage, type AiLock } from "@/lib/ai-limits";
 import { checkAi } from "@/server/ai-access";
 import { callAI } from "@/server/assistant/ai";
 import { isAdminUser } from "@/server/roles";
@@ -38,14 +39,14 @@ const nounSchema = {
   required: ["plural", "meaning"],
 };
 
-const aiError = (blocked: string) => Response.json({ error: blocked === "quota" ? "তোমার AI plan-এর ব্যবহার শেষ।" : "AI ব্যবহার করতে একটা plan লাগবে।" }, { status: 403 });
+const aiError = (blocked: Exclude<AiLock, null>) => Response.json({ error: aiBlockedMessage(blocked) }, { status: 403 });
 
 /** Vocabulary helper: a verb's other forms and meaning, or a prefix/suffix's meaning and examples — for the user to check. */
 export async function POST(request: Request) {
   const user = await requireUser();
   // Only admins add to the shared tables, so only they need the helper.
   if (!(await isAdminUser(user))) return Response.json({ error: "শুধু admin এটা ব্যবহার করতে পারে।" }, { status: 403 });
-  const { blocked } = await checkAi(user);
+  const { blocked } = await checkAi(user, "suggestion");
   if (blocked) return aiError(blocked);
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "আগে শব্দটা লেখো।" }, { status: 400 });

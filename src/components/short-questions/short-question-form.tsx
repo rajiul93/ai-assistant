@@ -50,12 +50,14 @@ async function readPage(body: object): Promise<Reading> {
 async function readPageTwice(file: File): Promise<{ topic: string | null; questions: ReviewedShortQuestion[] }> {
   let first: Reading;
   let second: Reading;
+  // Both readings carry one id, so the page counts as one scan of the day's AI limit.
+  const scanId = crypto.randomUUID();
   if (file.type === "application/pdf") {
-    const body = { files: [{ name: file.name, mimeType: file.type, data: await readFile(file) }] };
+    const body = { scanId, files: [{ name: file.name, mimeType: file.type, data: await readFile(file) }] };
     [first, second] = await Promise.all([readPage(body), readPage(body)]);
   } else {
     const [coarse, fine] = await Promise.all([pageTiles(file, { rows: 4, targetWidth: 1300 }), pageTiles(file, { rows: 5, targetWidth: 1700 })]);
-    const request = (tiles: typeof coarse) => readPage({ files: tiles.tiles.map((data, index) => ({ name: `${file.name}-${index + 1}.jpg`, mimeType: "image/jpeg", data })), layout: { columns: tiles.columns, rows: tiles.rows } });
+    const request = (tiles: typeof coarse) => readPage({ scanId, files: tiles.tiles.map((data, index) => ({ name: `${file.name}-${index + 1}.jpg`, mimeType: "image/jpeg", data })), layout: { columns: tiles.columns, rows: tiles.rows } });
     [first, second] = await Promise.all([request(coarse), request(fine)]);
   }
   const merged = mergeShortReadings(first.questions, second.questions);

@@ -23,8 +23,8 @@ function describe(item: Item): { text: string; href: string } {
   const thing = item.share ? `${shareTypeLabel[item.share.type]} “${item.share.title}”` : "";
   switch (item.type) {
     case "FRIEND_REQUEST": return { text: `${who} আপনাকে friend request পাঠিয়েছে`, href: "/messages?tab=requests" };
-    case "FRIEND_ACCEPTED": return { text: `${who} আপনার friend request গ্রহণ করেছে`, href: "/messages?tab=friends" };
-    case "FRIEND_REJECTED": return { text: `${who} আপনার friend request গ্রহণ করেনি`, href: "/messages?tab=friends" };
+    case "FRIEND_ACCEPTED": return { text: `${who} আপনার friend request গ্রহণ করেছে`, href: "/messages" };
+    case "FRIEND_REJECTED": return { text: `${who} আপনার friend request গ্রহণ করেনি`, href: "/messages" };
     case "SHARE_REQUEST": return { text: `${who} আপনার সাথে ${thing} share করেছে`, href: "/messages?tab=requests" };
     case "SHARE_ACCEPTED": return { text: `${who} আপনার ${thing} নিয়েছে`, href: "/messages?tab=requests" };
     case "SHARE_REJECTED": return { text: `${who} আপনার ${thing} নেয়নি`, href: "/messages?tab=requests" };

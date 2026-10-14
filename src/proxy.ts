@@ -3,8 +3,9 @@ import type { NextRequest } from "next/server";
 import { loginCookieOptions, REFRESH_COOKIE, refreshIdToken, SESSION_COOKIE, tokenExpiry } from "@/lib/session";
 
 // The manifest and app icons are fetched by the browser without cookies, so they must stay public;
-// /api/health is pinged by an outside keep-alive cron.
-const PUBLIC_PATHS = ["/login", "/manifest.webmanifest", "/icon", "/apple-icon", "/api/health"];
+// /api/health is pinged by an outside keep-alive cron; SSLCommerz posts its payment callbacks to
+// /api/payments/sslcommerz/* without our cookies (each one validates with SSLCommerz itself).
+const PUBLIC_PATHS = ["/login", "/manifest.webmanifest", "/icon", "/apple-icon", "/api/health", "/api/payments/sslcommerz"];
 /** Pages only for signed-out visitors: the landing page and the login page. */
 const SIGNED_OUT_ONLY = ["/", "/login"];
 /** Refresh this long before the ID token (1 hour) expires, so a request never arrives with a dead one. */

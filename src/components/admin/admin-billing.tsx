@@ -2,13 +2,13 @@
 
 import { useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import type { Payment, PaymentAccount, PaymentMethod, PlanPackage } from "@prisma/client";
-import { Check, Copy, X } from "lucide-react";
+import type { Payment, PaymentAccount, PaymentMethod } from "@prisma/client";
+import { Check, Copy, MessageSquarePlus, X } from "lucide-react";
 import { toast } from "sonner";
-import { formatTokens } from "@/lib/ai-limits";
 import { formatDateTime } from "@/lib/dayjs";
 import { cn } from "@/lib/utils";
-import { reviewPayment, savePaymentAccount, updatePackage } from "@/server/actions/billing";
+import { reviewPayment, savePaymentAccount } from "@/server/actions/billing";
+import { PricingPanel, type PricingAdmin } from "@/components/admin/pricing-panel";
 import { Pagination } from "@/components/pagination";
 import { methodNames, planInfo, taka } from "@/lib/billing-display";
 
@@ -24,9 +24,12 @@ function useAction() {
   return { pending, run };
 }
 
-const methodChip: Record<PaymentMethod, string> = { BKASH: "bg-pink-100 text-pink-700", NAGAD: "bg-orange-100 text-orange-700" };
+const methodChip: Record<PaymentMethod, string> = { BKASH: "bg-pink-100 text-pink-700", NAGAD: "bg-orange-100 text-orange-700", SSLCOMMERZ: "bg-blue-100 text-blue-700" };
 
-/** Compact on phones: who and how much, the TrxID to match (with copy), then Approve/Reject. */
+/** What was bought. New plans carry their tier in the name already ("BCS · Student AI · ১ মাস"); old packages don't. */
+const planLabel = (payment: AdminPayment) => (payment.breakdown ? payment.packageName : `${planInfo[payment.planType].label} · ${payment.packageName}`);
+
+/** Compact on phones: who (name and email) and how much, the TrxID to match (with copy), then Approve/Reject. */
 function PaymentRow({ payment }: { payment: AdminPayment }) {
   const { pending, run } = useAction();
   const [note, setNote] = useState("");
@@ -39,7 +42,8 @@ function PaymentRow({ payment }: { payment: AdminPayment }) {
     // Reviewed: one short line, so the ones still waiting stand out.
     return <li className="flex items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2">
       <div className="min-w-0">
-        <p className="truncate text-sm"><span className="font-medium">{payment.user.name || payment.user.email}</span> <span className="text-zinc-500">· {planInfo[payment.planType].label} {payment.packageName}</span></p>
+        <p className="truncate text-sm"><span className="font-medium">{payment.user.name || payment.user.email}</span> <span className="text-zinc-500">· {planLabel(payment)}</span></p>
+        {payment.user.name ? <p className="truncate text-[11px] text-zinc-500">{payment.user.email}</p> : null}
         <p className="truncate text-[11px] text-zinc-500">{gift ? "🎁 Gift" : <>{methodNames[payment.method]} · <span className="font-mono">{payment.transactionId}</span></>} · {formatDateTime(payment.createdAt)}{payment.adminNote ? ` · “${payment.adminNote}”` : ""}</p>
       </div>
       <div className="shrink-0 text-right">
@@ -49,59 +53,37 @@ function PaymentRow({ payment }: { payment: AdminPayment }) {
     </li>;
   }
 
-  return <li className="rounded-xl border border-amber-200 bg-amber-50/60 p-3">
+  return <li className="rounded-xl border border-amber-200 bg-amber-50/60 p-2.5 sm:p-3">
     <div className="flex items-start justify-between gap-2">
       <div className="min-w-0">
-        <p className="truncate text-sm font-semibold">{payment.user.name || payment.user.email}</p>
-        <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-600">
+        <p className="truncate text-sm font-semibold">{payment.user.name || <span className="font-normal text-zinc-400">নাম দেওয়া নেই</span>}</p>
+        <button type="button" onClick={() => copy(payment.user.email, "Email")} title="Email কপি করুন" className="flex max-w-full items-center gap-1 truncate text-left text-xs text-zinc-600 hover:text-zinc-950"><span className="truncate">{payment.user.email}</span><Copy className="size-3 shrink-0 text-zinc-400" /></button>
+        <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-zinc-600">
           <span className={cn("rounded px-1.5 py-px font-semibold", methodChip[payment.method])}>{methodNames[payment.method]}</span>
-          <span>{planInfo[payment.planType].label} · {payment.packageName}</span>
+          <span>{planLabel(payment)}</span>
           <span className="text-zinc-400">{formatDateTime(payment.createdAt)}</span>
         </p>
       </div>
       <p className="shrink-0 text-lg font-bold tabular-nums">{taka(payment.amountBdt)}</p>
     </div>
 
-    <div className="mt-2 flex items-center gap-2 rounded-lg bg-white px-3 py-2 ring-1 ring-amber-100">
-      <div className="min-w-0 flex-1">
-        <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-400">TrxID</p>
-        <p className="truncate font-mono text-base font-semibold tracking-wide">{payment.transactionId}</p>
-      </div>
-      <button type="button" onClick={() => copy(payment.transactionId, "TrxID")} aria-label="Copy transaction ID" className="flex size-10 shrink-0 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"><Copy className="size-4" /></button>
-    </div>
-    <div className="mt-1.5 flex items-center justify-between gap-2 px-1 text-xs text-zinc-600">
-      <span>From <span className="font-mono font-medium text-zinc-900">{payment.senderNumber}</span></span>
-      <button type="button" onClick={() => copy(payment.senderNumber, "Number")} className="flex items-center gap-1 rounded-md px-2 py-1 font-medium text-zinc-500 hover:bg-white hover:text-zinc-900"><Copy className="size-3.5" /> Copy</button>
+    {/* What to match in the bKash/Nagad app: the TrxID and the sender, each a tap to copy. */}
+    <div className="mt-2 grid grid-cols-[1.25fr_1fr] divide-x divide-amber-100 rounded-lg bg-white ring-1 ring-amber-100">
+      <button type="button" onClick={() => copy(payment.transactionId, "TrxID")} className="flex min-w-0 items-center gap-1.5 px-2.5 py-1.5 text-left hover:bg-zinc-50">
+        <span className="min-w-0 flex-1"><span className="block text-[10px] font-medium uppercase tracking-wide text-zinc-400">TrxID</span><span className="block truncate font-mono text-[15px] font-semibold">{payment.transactionId}</span></span>
+        <Copy className="size-3.5 shrink-0 text-zinc-400" />
+      </button>
+      <button type="button" onClick={() => copy(payment.senderNumber, "Number")} className="flex min-w-0 items-center gap-1.5 px-2.5 py-1.5 text-left hover:bg-zinc-50">
+        <span className="min-w-0 flex-1"><span className="block text-[10px] font-medium uppercase tracking-wide text-zinc-400">From</span><span className="block truncate font-mono text-[13px] font-medium">{payment.senderNumber}</span></span>
+        <Copy className="size-3.5 shrink-0 text-zinc-400" />
+      </button>
     </div>
 
     {noting ? <input value={note} onChange={(event) => setNote(event.target.value)} autoFocus placeholder="Note to the user (optional)" className="mt-2 h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-zinc-400" /> : null}
     <div className="mt-2 flex gap-2">
-      {noting ? null : <button type="button" onClick={() => setNoting(true)} className="h-11 shrink-0 rounded-lg px-3 text-xs font-medium text-zinc-600 hover:bg-white">+ Note</button>}
-      <button type="button" disabled={pending} onClick={() => run(() => reviewPayment({ paymentId: payment.id, approve: false, note }), "Payment rejected")} className="flex h-11 flex-1 items-center justify-center gap-1 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"><X className="size-4" /> Reject</button>
-      <button type="button" disabled={pending} onClick={() => run(() => reviewPayment({ paymentId: payment.id, approve: true, note }), "Approved — benefit added")} className="flex h-11 flex-[1.4] items-center justify-center gap-1 rounded-lg bg-emerald-600 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"><Check className="size-4" /> Approve</button>
-    </div>
-  </li>;
-}
-
-function PackageRow({ pkg }: { pkg: PlanPackage }) {
-  const { pending, run } = useAction();
-  const [form, setForm] = useState({ name: pkg.name, priceBdt: String(pkg.priceBdt), durationDays: String(pkg.durationDays), tokens: String(pkg.tokens), active: pkg.active });
-  const dirty = form.name !== pkg.name || Number(form.priceBdt) !== pkg.priceBdt || Number(form.durationDays) !== pkg.durationDays || Number(form.tokens) !== pkg.tokens || form.active !== pkg.active;
-  const field = (key: "name" | "priceBdt" | "durationDays" | "tokens", label: string, props: React.InputHTMLAttributes<HTMLInputElement> = {}) => <label className="min-w-0 space-y-1">
-    <span className="text-[11px] text-zinc-500">{label}</span>
-    <input value={form[key]} onChange={(event) => setForm({ ...form, [key]: event.target.value })} className="h-10 w-full rounded-lg border border-zinc-200 bg-white px-2.5 text-sm tabular-nums outline-none focus:border-zinc-400" {...props} />
-  </label>;
-  return <li className="rounded-xl border border-zinc-200 bg-white p-3">
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-      {field("name", "Name")}
-      {field("priceBdt", "Price (৳)", { inputMode: "numeric" })}
-      {field("durationDays", "Days", { inputMode: "numeric" })}
-      {field("tokens", "Tokens", { inputMode: "numeric" })}
-    </div>
-    <div className="mt-2 flex items-center justify-between gap-2">
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.active} onChange={(event) => setForm({ ...form, active: event.target.checked })} className="size-4" /> On sale</label>
-      <span className="text-xs text-zinc-500">{formatTokens(Number(form.tokens) || 0)} tokens · {taka(Number(form.priceBdt) || 0)}</span>
-      <button type="button" disabled={!dirty || pending} onClick={() => run(() => updatePackage({ id: pkg.id, name: form.name, priceBdt: form.priceBdt, durationDays: form.durationDays, tokens: form.tokens, active: form.active }), "Price saved — new payments use it")} className="h-9 rounded-lg bg-zinc-950 px-3.5 text-sm font-medium text-white disabled:opacity-40">Save</button>
+      {noting ? null : <button type="button" onClick={() => setNoting(true)} aria-label="Note যোগ করুন" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-zinc-500 hover:bg-white"><MessageSquarePlus className="size-4" /></button>}
+      <button type="button" disabled={pending} onClick={() => run(() => reviewPayment({ paymentId: payment.id, approve: false, note }), "Payment rejected")} className="flex h-10 flex-1 items-center justify-center gap-1 rounded-lg border border-zinc-200 bg-white text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"><X className="size-4" /> Reject</button>
+      <button type="button" disabled={pending} onClick={() => run(() => reviewPayment({ paymentId: payment.id, approve: true, note }), "Approved — benefit added")} className="flex h-10 flex-[1.4] items-center justify-center gap-1 rounded-lg bg-emerald-600 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"><Check className="size-4" /> Approve</button>
     </div>
   </li>;
 }
@@ -149,14 +131,16 @@ function StatusFilter({ value, pendingCount }: { value: PaymentFilter; pendingCo
   </div>;
 }
 
-export function AdminBilling({ payments, status, pendingCount, page, limit, total, packages, accounts }: {
+export function AdminBilling({ payments, status, pendingCount, page, limit, total, pricing, gatewayConfigured, accounts }: {
   payments: AdminPayment[];
   status: PaymentFilter;
   pendingCount: number;
   page: number;
   limit: number;
   total: number;
-  packages: PlanPackage[];
+  /** Only for the super admin, who alone sets prices. */
+  pricing: PricingAdmin | null;
+  gatewayConfigured: boolean;
   accounts: PaymentAccount[];
 }) {
   const [tab, setTab] = useState<Tab>("payments");
@@ -168,7 +152,7 @@ export function AdminBilling({ payments, status, pendingCount, page, limit, tota
   return <div className="mx-auto max-w-3xl space-y-3">
     <div>
       <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Billing</h1>
-      <p className="text-xs text-zinc-500 sm:text-sm">Match the TrxID in your bKash/Nagad app, then approve. Price changes apply to new payments only.</p>
+      <p className="hidden text-sm text-zinc-500 sm:block">bKash/Nagad-এর TrxID মিলিয়ে approve করুন; online payment নিজে থেকেই approve হয়। নতুন দাম শুধু নতুন কেনায় লাগে।</p>
     </div>
     <div role="tablist" className="grid grid-cols-3 gap-1 rounded-xl bg-zinc-100 p-1">
       {tabs.map((item) => <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} onClick={() => setTab(item.id)} className={cn("h-9 truncate rounded-lg px-2 text-sm font-medium", tab === item.id ? "bg-white shadow-sm" : "text-zinc-500")}>{item.label}</button>)}
@@ -184,12 +168,9 @@ export function AdminBilling({ payments, status, pendingCount, page, limit, tota
         : <p className="rounded-xl border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500">{status === "PENDING" ? "Nothing waiting for approval. 🎉" : "No payments here."}</p>}
     </div> : null}
 
-    {tab === "pricing" ? <div className="space-y-4">
-      {(["STUDENT", "PROFESSIONAL"] as const).map((type) => <section key={type}>
-        <h2 className={cn("mb-2 text-sm font-semibold", planInfo[type].accent)}>{planInfo[type].label} Plan</h2>
-        <ul className="space-y-2">{packages.filter((pkg) => pkg.planType === type).map((pkg) => <PackageRow key={pkg.id} pkg={pkg} />)}</ul>
-      </section>)}
-    </div> : null}
+    {tab === "pricing" ? pricing
+      ? <PricingPanel data={pricing} gatewayConfigured={gatewayConfigured} />
+      : <p className="rounded-xl border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500">দাম শুধু super admin বদলাতে পারেন।</p> : null}
 
     {tab === "numbers" ? <ul className="space-y-2">
       {(["BKASH", "NAGAD"] as const).map((method) => <AccountRow key={method} method={method} account={accounts.find((item) => item.method === method)} />)}

@@ -5,7 +5,7 @@ import type { PaymentMethod, PlanType } from "@prisma/client";
 // outside the "use client" component file: a server component can't read values exported from one.
 
 export const taka = (amount: number) => `৳${amount.toLocaleString("en-US")}`;
-export const methodNames: Record<PaymentMethod, string> = { BKASH: "bKash", NAGAD: "Nagad" };
+export const methodNames: Record<PaymentMethod, string> = { BKASH: "bKash", NAGAD: "Nagad", SSLCOMMERZ: "Online (SSLCommerz)" };
 
 export const planInfo: Record<PlanType, { label: string; blurb: string; icon: typeof GraduationCap; card: string; accent: string; chip: string }> = {
   STUDENT: {

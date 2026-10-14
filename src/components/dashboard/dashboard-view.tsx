@@ -1,18 +1,23 @@
 import Link from "next/link";
 import {
+  BookOpen,
   BookOpenText,
   BriefcaseBusiness,
   CalendarCheck,
   ChartColumnIncreasing,
   ChevronRight,
   CircleHelp,
+  Crown,
   FileText,
   Keyboard,
   Languages,
   ListChecks,
   ListTodo,
+  MessageCircle,
+  MonitorPlay,
   NotebookPen,
   RotateCcw,
+  UserRound,
   type LucideIcon,
 } from "lucide-react";
 import { ClockToolsCard } from "@/components/dashboard/clock-tools-card";
@@ -28,18 +33,26 @@ import { lastRevisedLabel, needsRevision } from "@/lib/revisions";
 import { cn } from "@/lib/utils";
 import type { TaskWithRelations } from "@/server/queries";
 
-/** The home page's shortcuts, in the design's pastel tiles. Only pages that exist. */
-const quickAccess: Array<{ href: string; label: string; icon: LucideIcon; tone: string }> = [
+/**
+ * The home page's shortcuts, in the design's pastel tiles — three full rows of five on a phone.
+ * Only pages that exist; `isNew` puts a small "নতুন" badge on recently added features.
+ */
+const quickAccess: Array<{ href: string; label: string; icon: LucideIcon; tone: string; isNew?: boolean }> = [
   { href: "/question-bank", label: "প্রশ্ন ব্যাংক", icon: BookOpenText, tone: "bg-blue-50 text-blue-600" },
   { href: "/preliminary", label: "প্রিলিমিনারি", icon: ListChecks, tone: "bg-rose-50 text-rose-500" },
+  { href: "/videos", label: "ভিডিও", icon: MonitorPlay, tone: "bg-red-50 text-red-500", isNew: true },
+  { href: "/messages", label: "মেসেজ", icon: MessageCircle, tone: "bg-cyan-50 text-cyan-600", isNew: true },
+  { href: "/billing", label: "প্রিমিয়াম", icon: Crown, tone: "bg-yellow-50 text-yellow-600", isNew: true },
   { href: "/confusions", label: "কনফিউশন", icon: CircleHelp, tone: "bg-emerald-50 text-emerald-600" },
   { href: "/notes", label: "নোটস", icon: NotebookPen, tone: "bg-orange-50 text-orange-500" },
   { href: "/plan", label: "স্টাডি প্ল্যান", icon: CalendarCheck, tone: "bg-violet-50 text-violet-600" },
   { href: "/jobs", label: "চাকরি", icon: BriefcaseBusiness, tone: "bg-pink-50 text-pink-500" },
   { href: "/progress", label: "প্রগতি", icon: ChartColumnIncreasing, tone: "bg-indigo-50 text-indigo-600" },
   { href: "/short-questions", label: "শর্ট প্রশ্ন", icon: FileText, tone: "bg-sky-50 text-sky-600" },
+  { href: "/subjects", label: "বিষয়", icon: BookOpen, tone: "bg-lime-50 text-lime-600" },
   { href: "/vocabulary", label: "Vocabulary", icon: Languages, tone: "bg-teal-50 text-teal-600" },
   { href: "/typing", label: "Typing Lab", icon: Keyboard, tone: "bg-amber-50 text-amber-600" },
+  { href: "/profile", label: "প্রোফাইল", icon: UserRound, tone: "bg-fuchsia-50 text-fuchsia-600" },
 ];
 
 const card = "rounded-3xl bg-white shadow-[0_6px_24px_-12px_rgba(15,23,42,0.15)]";
@@ -140,7 +153,10 @@ export function DashboardView({
           {quickAccess.map((item) => {
             const Icon = item.icon;
             return <Link key={item.href} href={item.href} className="group flex flex-col items-center gap-1.5 text-center transition active:scale-95 sm:rounded-3xl sm:bg-white sm:px-1 sm:py-5 sm:shadow-[0_6px_24px_-12px_rgba(15,23,42,0.15)] sm:hover:-translate-y-0.5">
-              <span className={cn("flex size-[clamp(48px,13.6vw,64px)] items-center justify-center rounded-[clamp(15px,4.2vw,20px)] ring-1 ring-white shadow-[0_6px_16px_-10px_rgba(15,23,42,0.35)] sm:shadow-none", item.tone)}><Icon className="size-[clamp(23px,6.4vw,30px)]" strokeWidth={2} /></span>
+              <span className={cn("relative flex size-[clamp(48px,13.6vw,64px)] items-center justify-center rounded-[clamp(15px,4.2vw,20px)] ring-1 ring-white shadow-[0_6px_16px_-10px_rgba(15,23,42,0.35)] sm:shadow-none", item.tone)}>
+                <Icon className="size-[clamp(23px,6.4vw,30px)]" strokeWidth={2} />
+                {item.isNew ? <span className="absolute -right-1.5 -top-1.5 rounded-full bg-rose-500 px-1.5 text-[9.5px] font-bold leading-4 text-white ring-2 ring-[#f4f6fb] sm:ring-white">নতুন</span> : null}
+              </span>
               <span className="w-full truncate px-0.5 text-[clamp(11px,3vw,15px)] font-medium leading-tight text-slate-700">{item.label}</span>
             </Link>;
           })}

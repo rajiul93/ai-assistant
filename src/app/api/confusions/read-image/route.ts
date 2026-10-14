@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { MAX_ATTACHMENT_BYTES, sniffType } from "@/lib/attachments";
+import { aiBlockedMessage } from "@/lib/ai-limits";
 import { checkAi } from "@/server/ai-access";
 import { callAI } from "@/server/assistant/ai";
 
@@ -21,8 +22,8 @@ const responseSchema = { type: "OBJECT", properties: { text: { type: "STRING" } 
 /** A photo of a page or a board → its text, word for word (or just the marked part), for a confusion or its clarification. */
 export async function POST(request: Request) {
   const user = await requireUser();
-  const { blocked } = await checkAi(user);
-  if (blocked) return Response.json({ error: blocked === "quota" ? "তোমার AI plan-এর ব্যবহার শেষ।" : "AI ব্যবহার করতে একটা plan লাগবে।" }, { status: 403 });
+  const { blocked } = await checkAi(user, "scan");
+  if (blocked) return Response.json({ error: aiBlockedMessage(blocked) }, { status: 403 });
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "ছবিটা পাঠানো যায়নি।" }, { status: 400 });
   const bytes = Buffer.from(parsed.data.data, "base64");

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { isAllowedType, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, MAX_TOTAL_ATTACHMENT_BYTES, sniffType } from "@/lib/attachments";
 import { requireUser } from "@/lib/auth";
 import { respond } from "@/server/assistant/respond";
+import { aiBlockedMessage } from "@/lib/ai-limits";
 import { checkAi } from "@/server/ai-access";
 
 const taskDraftSchema = z.object({
@@ -89,18 +90,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ type: "clarify", source: "fallback", reply });
     }
   }
-  const { blocked } = await checkAi(user);
+  const { blocked } = await checkAi(user, "message");
   if (blocked) {
-    const en = parsed.data.lang === "en";
-    const reply = blocked === "paused"
-      ? en ? "An admin has paused your AI for now. Contact the admin if you need it." : "Admin তোমার AI সাময়িকভাবে বন্ধ রেখেছে। দরকার হলে admin-এর সাথে যোগাযোগ করো।"
-      : blocked === "expired"
-      ? en ? "Your plan has run out. Choose a plan below to keep using the AI." : "তোমার plan-এর মেয়াদ শেষ। AI ব্যবহার চালিয়ে যেতে নিচ থেকে একটা plan বেছে নাও।"
-      : blocked === "quota"
-        ? en ? "Your plan's usage is used up. Buy another package — any days you have left carry over." : "তোমার plan-এর ব্যবহার শেষ। আরেকটা package কেনো — বাকি দিনের সাথে যোগ হবে।"
-        : en ? "To use the AI, choose a plan below." : "AI ব্যবহার করতে নিচ থেকে একটা plan বেছে নাও।";
-    // Offer plans in the chat — except when paused, which buying a plan wouldn't fix.
-    return NextResponse.json({ type: "clarify", source: "fallback", reply, aiLocked: blocked !== "paused" });
+    const reply = aiBlockedMessage(blocked, parsed.data.lang === "en" ? "en" : "bn");
+    // Offer plans in the chat — except when paused or for today's limit, which buying wouldn't fix.
+    return NextResponse.json({ type: "clarify", source: "fallback", reply, aiLocked: blocked !== "paused" && blocked !== "daily" });
   }
   // Newline-delimited JSON: {"type":"delta","text"} while the answer is being written (so the page
   // can show and speak it sentence by sentence), then one {"type":"final","reply"}.

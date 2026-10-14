@@ -20,7 +20,7 @@ function FriendPicker({ exclude, picked, onToggle, limit }: { exclude: Set<strin
   const friends = useQuery({ queryKey: ["friends"], queryFn: () => listFriendsOverview() });
   const list = (friends.data?.friends ?? []).filter((friend) => !exclude.has(friend.id));
   if (friends.isLoading) return <div className="h-24 animate-pulse rounded-xl bg-zinc-100" />;
-  if (!list.length) return <p className="rounded-xl border border-dashed border-zinc-300 px-4 py-6 text-center text-sm text-zinc-500">যোগ করার মতো কোনো friend নেই। আগে Friends ট্যাব থেকে friend যোগ করুন।</p>;
+  if (!list.length) return <p className="rounded-xl border border-dashed border-zinc-300 px-4 py-6 text-center text-sm text-zinc-500">যোগ করার মতো কোনো friend নেই। আগে Messages-এর উপরে “Friend” চেপে friend যোগ করুন।</p>;
   return <ul className="max-h-72 space-y-1 overflow-y-auto">
     {list.map((friend) => {
       const on = picked.has(friend.id);

@@ -67,7 +67,7 @@ const PROMPT = `তুমি বাংলাদেশের চাকরির �
 export async function POST(request: Request) {
   const user = await requireUser();
   if (!(await isAdminUser(user))) return Response.json({ error: "শুধু admin এটা ব্যবহার করতে পারেন।" }, { status: 403 });
-  const { blocked } = await checkAi(user);
+  const { blocked } = await checkAi(user, "suggestion");
   if (blocked) return Response.json({ error: "AI এখন ব্যবহার করা যাচ্ছে না।" }, { status: 403 });
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "কোন প্রশ্ন, বোঝা গেল না।" }, { status: 400 });

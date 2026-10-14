@@ -56,16 +56,11 @@ export async function getPlanStatus(userId: string): Promise<PlanStatus> {
   return { hasPlan: true, active: msLeft > 0, endsAt, tokensTotal, tokensUsed, tokensLeft: Math.max(0, tokensTotal - tokensUsed), daysLeft: Math.max(0, Math.ceil(msLeft / DAY_MS)), countingFrom: usageFrom };
 }
 
-/** Packages on sale, cheapest first within each plan. */
-export function listActivePackages() {
-  return prisma.planPackage.findMany({ where: { active: true }, orderBy: [{ planType: "asc" }, { sortOrder: "asc" }, { priceBdt: "asc" }] });
-}
-
 export function listPaymentAccounts() {
   return prisma.paymentAccount.findMany({ where: { enabled: true }, orderBy: { method: "asc" } });
 }
 
-export const methodLabels: Record<PaymentMethod, string> = { BKASH: "bKash", NAGAD: "Nagad" };
+export const methodLabels: Record<PaymentMethod, string> = { BKASH: "bKash", NAGAD: "Nagad", SSLCOMMERZ: "SSLCommerz" };
 
 /**
  * Approves a pending payment and adds its benefit. Runs in one transaction and only moves a
@@ -79,11 +74,20 @@ export async function approvePayment(paymentId: string, reviewer: string, note?:
     });
     if (!moved.count) throw new Error("This payment was already reviewed.");
     const payment = await tx.payment.findUniqueOrThrow({ where: { id: paymentId } });
-    const latest = await tx.entitlement.aggregate({ where: { userId: payment.userId }, _max: { endsAt: true } });
-    // The new period starts when the current one ends (or now, if none is running): no days are lost.
-    const startsAt = new Date(Math.max(Date.now(), latest._max.endsAt?.getTime() ?? 0));
+    // An old package payment (no price breakdown) opens every exam, as packages always did.
+    const legacy = payment.breakdown === null && !payment.trackIds.length;
+    const scope = legacy ? { allTracks: true, trackIds: [] as string[] } : { allTracks: payment.allTracks, trackIds: payment.trackIds };
+    // Renewing the same plan (tier and exams) while it runs continues after it, so no days are
+    // lost; a different plan starts now and runs alongside.
+    const sameKey = [...scope.trackIds].sort().join(",");
+    const running = await tx.entitlement.findMany({
+      where: { userId: payment.userId, endsAt: { gt: new Date() }, allTracks: scope.allTracks, payment: { planType: payment.planType } },
+      select: { endsAt: true, trackIds: true },
+    });
+    const latestSame = running.filter((row) => [...row.trackIds].sort().join(",") === sameKey).reduce((latest, row) => Math.max(latest, row.endsAt.getTime()), 0);
+    const startsAt = new Date(Math.max(Date.now(), latestSame));
     const endsAt = new Date(startsAt.getTime() + payment.durationDays * DAY_MS);
-    await tx.entitlement.create({ data: { userId: payment.userId, paymentId: payment.id, tokens: payment.tokens, startsAt, endsAt } });
+    await tx.entitlement.create({ data: { userId: payment.userId, paymentId: payment.id, tokens: payment.tokens, startsAt, endsAt, ...scope } });
     return { startsAt, endsAt };
   });
 }

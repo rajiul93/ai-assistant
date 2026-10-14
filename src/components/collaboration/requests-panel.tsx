@@ -42,7 +42,7 @@ export function RequestsPanel({ compact = false }: { compact?: boolean }) {
   const waitingShares = shares.data ?? [];
   if (compact && !incoming.length && !waitingShares.length) return null;
 
-  const card = "rounded-2xl border border-zinc-200 bg-white p-3";
+  const card = "rounded-3xl bg-white shadow-[0_6px_24px_-12px_rgba(15,23,42,0.15)] p-3";
   return <div className="space-y-4">
     {compact ? <h2 className="flex items-center gap-2 font-semibold"><Inbox className="size-4 text-indigo-600" /> আপনার উত্তরের অপেক্ষায়</h2> : null}
 
@@ -83,6 +83,6 @@ export function RequestsPanel({ compact = false }: { compact?: boolean }) {
 
     {previewing ? <SharePreviewDialog shareId={previewing} onClose={() => { setPreviewing(null); reload(); }} /> : null}
 
-    {!compact && !incoming.length && !outgoing.length && !waitingShares.length ? <p className="rounded-2xl border border-dashed border-zinc-300 bg-white px-4 py-10 text-center text-sm text-zinc-500">কোনো request নেই।</p> : null}
+    {!compact && !incoming.length && !outgoing.length && !waitingShares.length ? <p className="rounded-3xl border border-dashed border-blue-200 bg-white px-4 py-10 text-center text-sm text-zinc-500">কোনো request নেই।</p> : null}
   </div>;
 }
