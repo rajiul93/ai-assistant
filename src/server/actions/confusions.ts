@@ -3,20 +3,37 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
+import { htmlToPlainText, toRichHtml } from "@/lib/note-html";
 import { prisma } from "@/lib/prisma";
 
 /**
  * Confusion: doubts noted down to ask in class. Each one sits under Confusion until it is marked
  * Clear, optionally with what made it clear, and can be moved back if the doubt returns.
+ * Both texts are rich text from the Quill editor (math as formulas); older entries are plain text.
  */
 
+// The editor's HTML carries the drawn KaTeX of every formula (1–3 KB each), dropped on save, so the
+// limits that matter are on the written text (`richText`), not on what arrives.
 const confusionSchema = z.object({
   subjectId: z.string().nullable(),
   topic: z.string().trim().max(160),
   topicId: z.string().max(64).nullish(),
-  text: z.string().trim().min(1, "কী নিয়ে confusion লেখো").max(4000),
-  clarification: z.string().trim().max(8000).optional(),
+  text: z.string().max(200_000),
+  clarification: z.string().max(400_000).optional(),
 });
+
+/** Editor HTML (or plain text) → sanitized HTML; null when nothing is written. */
+function richText(value: string | undefined, maxChars: number, tooLong: string) {
+  const html = toRichHtml(value);
+  if (html && htmlToPlainText(html).length > maxChars) throw new Error(tooLong);
+  return html;
+}
+const confusionText = (value: string) => {
+  const html = richText(value, 4000, "Confusion ৪০০০ অক্ষরের মধ্যে লেখো।");
+  if (!html) throw new Error("কী নিয়ে confusion লেখো");
+  return html;
+};
+const clarificationText = (value: string | undefined) => richText(value, 8000, "ব্যাখ্যা ৮০০০ অক্ষরের মধ্যে লেখো।");
 
 async function ownedConfusion(userId: string, id: string) {
   const confusion = await prisma.confusion.findFirst({ where: { id, userId } });
@@ -53,7 +70,7 @@ export async function createConfusion(input: unknown) {
   const data = confusionSchema.parse(input);
   const subjectId = await ownedSubject(user.id, data.subjectId);
   const topicId = await ownedTopic(user.id, data.topicId, subjectId);
-  await prisma.confusion.create({ data: { userId: user.id, subjectId, topicId, topic: data.topic || null, text: data.text } });
+  await prisma.confusion.create({ data: { userId: user.id, subjectId, topicId, topic: data.topic || null, text: confusionText(data.text) } });
   revalidatePath("/confusions");
 }
 
@@ -69,8 +86,8 @@ export async function updateConfusion(id: string, input: unknown) {
       subjectId,
       topicId,
       topic: data.topic || null,
-      text: data.text,
-      ...(data.clarification !== undefined ? { clarification: data.clarification || null } : {}),
+      text: confusionText(data.text),
+      ...(data.clarification !== undefined ? { clarification: clarificationText(data.clarification) } : {}),
     },
   });
   revalidatePath("/confusions");
@@ -81,11 +98,11 @@ export async function setConfusionStatus(id: string, status: "CONFUSION" | "CLEA
   const user = await requireUser();
   const confusion = await ownedConfusion(user.id, id);
   const next = z.enum(["CONFUSION", "CLEAR"]).parse(status);
-  const note = z.string().trim().max(8000).optional().parse(clarification);
+  const note = z.string().max(400_000).optional().parse(clarification);
   await prisma.confusion.update({
     where: { id: confusion.id },
     data: next === "CLEAR"
-      ? { status: next, clearedAt: new Date(), ...(note !== undefined ? { clarification: note || null } : {}) }
+      ? { status: next, clearedAt: new Date(), ...(note !== undefined ? { clarification: clarificationText(note) } : {}) }
       : { status: next, clearedAt: null },
   });
   revalidatePath("/confusions");

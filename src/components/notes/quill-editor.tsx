@@ -4,10 +4,16 @@ import { useEffect, useImperativeHandle, useRef } from "react";
 import type Quill from "quill";
 import katex from "katex";
 import "quill/dist/quill.snow.css";
+import { renderLatex, splitMath } from "@/lib/math";
 
 export type QuillHandle = {
   /** Inserts HTML at the cursor (or at the end when the editor isn't focused). */
   insertHtml: (html: string) => void;
+  /**
+   * Inserts plain text (dictation, text read from a photo) at the cursor or the end, with `$…$`
+   * as formulas. It is kept apart from what is already there: after a space, or on a line of its own.
+   */
+  insertText: (text: string, onNewLine?: boolean) => void;
   getText: () => string;
 };
 
@@ -47,6 +53,25 @@ export function QuillEditor({ initialHtml, placeholder, onChange, handleRef }: {
       quill.clipboard.dangerouslyPasteHTML(at, html, "user");
       quill.setSelection(at + quill.clipboard.convert({ html }).length(), 0, "silent");
     },
+    insertText: (text, onNewLine = false) => {
+      const quill = quillRef.current;
+      if (!quill || !text) return;
+      const range = quill.getSelection();
+      let at = range?.index ?? Math.max(0, quill.getLength() - 1);
+      // A formula reads back as "", so it gets a space after it like a word.
+      const before = at > 0 ? quill.getText(at - 1, 1) : "\n";
+      if (before !== "\n" && (onNewLine || !/\s/.test(before))) {
+        quill.insertText(at, onNewLine ? "\n" : " ", "user");
+        at += 1;
+      }
+      for (const part of splitMath(text)) {
+        if (part.type === "math") quill.insertEmbed(at, "formula", part.value, "user");
+        else quill.insertText(at, part.value, "user");
+        at += part.type === "math" ? 1 : part.value.length;
+      }
+      // Moving the cursor would focus the editor and open the keyboard on a phone; only when it had focus.
+      if (range) quill.setSelection(at, 0, "silent");
+    },
     getText: () => quillRef.current?.getText() ?? "",
   }), []);
 
@@ -73,6 +98,22 @@ export function QuillEditor({ initialHtml, placeholder, onChange, handleRef }: {
           clipboard: { matchers: [["IMG", () => new Delta()]] },
         },
       });
+      // The formula box shows the math as it will look while its LaTeX is typed.
+      const tooltip = (quill.theme as unknown as { tooltip: { root: HTMLElement; textbox: HTMLInputElement | null } }).tooltip;
+      if (tooltip.textbox) {
+        const textbox = tooltip.textbox;
+        textbox.dataset.formula = "\\frac{1}{2}   x^{2}   \\sqrt{3}";
+        const preview = document.createElement("div");
+        preview.className = "formula-preview";
+        tooltip.root.appendChild(preview);
+        const draw = () => {
+          const latex = textbox.value.trim();
+          preview.innerHTML = tooltip.root.dataset.mode === "formula" && latex ? renderLatex(latex) : "";
+        };
+        textbox.addEventListener("input", draw);
+        // Opening, closing or switching the box (link ↔ formula) redraws it.
+        new MutationObserver(draw).observe(tooltip.root, { attributes: true, attributeFilter: ["class", "data-mode"] });
+      }
       quill.setContents(quill.clipboard.convert({ html: initialRef.current }), "silent");
       quill.history.clear();
       quill.on("text-change", () => onChangeRef.current(quill.root.innerHTML, quill.getText()));

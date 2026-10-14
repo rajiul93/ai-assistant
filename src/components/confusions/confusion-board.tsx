@@ -4,7 +4,8 @@ import { useRef, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CalendarDays, CheckCircle2, CircleHelp, ImageIcon, Lightbulb, Loader2, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { MathText } from "@/components/math-text";
+import { MathText, RichHtml } from "@/components/math-text";
+import { QuillEditor, type QuillHandle } from "@/components/notes/quill-editor";
 import { DictateButton } from "@/components/preliminary/question-set-form";
 import {
   AlertDialog,
@@ -17,6 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatDate } from "@/lib/dayjs";
+import { htmlToPlainText, isRichHtml, toEditorHtml } from "@/lib/note-html";
 import { useBestMic } from "@/lib/use-best-mic";
 import { SubjectTopicFilter, TopicSelect, useSubjectTopicFilter } from "@/components/subject-topic-filter";
 import { topicPath, type TopicNode } from "@/lib/subject-filter";
@@ -57,8 +59,11 @@ function useDictation(insert: (target: string, said: string) => void) {
   return { supported: mic.supported, dictating, heard: heard && heard !== "…" ? heard : "", dictate, stop: () => { mic.stop(); end(); } };
 }
 
-const joinSpoken = (current: string, said: string) => (current.trim() ? `${current.trimEnd()} ${said}` : said);
-const joinRead = (current: string, read: string) => (current.trim() ? `${current.trimEnd()}\n${read}` : read);
+/** What the editor holds, or "" when nothing is written (a formula alone counts). */
+const written = (html: string, text: string) => (text.trim() || html.includes("ql-formula") ? html : "");
+/** Rich text, or plain text from before the editor, as one line of plain text. */
+const plainText = (text: string) => (isRichHtml(text) ? htmlToPlainText(text) : text);
+const placeholder = "কী নিয়ে confusion? গণিত লিখতে fx বোতাম চাপো";
 
 /** A phone photo scaled down to a JPEG the AI reads well and the upload limit allows (base64, no prefix). */
 async function photoToJpeg(file: File, maxSide = 2000) {
@@ -114,15 +119,19 @@ function ConfusionDialog({ item, mode, subjects, topics, onClose }: { item: Item
   const [topicId, setTopicId] = useState(item.topicId ?? "");
   // Older entries have a free-text topic; it's kept as it is.
   const topic = item.topic ?? "";
-  const [text, setText] = useState(item.text);
-  const [clarification, setClarification] = useState(item.clarification ?? "");
+  // Both are editor HTML; older plain-text entries are turned into paragraphs once, here.
+  const [initial] = useState(() => ({ text: toEditorHtml(item.text), clarification: toEditorHtml(item.clarification) }));
+  const [text, setText] = useState(initial.text);
+  const [clarification, setClarification] = useState(initial.clarification);
+  const textEditor = useRef<QuillHandle>(null);
+  const clarificationEditor = useRef<QuillHandle>(null);
   const [pending, start] = useTransition();
   const voice = useDictation((target, said) => {
-    if (target === "dialog-text") setText((value) => joinSpoken(value, said));
-    if (target === "dialog-clarification") setClarification((value) => joinSpoken(value, said));
+    if (target === "dialog-text") textEditor.current?.insertText(said);
+    if (target === "dialog-clarification") clarificationEditor.current?.insertText(said);
   });
   const showClarification = mode === "clear" || item.status === "CLEAR";
-  const photo = useImageText("clarification", (read) => setClarification((value) => joinRead(value, read)));
+  const photo = useImageText("clarification", (read) => clarificationEditor.current?.insertText(read, true));
 
   const save = () => start(async () => {
     try {
@@ -145,7 +154,7 @@ function ConfusionDialog({ item, mode, subjects, topics, onClose }: { item: Item
     <DialogContent className="sm:max-w-lg">
       <DialogHeader><DialogTitle>{mode === "clear" ? "Clear হয়েছে — কী বুঝলে?" : "Confusion edit করো"}</DialogTitle></DialogHeader>
       {mode === "clear"
-        ? <div className="rounded-xl bg-amber-50 px-3 py-2.5 text-sm text-amber-950"><MathText text={item.text} /></div>
+        ? <div className="rounded-xl bg-amber-50 px-3 py-2.5 text-sm text-amber-950"><RichHtml html={initial.text} className="confusion-text" /></div>
         : <div className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block space-y-1.5"><span className="text-xs font-medium text-zinc-600">Subject</span>
@@ -156,19 +165,18 @@ function ConfusionDialog({ item, mode, subjects, topics, onClose }: { item: Item
             </label>
             <label className="block space-y-1.5"><span className="text-xs font-medium text-zinc-600">Topic (ইচ্ছা হলে)</span><TopicSelect subjectId={subjectId} topics={topics} value={topicId} onChange={setTopicId} className={cn(field, "h-11 disabled:bg-zinc-50 disabled:text-zinc-400")} />{topic ? <span className="block text-xs text-zinc-500">আগে লেখা: {topic}</span> : null}</label>
           </div>
-          <label className="block space-y-1.5"><span className="text-xs font-medium text-zinc-600">কী নিয়ে confusion</span>
-            <div className="relative">
-              <textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} className={cn(field, "resize-y py-2.5 leading-relaxed", voice.supported && "pr-11")} />
-              {voice.supported ? <DictateButton active={voice.dictating === "dialog-text"} onClick={() => voice.dictate("dialog-text")} label="Confusion" className="absolute right-1.5 top-1.5" /> : null}
-            </div>
-          </label>
+          {/* A div, not a label: a label would pass clicks in the editor on to its first toolbar button. */}
+          <div className="space-y-1.5">
+            <div className="flex min-h-8 items-center justify-between gap-2"><span className="text-xs font-medium text-zinc-600">কী নিয়ে confusion</span>
+              {voice.supported ? <DictateButton active={voice.dictating === "dialog-text"} onClick={() => voice.dictate("dialog-text")} label="Confusion" /> : null}</div>
+            <div className="task-editor"><QuillEditor handleRef={textEditor} initialHtml={initial.text} placeholder={placeholder} onChange={(html, plain) => setText(written(html, plain))} /></div>
+          </div>
         </div>}
-      {showClarification ? <label className="block space-y-1.5"><span className="text-xs font-medium text-emerald-700">কীভাবে clear হলো (ইচ্ছা হলে)</span>
-        <div className="relative">
-          <textarea value={clarification} onChange={(event) => setClarification(event.target.value)} rows={4} autoFocus={mode === "clear"} placeholder="স্যার/ম্যাম যা বুঝিয়েছেন, বা নিজে যা বুঝলে — পরে রিভিশনে কাজে লাগবে" className={cn(field, "resize-y border-emerald-200 py-2.5 leading-relaxed", voice.supported && "pr-11")} />
-          {voice.supported ? <DictateButton active={voice.dictating === "dialog-clarification"} onClick={() => voice.dictate("dialog-clarification")} label="ব্যাখ্যা" className="absolute right-1.5 top-1.5" /> : null}
-        </div>
-      </label> : null}
+      {showClarification ? <div className="space-y-1.5">
+        <div className="flex min-h-8 items-center justify-between gap-2"><span className="text-xs font-medium text-emerald-700">কীভাবে clear হলো (ইচ্ছা হলে)</span>
+          {voice.supported ? <DictateButton active={voice.dictating === "dialog-clarification"} onClick={() => voice.dictate("dialog-clarification")} label="ব্যাখ্যা" /> : null}</div>
+        <div className="task-editor"><QuillEditor handleRef={clarificationEditor} initialHtml={initial.clarification} placeholder="স্যার/ম্যাম যা বুঝিয়েছেন, বা নিজে যা বুঝলে — পরে রিভিশনে কাজে লাগবে" onChange={(html, plain) => setClarification(written(html, plain))} /></div>
+      </div> : null}
       {showClarification ? <div className="flex items-center justify-between gap-2">{voice.dictating ? <Listening heard={voice.heard} /> : <span className="text-xs text-zinc-500">বোর্ড বা খাতার ছবি থেকেও লেখা যায়</span>}<PhotoButton reading={photo.reading} onClick={photo.pick} />{photo.field}</div>
         : voice.dictating ? <Listening heard={voice.heard} /> : null}
       <button type="button" onClick={save} disabled={pending || photo.reading || !text.trim()} className={cn("h-11 w-full rounded-xl text-sm font-semibold text-white disabled:opacity-50", mode === "clear" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-zinc-950 hover:bg-zinc-800")}>
@@ -194,14 +202,14 @@ function ConfusionCard({ item, place, onEdit, onClear, onDelete }: { item: Item;
           {item.topic && !item.topicId ? <span>· {item.topic}</span> : null}
           <span className="flex items-center gap-1">· <CalendarDays className="size-3.5" />{formatDate(item.createdAt)}</span>
         </p>
-        <p className="mt-1.5 whitespace-pre-line font-medium leading-relaxed"><MathText text={item.text} /></p>
+        <RichHtml html={toEditorHtml(item.text)} className="confusion-text mt-1.5 text-[0.95rem] text-zinc-950" />
       </div>
       <div className="flex shrink-0 items-center gap-0.5">
         <button type="button" onClick={onEdit} aria-label="Edit" className="flex size-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"><Pencil className="size-4" /></button>
         <button type="button" onClick={onDelete} aria-label="Delete" className="flex size-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-red-50 hover:text-red-700"><Trash2 className="size-4" /></button>
       </div>
     </div>
-    {clear && item.clarification ? <div className="mt-3 flex gap-2 rounded-xl bg-emerald-50 px-3 py-2.5 text-sm text-emerald-950"><Lightbulb className="mt-0.5 size-4 shrink-0 text-emerald-600" /><p className="min-w-0 whitespace-pre-line"><MathText text={item.clarification} /></p></div> : null}
+    {clear && item.clarification ? <div className="mt-3 flex gap-2 rounded-xl bg-emerald-50 px-3 py-2.5 text-sm text-emerald-950"><Lightbulb className="mt-0.5 size-4 shrink-0 text-emerald-600" /><RichHtml html={toEditorHtml(item.clarification)} className="confusion-text min-w-0 flex-1" /></div> : null}
     <div className="mt-3 flex flex-wrap items-center gap-2">
       {clear
         ? <>
@@ -221,20 +229,25 @@ export function ConfusionBoard({ items, subjects, topics = [] }: { items: Item[]
   const active: Status = searchParams.get("status")?.toUpperCase() === "CLEAR" ? "CLEAR" : "CONFUSION";
   const [dialog, setDialog] = useState<{ item: Item; mode: "edit" | "clear" } | null>(null);
   const [deleting, setDeleting] = useState<Item | null>(null);
+  const deletingText = deleting ? plainText(deleting.text) : "";
 
   // Quick add.
   const [subjectId, setSubjectId] = useState("");
   const [topicId, setTopicId] = useState("");
   const [text, setText] = useState("");
+  // Quill is uncontrolled: a new key gives an empty editor after adding.
+  const [editorKey, setEditorKey] = useState(0);
+  const editor = useRef<QuillHandle>(null);
   const [adding, startAdding] = useTransition();
   const voice = useDictation((target, said) => {
-    if (target === "add-text") setText((value) => joinSpoken(value, said));
+    if (target === "add-text") editor.current?.insertText(said);
   });
-  const photo = useImageText("confusion", (read) => setText((value) => joinRead(value, read)));
+  const photo = useImageText("confusion", (read) => editor.current?.insertText(read, true));
   const add = () => startAdding(async () => {
     try {
       await createConfusion({ subjectId: subjectId || null, topicId: topicId || null, topic: "", text });
       setText("");
+      setEditorKey((key) => key + 1);
       toast.success("Confusion লেখা হলো — ক্লাসে জিজ্ঞেস করো");
       if (active !== "CONFUSION") router.replace(`${pathname}?status=confusion`, { scroll: false });
       router.refresh();
@@ -274,12 +287,12 @@ export function ConfusionBoard({ items, subjects, topics = [] }: { items: Item[]
         </select>
         <TopicSelect subjectId={subjectId} topics={topics} value={topicId} onChange={setTopicId} className={cn(field, "h-11 disabled:bg-zinc-50 disabled:text-zinc-400")} />
       </div>
-      <div className="relative">
-        <textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} placeholder={voice.supported ? "কী নিয়ে confusion? লেখো বা 🎤 চেপে বলো" : "কী নিয়ে confusion?"} aria-label="Confusion" className={cn(field, "resize-y py-2.5 leading-relaxed", voice.supported && "pr-11")} />
-        {voice.supported ? <DictateButton active={voice.dictating === "add-text"} onClick={() => voice.dictate("add-text")} label="Confusion" className="absolute right-1.5 top-1.5" /> : null}
-      </div>
+      <div className="task-editor"><QuillEditor key={editorKey} handleRef={editor} initialHtml="" placeholder={placeholder} onChange={(html, plain) => setText(written(html, plain))} /></div>
       <div className="flex items-center justify-between gap-3">
-        {voice.dictating ? <Listening heard={voice.heard} /> : <PhotoButton reading={photo.reading} onClick={photo.pick} />}
+        <div className="flex min-w-0 items-center gap-1.5">
+          {voice.supported ? <DictateButton active={voice.dictating === "add-text"} onClick={() => voice.dictate("add-text")} label="Confusion" /> : null}
+          {voice.dictating ? <Listening heard={voice.heard} /> : <PhotoButton reading={photo.reading} onClick={photo.pick} />}
+        </div>
         {photo.field}
         <button type="button" onClick={add} disabled={adding || photo.reading || !text.trim()} className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl bg-zinc-950 px-4 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50"><Plus className="size-4" /> {adding ? "লেখা হচ্ছে…" : "যোগ করো"}</button>
       </div>
@@ -318,7 +331,7 @@ export function ConfusionBoard({ items, subjects, topics = [] }: { items: Item[]
     <AlertDialog open={Boolean(deleting)} onOpenChange={(open) => !open && setDeleting(null)}>
       <AlertDialogContent>
         <AlertDialogTitle>এটা মুছে ফেলবে?</AlertDialogTitle>
-        <AlertDialogDescription>“{deleting?.text.slice(0, 80)}{(deleting?.text.length ?? 0) > 80 ? "…" : ""}” মুছে যাবে। ফেরানো যাবে না।</AlertDialogDescription>
+        <AlertDialogDescription>“<MathText text={`${deletingText.slice(0, 80)}${deletingText.length > 80 ? "…" : ""}`} />” মুছে যাবে। ফেরানো যাবে না।</AlertDialogDescription>
         <AlertDialogFooter>
           <AlertDialogCancel>রাখো</AlertDialogCancel>
           <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={() => {

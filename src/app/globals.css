@@ -103,6 +103,10 @@ body {
 .note-editor .ql-editor h3 { font-size: 1.1rem; font-weight: 600; margin: 0.8rem 0 0.3rem; }
 .note-editor .ql-editor blockquote { border-left: 3px solid var(--color-zinc-300); color: var(--color-zinc-600); }
 
+/* The formula box (∑ button): the math drawn under the LaTeX as it is typed. */
+.note-editor .ql-tooltip .formula-preview { max-width: 16rem; overflow-x: auto; padding: 0.5rem 0 0.25rem; font-size: 1.1rem; color: var(--color-zinc-900); }
+.note-editor .ql-tooltip .formula-preview:empty { display: none; }
+
 /* ---------- Phone ---------- */
 
 /* iOS Safari zooms the page when focusing a field smaller than 16px; keep fields at 16px on phones. */
@@ -257,7 +261,7 @@ html {
   .note-editor .ql-editor { min-height: 55dvh; padding: 1rem 0; font-size: 16px; }
 }
 
-/* The task form's editor is a boxed field in a dialog, not a full page. */
+/* The task form's and Confusion's editors are boxed fields (often in a dialog), not a full page. */
 .task-editor .note-editor .ql-editor { min-height: 8rem; max-height: 50dvh; overflow-y: auto; padding: 0.75rem 1rem; }
 @media (max-width: 1023px) {
   .task-editor .note-editor .ql-toolbar.ql-snow { position: static; margin: 0; border: 1px solid var(--color-zinc-200); border-radius: 0.75rem 0.75rem 0 0; }
@@ -278,6 +282,6 @@ html {
 .rich-view.ql-editor h3 { font-size: 0.9rem; font-weight: 600; margin: 0.75rem 0 0.25rem; color: var(--color-zinc-900); }
 .rich-view.ql-editor > :first-child { margin-top: 0; }
 .rich-view.ql-editor li { padding-left: 1.25em; }
-/* Solutions and explanations (BookText): the box around them already pads, and they keep its colour. */
-.book-text .rich-view.ql-editor { padding: 0.125rem 0 0; color: inherit; font-size: inherit; }
+/* Solutions and explanations (BookText), confusions: the box around them already pads, and they keep its colour. */
+.book-text .rich-view.ql-editor, .confusion-text .rich-view.ql-editor { padding: 0.125rem 0 0; color: inherit; font-size: inherit; }
 .book-text .rich-view.ql-editor p + p { margin-top: 0.375rem; }
