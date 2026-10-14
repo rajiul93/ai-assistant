@@ -31,14 +31,15 @@ function useNow() {
   return useSyncExternalStore(subscribe, () => nowMs, () => null);
 }
 
-// Short labels keep all six units in one row on a phone.
+// Phones show only years, months and days (the card is half the screen wide); hours, minutes and
+// seconds join from the sm breakpoint.
 const units = [
-  { key: "years", label: "Years", short: "Yrs" },
-  { key: "months", label: "Months", short: "Mos" },
-  { key: "days", label: "Days", short: "Days" },
-  { key: "hours", label: "Hours", short: "Hrs" },
-  { key: "minutes", label: "Minutes", short: "Min" },
-  { key: "seconds", label: "Seconds", short: "Sec" },
+  { key: "years", label: "Years", short: "Yrs", phone: true },
+  { key: "months", label: "Months", short: "Mos", phone: true },
+  { key: "days", label: "Days", short: "Days", phone: true },
+  { key: "hours", label: "Hours", short: "Hrs", phone: false },
+  { key: "minutes", label: "Minutes", short: "Min", phone: false },
+  { key: "seconds", label: "Seconds", short: "Sec", phone: false },
 ] as const;
 
 /**
@@ -76,8 +77,8 @@ export function DeadlineCountdown({ deadline, dateOfBirth, ageLimitYears }: { de
       <p className="text-xl font-bold text-red-700 sm:text-2xl">{dateOfBirth ? `You've reached ${ageLimitYears}` : "Deadline passed"}</p>
       <p className="mt-1 text-sm text-red-800/80">লক্ষ্য বদলালে <Link href="/plan" className="underline underline-offset-4">Study Plan</Link> ঠিক করে নিন।</p>
     </div> : <>
-      <dl className="mt-[clamp(10px,3vw,18px)] grid grid-cols-6 gap-[clamp(4px,1.3vw,10px)]">
-        {units.map((unit) => <div key={unit.key} className="flex min-w-0 flex-col-reverse rounded-[clamp(8px,2.4vw,14px)] bg-white/85 px-0.5 pb-[clamp(5px,1.6vw,10px)] pt-[clamp(6px,2vw,12px)] text-center">
+      <dl className="mt-[clamp(10px,3vw,18px)] grid grid-cols-3 gap-[clamp(4px,1.3vw,10px)] sm:grid-cols-6">
+        {units.map((unit) => <div key={unit.key} className={cn("min-w-0 flex-col-reverse rounded-[clamp(8px,2.4vw,14px)] bg-white/85 px-0.5 pb-[clamp(5px,1.6vw,10px)] pt-[clamp(6px,2vw,12px)] text-center", unit.phone ? "flex" : "hidden sm:flex")}>
           <dt className="mt-[clamp(2px,0.6vw,4px)] text-[clamp(8px,2vw,11px)] font-medium uppercase tracking-wide text-slate-500">{unit.short}</dt>
           <dd className="text-[clamp(13px,3.8vw,28px)] font-semibold tabular-nums leading-none text-slate-900">
             {parts ? String(parts[unit.key]).padStart(unit.key === "years" ? 1 : 2, "0") : "–"}
