@@ -13,7 +13,7 @@ import { dueRevisionCount } from "@/lib/revisions";
 import { htmlToPlainText, isRichHtml, toEditorHtml } from "@/lib/note-html";
 import { MathText, RichHtml } from "@/components/math-text";
 import "quill/dist/quill.snow.css";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -167,6 +167,9 @@ function TaskCard({ task, todayStart, now, timerRunning, onStart, onStatus, onEd
     </div>
   </article>;
 }
+
+/** The task sheet: no padding (the form lays itself out), rounded like the home cards, scrolls inside. */
+const taskSheet = "flex flex-col overflow-hidden p-0 pt-0 pb-0 sm:max-w-md sm:rounded-3xl sm:border-slate-200 sm:pb-0 sm:pt-0";
 
 export function TaskBoard({
   initialTasks,
@@ -386,11 +389,9 @@ export function TaskBoard({
         <RevisionManager tasks={tasksQuery.data} todayMs={now} />
       )}
 
+      {/* The form brings its own header and a save bar pinned to the bottom of the sheet. */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>নতুন task</DialogTitle>
-          </DialogHeader>
+        <DialogContent className={taskSheet}>
           <TaskForm
             subjects={subjects}
             topics={topics}
@@ -400,10 +401,7 @@ export function TaskBoard({
       </Dialog>
 
       <Dialog open={Boolean(editing)} onOpenChange={(open) => !open && setEditing(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Task বদলান</DialogTitle>
-          </DialogHeader>
+        <DialogContent className={taskSheet}>
           {editing ? (
             <TaskForm
               task={editing}
