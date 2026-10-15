@@ -52,7 +52,6 @@ export default async function DashboardPage() {
       </Link>
     ) : null}
     <DashboardView
-      longTermDeadline={plan?.longTermDeadline ?? null}
       dateOfBirth={plan?.dateOfBirth ?? null}
       ageLimitYears={plan?.ageLimitYears ?? 34}
       preparationDeadline={plan?.preparationDeadline ?? null}

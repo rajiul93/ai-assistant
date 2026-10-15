@@ -33,8 +33,9 @@ export const topicSchema = z.object({
 });
 
 export const studyPlanSchema = z.object({
-  longTermDeadline: z.string().min(1, "Long-term deadline is required"),
-  preparationDeadline: z.string().min(1, "Preparation deadline is required"),
+  /** No longer asked by the form (owner, 2026-10-15); still accepted from older clients. */
+  longTermDeadline: z.string().optional().or(z.literal("")),
+  preparationDeadline: z.string().min(1, "প্রস্তুতি শেষের তারিখ দাও"),
   dailyStudyTargetHours: z.coerce.number().min(0.5).max(16),
   dateOfBirth: z
     .string()

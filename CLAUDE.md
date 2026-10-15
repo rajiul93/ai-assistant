@@ -109,6 +109,11 @@ alone. Record decisions and their reasons; don't restate code.
 - `User` (firebaseUid, email, role, status, AI flags) owns almost everything (`onDelete: Cascade`).
 - Study: `Subject` → `Topic` (tree, per user, `@@unique([userId, name])` on Subject), `Task`,
   `StudySession`, `StudyPlan`, `DailyPlanStart`, `Note` (+ `TaskNote` links).
+  `StudyPlan.longTermDeadline` is legacy (owner removed "চূড়ান্ত লক্ষ্য" from the form, 2026-10-15): the
+  column is NOT NULL, so saving mirrors `preparationDeadline` into it and nothing shows it. The
+  dashboard countdown runs to the age limit (birth date given) or else to the preparation deadline;
+  days left to the preparation deadline show on /plan and on the dashboard. Dropping the column
+  needs a migration (ask first).
 - Question sets: `QuestionSet` + `Question` + `TestAttempt` (Preliminary, MCQ);
   `ShortQuestionSet` + `ShortQuestion` + `ShortTestAttempt` (self-marked). Both use
   `QuestionSetStatus` TODO → DOING → TESTING → DONE; answers never reach the page during TESTING.
