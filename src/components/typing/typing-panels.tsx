@@ -38,10 +38,11 @@ export function LearnPanel({ language }: PanelProps) {
   return (
     <section className="grid gap-6 lg:grid-cols-2">
       <div className="space-y-4">
-        <div className="flex flex-wrap gap-2">
+        {/* One line: just the group's name (the English subtitle was noise on phones). */}
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
           {groups.map((item, index) => (
-            <button key={item.title} onClick={() => { setGroupIndex(index); goTo(0); }} className={chip(groupIndex === index)}>
-              {item.title} <span className="text-xs opacity-70">· {item.subtitle}</span>
+            <button key={item.title} onClick={() => { setGroupIndex(index); goTo(0); }} title={item.subtitle} className={`shrink-0 whitespace-nowrap ${chip(groupIndex === index)}`}>
+              {item.title}
             </button>
           ))}
         </div>
@@ -50,18 +51,23 @@ export function LearnPanel({ language }: PanelProps) {
             <button key={item} onClick={() => goTo(index)} className={`grid size-10 place-items-center rounded border text-lg ${lesson === index ? "border-emerald-700 bg-emerald-50" : "border-zinc-200 bg-white"}`}>{item}</button>
           ))}
         </div>
-        <div className="flex items-center gap-4 border-l-2 border-emerald-500 bg-white py-3 pl-4">
-          <span className="text-5xl">{character}</span>
-          <span className="text-sm text-zinc-600">{keys.length ? keys.map(formatKey).join("  →  ") : "—"}</span>
-        </div>
-        <TypingInput value={typed} onChange={setTyped} bijoy={language === "bn"} placeholder={language === "bn" ? "উপরের কী চেপে অক্ষরটি লিখুন" : "Type the highlighted key"} />
-        <div className="flex items-center justify-between">
-          <span role="status" className={`text-sm ${correct ? "text-emerald-700" : "text-zinc-500"}`}>
-            {correct ? "সঠিক হয়েছে!" : typed ? "আবার চেষ্টা করুন" : `${lesson + 1} / ${group.items.length}`}
-          </span>
-          <div className="flex gap-3">
-            <button onClick={() => setTyped("")} className="text-sm text-zinc-500">Clear</button>
-            <button onClick={() => goTo((lesson + 1) % group.items.length)} className="text-emerald-800">Next →</button>
+        {/* One card: the letter and its keys on the left, the typing box and controls beside it. */}
+        <div className={`flex items-stretch gap-3 rounded-2xl border-l-4 bg-white p-3 transition-colors ${correct ? "border-emerald-500 bg-emerald-50/60" : "border-emerald-500"}`}>
+          <div className="flex w-[34%] shrink-0 flex-col items-center justify-center text-center">
+            <span className="text-5xl leading-tight">{character}</span>
+            <span className="mt-1 text-[12px] font-medium text-zinc-600">{keys.length ? keys.map(formatKey).join(" → ") : "—"}</span>
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col justify-center gap-2">
+            <TypingInput value={typed} onChange={setTyped} bijoy={language === "bn"} placeholder={language === "bn" ? "এখানে লিখুন" : "Type here"} className="text-center" />
+            <div className="flex items-center justify-between gap-2 text-[13px]">
+              <span role="status" className={correct ? "font-semibold text-emerald-700" : typed ? "text-amber-700" : "text-zinc-500"}>
+                {correct ? "সঠিক!" : typed ? "আবার চেষ্টা" : `${lesson + 1}/${group.items.length}`}
+              </span>
+              <span className="flex items-center gap-3">
+                <button onClick={() => setTyped("")} className="text-zinc-500">Clear</button>
+                <button onClick={() => goTo((lesson + 1) % group.items.length)} className="font-semibold text-emerald-800">Next →</button>
+              </span>
+            </div>
           </div>
         </div>
       </div>
