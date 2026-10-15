@@ -21,7 +21,7 @@ export default function LoginPage() {
   const configured = isFirebaseClientConfigured();
 
   return (
-    <div className="flex min-h-dvh flex-col bg-[#f4f6fb] lg:grid lg:grid-cols-[1.1fr_1fr]">
+    <div className="flex min-h-dvh flex-col bg-[#f3f3ef] lg:grid lg:grid-cols-[1.1fr_1fr]">
       {/* Banner */}
       <section className="relative overflow-hidden bg-linear-to-br from-[#3f6ef3] via-[#5a87f8] to-[#8fa6fb] px-6 pb-20 pt-[calc(1.5rem+env(safe-area-inset-top))] text-white lg:flex lg:flex-col lg:justify-between lg:px-14 lg:py-12">
         <div aria-hidden className="pointer-events-none absolute -left-16 -top-20 size-72 rounded-full bg-white/10 blur-3xl" />

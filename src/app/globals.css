@@ -1,8 +1,26 @@
 @import "tailwindcss";
 
 :root {
-  --background: #fafafa;
-  --foreground: #09090b;
+  --background: #f3f3ef;
+  --foreground: #1f2329;
+}
+
+/* ---------- Easy on the eyes (owner, 2026-10-15) ----------
+ * Pure white and near-black make the most glare and the hardest contrast for long study hours.
+ * Every Tailwind colour reads a --color-* variable, so these few overrides soften the whole app at
+ * once: white surfaces become a soft paper tone, the page a warm light grey, and the darkest text a
+ * deep grey (still well above WCAG AA contrast). Change these, not the components.
+ */
+:root {
+  --color-white: #fdfdfa;
+  --color-zinc-50: #f6f6f2;
+  --color-slate-50: #f5f6f3;
+  --color-slate-100: #eef0ec;
+  --color-zinc-100: #efefeb;
+  --color-zinc-900: #262a30;
+  --color-zinc-950: #1f2329;
+  --color-slate-900: #222833;
+  --color-slate-950: #1c212b;
 }
 
 @theme inline {

@@ -154,7 +154,7 @@ export function DashboardView({
             return <Link key={item.href} href={item.href} className="group flex flex-col items-center gap-1.5 text-center transition active:scale-95 sm:rounded-3xl sm:bg-white sm:px-1 sm:py-5 sm:shadow-[0_6px_24px_-12px_rgba(15,23,42,0.15)] sm:hover:-translate-y-0.5">
               <span className={cn("relative flex size-[clamp(48px,13.6vw,64px)] items-center justify-center rounded-[clamp(15px,4.2vw,20px)] ring-1 ring-white shadow-[0_6px_16px_-10px_rgba(15,23,42,0.35)] sm:shadow-none", item.tone)}>
                 <Icon className="size-[clamp(23px,6.4vw,30px)]" strokeWidth={2} />
-                {item.isNew ? <span className="absolute -right-1.5 -top-1.5 rounded-full bg-rose-500 px-1.5 text-[9.5px] font-bold leading-4 text-white ring-2 ring-[#f4f6fb] sm:ring-white">নতুন</span> : null}
+                {item.isNew ? <span className="absolute -right-1.5 -top-1.5 rounded-full bg-rose-500 px-1.5 text-[9.5px] font-bold leading-4 text-white ring-2 ring-[#f3f3ef] sm:ring-white">নতুন</span> : null}
               </span>
               <span className="w-full truncate px-0.5 text-[clamp(11px,3vw,15px)] font-medium leading-tight text-slate-700">{item.label}</span>
             </Link>;
@@ -206,7 +206,7 @@ export function DashboardView({
                 <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold", index === 0 ? "bg-amber-100 text-amber-700" : index === 1 ? "bg-slate-100 text-slate-600" : "bg-orange-100 text-orange-700")}>{index + 1}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[12px] font-medium sm:text-sm"><MathText text={task.title} /></span>
-                  <span className={cn("block truncate text-[10.5px] sm:text-xs", needsRevision(task, todayMs) ? "text-amber-700" : "text-slate-500")}>{lastRevisedLabel(task.lastRevisedAt, todayMs).replace("last: ", "")}</span>
+                  <span className={cn("block truncate text-[10.5px] sm:text-xs", needsRevision(task, todayMs) ? "text-amber-700" : "text-slate-500")}>{lastRevisedLabel(task.lastRevisedAt, todayMs).replace("শেষ: ", "")}</span>
                 </span>
               </Link>
             </li>)}

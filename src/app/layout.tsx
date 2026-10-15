@@ -37,7 +37,7 @@ export const viewport: Viewport = {
   // Draw under the iPhone notch/home bar; the layout pads itself with the safe-area insets.
   viewportFit: "cover",
   // Light only (no dark mode), so the browser bar stays white too.
-  themeColor: "#ffffff",
+  themeColor: "#f3f3ef",
   colorScheme: "light",
 };
 

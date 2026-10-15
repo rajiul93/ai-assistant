@@ -17,7 +17,7 @@ const actions = [
 export function QuickCreate() {
   const [open, setOpen] = useState(false);
   return <>
-    <button type="button" onClick={() => setOpen(true)} aria-label="নতুন কিছু যোগ করুন" aria-haspopup="dialog" className="-mt-7 flex size-16 items-center justify-center justify-self-center rounded-full bg-blue-600 text-white shadow-[0_10px_24px_-6px_rgba(37,99,235,0.65)] ring-[6px] ring-[#f4f6fb] transition hover:bg-blue-700 active:scale-95">
+    <button type="button" onClick={() => setOpen(true)} aria-label="নতুন কিছু যোগ করুন" aria-haspopup="dialog" className="-mt-7 flex size-16 items-center justify-center justify-self-center rounded-full bg-blue-600 text-white shadow-[0_10px_24px_-6px_rgba(37,99,235,0.65)] ring-[6px] ring-[#f3f3ef] transition hover:bg-blue-700 active:scale-95">
       <Plus className="size-8" strokeWidth={2.25} />
     </button>
     <Dialog open={open} onOpenChange={setOpen}>
