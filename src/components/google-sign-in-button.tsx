@@ -7,24 +7,45 @@ import { toast } from "sonner";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { getFirebaseAuth, isFirebaseClientConfigured } from "@/lib/firebase/client";
 
-/** Hands the server a fresh ID token plus the refresh token that keeps the login alive. */
-async function startSession(user: User) {
+type Device = { id: string; label: string; lastSeenAt: string };
+
+/** The user is already signed in on two devices: these, to pick one to remove. */
+class DeviceLimitError extends Error {
+  constructor(message: string, readonly devices: Device[]) { super(message); }
+}
+
+/**
+ * Hands the server a fresh ID token plus the refresh token that keeps the login alive.
+ * `replaceDeviceId` signs that other device out to make room for this one.
+ */
+async function startSession(user: User, replaceDeviceId?: string) {
   const response = await fetch("/api/auth/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ idToken: await user.getIdToken(true), refreshToken: user.refreshToken }),
+    body: JSON.stringify({ idToken: await user.getIdToken(true), refreshToken: user.refreshToken, replaceDeviceId }),
   });
   if (!response.ok) {
-    const payload = (await response.json().catch(() => ({}))) as { error?: string };
+    const payload = (await response.json().catch(() => ({}))) as { error?: string; code?: string; devices?: Device[] };
+    if (payload.code === "DEVICE_LIMIT" && payload.devices) throw new DeviceLimitError(payload.error ?? "", payload.devices);
     throw new Error(payload.error || "Sign-in failed.");
   }
 }
+
+const seen = (iso: string) => {
+  const minutes = Math.round((Date.now() - Date.parse(iso)) / 60_000);
+  if (minutes < 60) return "এই মাত্র ব্যবহার হয়েছে";
+  const hours = Math.round(minutes / 60);
+  return hours < 24 ? `${hours} ঘণ্টা আগে ব্যবহার` : `${Math.round(hours / 24)} দিন আগে ব্যবহার`;
+};
 
 export function GoogleSignInButton() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [resuming, setResuming] = useState(false);
   const busy = useRef(false);
+  // Over the device limit: the signed-in Google user and the devices to pick from.
+  const [limit, setLimit] = useState<{ user: User; devices: Device[] } | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
   const configured = isFirebaseClientConfigured();
 
   // Firebase remembers the Google sign-in on this device. If the server session is gone (cookies
@@ -38,7 +59,11 @@ export function GoogleSignInButton() {
       setResuming(true);
       startSession(user)
         .then(() => { router.replace("/dashboard"); router.refresh(); })
-        .catch(() => { setResuming(false); busy.current = false; });
+        .catch((error: unknown) => {
+          setResuming(false);
+          busy.current = false;
+          if (error instanceof DeviceLimitError) setLimit({ user, devices: error.devices });
+        });
     });
   }, [configured, router]);
 
@@ -55,7 +80,12 @@ export function GoogleSignInButton() {
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: "select_account" });
       const result = await signInWithPopup(auth, provider);
-      await startSession(result.user);
+      try {
+        await startSession(result.user);
+      } catch (error) {
+        if (error instanceof DeviceLimitError) { setLimit({ user: result.user, devices: error.devices }); busy.current = false; return; }
+        throw error;
+      }
       router.replace("/dashboard");
       router.refresh();
     } catch (error) {
@@ -64,6 +94,41 @@ export function GoogleSignInButton() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function replace(device: Device) {
+    if (!limit) return;
+    setRemoving(device.id);
+    try {
+      await startSession(limit.user, device.id);
+      toast.success(`${device.label} থেকে বের করে দেওয়া হলো`);
+      router.replace("/dashboard");
+      router.refresh();
+    } catch (error) {
+      if (error instanceof DeviceLimitError) setLimit({ user: limit.user, devices: error.devices });
+      else toast.error(error instanceof Error ? error.message : "করা গেল না");
+    } finally {
+      setRemoving(null);
+    }
+  }
+
+  // Already on two devices: pick one to sign out, then this one comes in.
+  if (limit) {
+    return <div className="space-y-3 rounded-2xl bg-amber-50 p-3.5 ring-1 ring-amber-200">
+      <p className="text-[14px] font-semibold leading-snug text-amber-950">আপনি এখন ২টা device-এ লগইন আছেন। একসাথে ২টার বেশি চলে না — এখানে ঢুকতে একটা সরিয়ে দিন:</p>
+      <ul className="space-y-2">
+        {limit.devices.map((device) => <li key={device.id} className="flex items-center gap-3 rounded-xl bg-white px-3 py-2.5 ring-1 ring-amber-100">
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[14px] font-semibold text-slate-900">{device.label}</span>
+            <span className="block text-xs text-slate-500">{seen(device.lastSeenAt)}</span>
+          </span>
+          <button type="button" onClick={() => void replace(device)} disabled={Boolean(removing)} className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-red-50 px-3 text-[13px] font-semibold text-red-700 ring-1 ring-red-200 disabled:opacity-50">
+            {removing === device.id ? <Loader2 className="size-4 animate-spin" /> : null} সরাও
+          </button>
+        </li>)}
+      </ul>
+      <button type="button" onClick={() => setLimit(null)} className="w-full text-center text-[13px] font-medium text-slate-500 underline underline-offset-4">বাতিল</button>
+    </div>;
   }
 
   const working = loading || resuming;

@@ -17,7 +17,15 @@ const highlights = [
  * Sign in: the landing page's blue banner (on phones it sits above the card like a sheet; on wide
  * screens it fills the left half) and one Google button.
  */
-export default function LoginPage() {
+/** Why this browser was signed out, from /api/auth/device. */
+const DEVICE_NOTICES: Record<string, string> = {
+  removed: "অন্য একটা device থেকে এই device-টা বের করে দেওয়া হয়েছে। আবার ঢুকতে নিচে চাপো।",
+  limit: "একসাথে ২টা device-এ লগইন থাকা যায়। আবার ঢুকলে একটা device বেছে সরিয়ে দিতে পারবে।",
+};
+
+export default async function LoginPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const device = (await searchParams).device;
+  const notice = typeof device === "string" ? DEVICE_NOTICES[device] : undefined;
   const configured = isFirebaseClientConfigured();
 
   return (
@@ -59,6 +67,7 @@ export default function LoginPage() {
           <p className="mt-1.5 text-[15px] leading-relaxed text-slate-500">আপনার Google account দিয়ে ঢুকুন। নতুন হলে এক চাপেই account তৈরি হয়ে যাবে।</p>
 
           <div className="mt-7">
+            {notice ? <p className="mb-3 rounded-2xl bg-amber-50 px-3.5 py-2.5 text-[13.5px] leading-snug text-amber-900 ring-1 ring-amber-200">{notice}</p> : null}
             <GoogleSignInButton />
           </div>
           {!configured ? <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">Add the NEXT_PUBLIC_FIREBASE_* environment variables to enable Google sign-in.</p> : null}

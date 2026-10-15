@@ -71,6 +71,8 @@ model User {
   aiUses                 AiUse[]
   payments               Payment[]
   entitlements           Entitlement[]
+  devices                UserDevice[]
+  activeTimer            ActiveTimer?
 }
 
 model StudyPlan {
@@ -199,6 +201,39 @@ model Task {
   @@index([userId, dueDate])
   @@index([userId, status])
   @@index([createdAt])
+}
+
+/// A browser or phone this user is signed in on (cookie "prep_device" holds the id). At most two
+/// at a time (src/server/devices.ts); a third sign-in must remove one. Deleting the row signs that
+/// device out on its next request.
+model UserDevice {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// "Chrome · Android", from the user agent, to tell the devices apart.
+  label      String
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// The study timer running for this user, shared by all their devices: one at a time, so a second
+/// device shows this one instead of starting another. Gone when the session is saved or cancelled.
+model ActiveTimer {
+  userId        String    @id
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// When the running stretch began (null while paused); time before it is in accumulatedMs.
+  startedAt     DateTime?
+  accumulatedMs Int       @default(0)
+  paused        Boolean   @default(false)
+  label         String    @default("")
+  taskId        String    @default("")
+  subjectId     String    @default("")
+  topicId       String    @default("")
+  targetMinutes Int?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
 model StudySession {
