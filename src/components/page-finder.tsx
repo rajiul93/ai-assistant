@@ -5,16 +5,17 @@ import Link from "next/link";
 import { Search } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { adminLinksFor, links, searchWords } from "@/components/nav-links";
+import type { StaffPermission } from "@/lib/staff";
 import { cn } from "@/lib/utils";
 
 /**
  * The header's search: find any page by its name (Bangla or English) and open it. Also used by
  * "See All" on the home page, which opens it with every page listed.
  */
-export function PageFinder({ admin = false, superAdmin = false, trigger = "icon", className }: { admin?: boolean; superAdmin?: boolean; trigger?: "icon" | "see-all"; className?: string }) {
+export function PageFinder({ permissions = [], trigger = "icon", className }: { permissions?: readonly StaffPermission[]; trigger?: "icon" | "see-all"; className?: string }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const pages = [...links, ...adminLinksFor(admin, superAdmin)];
+  const pages = [...links, ...adminLinksFor(permissions)];
   const words = query.trim().toLowerCase();
   const shown = words ? pages.filter((page) => `${page.label} ${searchWords[page.href] ?? ""}`.toLowerCase().includes(words)) : pages;
 

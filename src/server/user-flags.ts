@@ -9,5 +9,5 @@ import { prisma } from "@/lib/prisma";
  * reminder), not after the session cache expires.
  */
 export const freshUserFlags = cache((userId: string) =>
-  prisma.user.findUnique({ where: { id: userId }, select: { status: true, role: true, aiPaused: true, name: true, phone: true } }),
+  prisma.user.findUnique({ where: { id: userId }, select: { status: true, role: true, staffPermissions: true, aiPaused: true, name: true, phone: true } }),
 );

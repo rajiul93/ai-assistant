@@ -18,6 +18,7 @@ const featureLabels: Record<string, string> = {
   answer_search: "Answers with web search",
   note_writer: "Note writing",
   bank_beautify: "Question bank clean-up",
+  bank_solve: "Question bank solutions & explanations",
   speech: "Voice replies (spoken aloud)",
   transcribe: "Understanding your voice",
   voice_fix: "Fixing spelling & math in what you said",
@@ -243,7 +244,7 @@ export function CustomerUsageView({ quota, requests, failed, today }: { quota: A
   </div>;
 }
 
-export function AiUsageView({ usage, period, admin, quota }: { usage: Awaited<ReturnType<typeof getAiUsage>>; period: UsagePeriod; admin: boolean; quota: AiQuota }) {
+export function AiUsageView({ usage, period, admin, quota, balance }: { usage: Awaited<ReturnType<typeof getAiUsage>>; period: UsagePeriod; admin: boolean; quota: AiQuota; balance?: React.ReactNode }) {
   const { totals } = usage;
   const successRate = totals.requests ? Math.round((totals.succeeded / totals.requests) * 100) : 0;
   const tiles = [
@@ -273,6 +274,7 @@ export function AiUsageView({ usage, period, admin, quota }: { usage: Awaited<Re
       </nav>
     </div>
 
+    {balance}
     <QuotaCard quota={quota} />
 
     <section className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">

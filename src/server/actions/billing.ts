@@ -5,7 +5,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { isAdminUser } from "@/server/roles";
+import { can } from "@/server/roles";
 import { headers } from "next/headers";
 import { normalizeBdPhone } from "@/lib/phone";
 import { quoteLabel, tokensForDays } from "@/lib/pricing";
@@ -18,9 +18,10 @@ function revalidateBilling() {
   revalidatePath("/", "layout");
 }
 
+/** Payment review: staff with the Billing permission (and the super admin). */
 async function requireAdmin() {
   const user = await requireUser();
-  if (!(await isAdminUser(user))) throw new Error("Only admins can do this.");
+  if (!(await can(user, "billing"))) throw new Error("এটা করতে Billing permission লাগবে।");
   return user;
 }
 

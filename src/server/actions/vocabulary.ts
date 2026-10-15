@@ -6,7 +6,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { bareAffix } from "@/lib/vocabulary/affixes";
 import { namesAPerson, nounKey } from "@/lib/vocabulary/nouns";
-import { isAdminUser } from "@/server/roles";
+import { can } from "@/server/roles";
 
 /**
  * Vocabulary: shared tables of verbs, nouns (singular/plural) and prefixes/suffixes, all in the
@@ -18,7 +18,7 @@ import { isAdminUser } from "@/server/roles";
 /** The signed-in user, if they may change the vocabulary tables. */
 async function requireEditor() {
   const user = await requireUser();
-  if (!(await isAdminUser(user))) throw new Error("শুধু admin এখানে যোগ, বদল বা মুছতে পারে।");
+  if (!(await can(user, "vocabulary"))) throw new Error("যোগ, বদল বা মুছতে শব্দভান্ডার permission লাগবে।");
   return user;
 }
 
