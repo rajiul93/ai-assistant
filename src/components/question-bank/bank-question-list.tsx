@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ListChecks, Loader2, Pencil, Plus, RotateCcw, Sparkles, X } from "lucide-react";
+import { Check, ListChecks, Loader2, Pencil, Plus, RotateCcw, Sparkles, WandSparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { BookText, MathText } from "@/components/math-text";
 import { SolutionNotes } from "@/components/preliminary/question-set-views";
@@ -22,6 +22,16 @@ async function beautify(questionIds: string[], mode: "preview" | "save"): Promis
   if (!response.ok) throw new Error(payload.error ?? "AI দিয়ে করা গেল না।");
   return payload;
 }
+
+/** Writes solution + explanation with AI and saves them; `fill: "missing"` keeps what is already written. */
+async function solve(questionIds: string[], fill: "missing" | "all"): Promise<BeautifyResponse> {
+  const response = await fetch("/api/question-bank/solve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ questionIds, fill }) });
+  const payload = (await response.json().catch(() => ({}))) as BeautifyResponse;
+  if (!response.ok) throw new Error(payload.error ?? "AI দিয়ে লেখা গেল না।");
+  return payload;
+}
+
+type Task = { kind: "tidy" } | { kind: "solve"; fill: "missing" | "all" };
 
 const field = "w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm leading-relaxed outline-none focus:border-zinc-400";
 
@@ -125,7 +135,7 @@ export function BankQuestionList({ questions: initial, canEdit }: { questions: B
   }
 
   /** Several at once: saved straight away, a few per call, with an undo for the whole run. */
-  async function aiMany(ids: string[]) {
+  async function aiMany(ids: string[], task: Task = { kind: "tidy" }) {
     if (!ids.length) return;
     setRun({ done: 0, total: ids.length });
     setUndo(null);
@@ -134,7 +144,7 @@ export function BankQuestionList({ questions: initial, canEdit }: { questions: B
     for (let start = 0; start < ids.length; start += PER_CALL) {
       const batch = ids.slice(start, start + PER_CALL);
       try {
-        const result = await beautify(batch, "save");
+        const result = task.kind === "solve" ? await solve(batch, task.fill) : await beautify(batch, "save");
         replace(result.results);
         before.push(...result.originals);
         skipped += result.skipped;
@@ -148,7 +158,7 @@ export function BankQuestionList({ questions: initial, canEdit }: { questions: B
     setRun(null);
     setSelecting(false);
     setPicked(new Set());
-    if (before.length) { setUndo(before); toast.success(`${before.length}টি প্রশ্ন AI দিয়ে গোছানো হলো${skipped ? ` · ${skipped}টি পারেনি` : ""}`); }
+    if (before.length) { setUndo(before); toast.success(`${before.length}টি প্রশ্ন${task.kind === "solve" ? "র সমাধান ও ব্যাখ্যা AI লিখে দিয়েছে" : " AI দিয়ে গোছানো হলো"}${skipped ? ` · ${skipped}টি পারেনি` : ""}`); }
     router.refresh();
   }
 
@@ -165,6 +175,8 @@ export function BankQuestionList({ questions: initial, canEdit }: { questions: B
     router.refresh();
   }
 
+  // One click fills every question that still lacks a solution or an explanation.
+  const unsolved = questions.filter((question) => !question.solution?.trim() || !question.explanation?.trim());
   const toggle = (id: string) => setPicked((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
 
   return <div className="space-y-3">
@@ -174,8 +186,12 @@ export function BankQuestionList({ questions: initial, canEdit }: { questions: B
         <button type="button" disabled={busy} onClick={() => { setSelecting((value) => !value); setPicked(new Set()); }} aria-pressed={selecting} className={cn("flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium ring-1 transition disabled:opacity-50", selecting ? "bg-white text-violet-900 ring-violet-300" : "text-violet-900 ring-violet-200 hover:bg-white")}>{selecting ? <X className="size-4" /> : <ListChecks className="size-4" />} {selecting ? "বাছাই বাতিল" : "বাছাই করো"}</button>
         {selecting
           ? <button type="button" disabled={busy || !picked.size} onClick={() => void aiMany(questions.filter((question) => picked.has(question.id)).map((question) => question.id))} className="flex h-9 items-center gap-1.5 rounded-lg bg-violet-700 px-3 text-sm font-semibold text-white hover:bg-violet-800 disabled:opacity-50"><Sparkles className="size-4" /> বাছাই করা {picked.size}টি AI দিয়ে গোছাও</button>
-          : <button type="button" disabled={busy} onClick={() => void aiMany(questions.map((question) => question.id))} className="flex h-9 items-center gap-1.5 rounded-lg bg-violet-700 px-3 text-sm font-semibold text-white hover:bg-violet-800 disabled:opacity-50"><Sparkles className="size-4" /> সব ({questions.length}টি) AI দিয়ে গোছাও</button>}
+          : <button type="button" disabled={busy} onClick={() => void aiMany(questions.map((question) => question.id))} className="flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold text-violet-900 ring-1 ring-violet-200 hover:bg-white disabled:opacity-50"><Sparkles className="size-4" /> সব ({questions.length}টি) AI দিয়ে গোছাও</button>}
       </div>
+      {/* Solutions and explanations by AI: all missing ones in one click, or rewrite the picked ones. */}
+      {selecting
+        ? <button type="button" disabled={busy || !picked.size} onClick={() => void aiMany(questions.filter((question) => picked.has(question.id)).map((question) => question.id), { kind: "solve", fill: "all" })} className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-violet-700 px-3 text-sm font-semibold text-white hover:bg-violet-800 disabled:opacity-50"><WandSparkles className="size-4" /> বাছাই করা {picked.size}টির সমাধান ও ব্যাখ্যা নতুন করে লেখো</button>
+        : <button type="button" disabled={busy || !unsolved.length} onClick={() => void aiMany(unsolved.map((question) => question.id), { kind: "solve", fill: "missing" })} className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-violet-700 px-3 text-sm font-semibold text-white hover:bg-violet-800 disabled:opacity-50"><WandSparkles className="size-4" /> {unsolved.length ? `AI দিয়ে সমাধান ও ব্যাখ্যা লেখো (${unsolved.length}টি বাকি)` : "সব প্রশ্নের সমাধান ও ব্যাখ্যা আছে"}</button>}
       {selecting ? <label className="flex items-center gap-2 text-xs text-violet-900"><input type="checkbox" checked={picked.size === questions.length} onChange={() => setPicked(picked.size === questions.length ? new Set() : new Set(questions.map((question) => question.id)))} className="size-4 accent-violet-700" /> সব বাছো</label> : null}
       {run ? <div className="space-y-1">
         <div className="h-1.5 overflow-hidden rounded-full bg-violet-100"><div className="h-full rounded-full bg-violet-600 transition-all" style={{ width: `${(run.done / run.total) * 100}%` }} /></div>
