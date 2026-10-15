@@ -20,7 +20,9 @@ import { CalendarSheet } from "@/components/calendar-sheet";
 import { SessionBar } from "@/components/timer/session-bar";
 import { SubjectPickerDialog } from "@/components/timer/subject-picker-dialog";
 import { TimerAlarm } from "@/components/timer/timer-alarm";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { MoreSheet } from "@/components/more-sheet";
+import { SideNav } from "@/components/side-nav";
 
 // Phones get the four daily pages in the tab bar, around a "+" for adding; the rest is under "More".
 // The study timer lives on the Tasks page and in the session bar, so it has no page of its own.
@@ -68,7 +70,6 @@ export function AppShell({
   // Voice features are admin-only; switched on here, in the browser only (never shared on the server).
   useEffect(() => { setVoiceAllowed(admin); }, [admin]);
   const adminLinks = adminLinksFor(permissions);
-  const sideLinks = [...links, ...adminLinks];
   const moreLinks = [...baseMoreLinks, ...adminLinks];
   const { counts } = useLive();
   const badge = (href: string) => (href === billingAdminLink.href ? pendingPayments : href === "/messages" ? counts.messagesUnread : 0);
@@ -89,36 +90,21 @@ export function AppShell({
 
   return (
     <div className="min-h-full bg-[#f4f6fb]">
-      <aside className="fixed inset-y-0 left-0 hidden w-60 border-r border-slate-200/80 bg-white lg:flex lg:flex-col">
-        <div className="flex items-start justify-between gap-2 px-5 py-6">
+      <aside className="fixed inset-y-0 left-0 hidden w-60 border-r border-slate-200/70 bg-white lg:flex lg:flex-col">
+        <div className="flex items-start justify-between gap-2 px-5 pb-4 pt-6">
           <Logo />
           <NotificationBell className="-mr-1 shrink-0" />
         </div>
-        <nav className="flex-1 space-y-1 overflow-y-auto px-3">
-          {sideLinks.map((link) => {
-            const Icon = link.icon;
-            const active = isActive(link.href);
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={cn(
-                  "flex items-center gap-3 rounded-xl px-3 py-2 text-sm",
-                  active ? "bg-blue-600 font-medium text-white shadow-sm shadow-blue-600/30" : "text-slate-700 hover:bg-blue-50 hover:text-blue-700",
-                )}
-              >
-                <Icon className="size-4" />
-                {link.label}
-                {badge(link.href) > 0 ? <span className="ml-auto rounded-full bg-rose-500 px-1.5 text-[11px] font-semibold text-white">{badge(link.href)}</span> : null}
-              </Link>
-            );
-          })}
-        </nav>
-        <div className="flex items-center gap-3 border-t border-slate-200 p-4">
-          <Avatar name={userName} image={userImage} />
-          <div className="min-w-0 flex-1 space-y-1">
-            <Link href="/profile" className="block truncate text-sm font-medium text-slate-700 hover:text-blue-700">{userName}</Link>
-            <SignOutButton />
+        <SideNav links={links} adminLinks={adminLinks} isActive={isActive} badge={badge} />
+        {/* Who is signed in, on the home page's blue. */}
+        <div className="p-3">
+          <div className="flex items-center gap-2.5 rounded-2xl bg-linear-to-br from-[#3f6ef3] via-[#5a87f8] to-[#8fa6fb] p-2.5 text-white shadow-[0_10px_24px_-14px_rgba(37,99,235,0.9)]">
+            <Avatar name={userName} image={userImage} />
+            <Link href="/profile" className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-bold">{userName}</span>
+              <span className="block text-[11px] text-white/80">প্রোফাইল</span>
+            </Link>
+            <SignOutButton compact />
           </div>
         </div>
       </aside>
@@ -159,35 +145,8 @@ export function AppShell({
         </nav>
 
         <Dialog open={moreOpen} onOpenChange={setMoreOpen}>
-          <DialogContent>
-            <DialogTitle className="mb-3">More</DialogTitle>
-            <nav aria-label="More pages" className="grid grid-cols-3 gap-2">
-              {moreLinks.map((link) => {
-                const Icon = link.icon;
-                const active = isActive(link.href);
-                return (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    onClick={() => setMoreOpen(false)}
-                    className={cn(
-                      "flex min-h-20 flex-col items-center justify-center gap-2 rounded-2xl border text-xs font-medium transition active:scale-95",
-                      active ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 text-slate-700",
-                    )}
-                  >
-                    <span className="relative">
-                      <Icon className="size-5" />
-                      {badge(link.href) > 0 ? <span className="absolute -right-2.5 -top-1.5 rounded-full bg-rose-500 px-1 text-[10px] font-semibold text-white">{badge(link.href)}</span> : null}
-                    </span>
-                    {link.label}
-                  </Link>
-                );
-              })}
-            </nav>
-            <div className="mt-5 flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
-              <Link href="/profile" onClick={() => setMoreOpen(false)} className="truncate text-sm text-slate-600 hover:text-blue-700">{userName}</Link>
-              <SignOutButton />
-            </div>
+          <DialogContent className="bg-[#f4f6fb] p-0 pt-0 pb-0 sm:max-w-md sm:rounded-3xl sm:pb-0 sm:pt-0">
+            <MoreSheet links={baseMoreLinks} adminLinks={adminLinks} userName={userName} userImage={userImage} isActive={isActive} badge={badge} onClose={() => setMoreOpen(false)} />
           </DialogContent>
         </Dialog>
       </div>

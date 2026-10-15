@@ -2,11 +2,13 @@
 
 import { signOut } from "firebase/auth";
 import { useState } from "react";
+import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getFirebaseAuth, isFirebaseClientConfigured } from "@/lib/firebase/client";
 import { stopSpeaking } from "@/lib/voice";
 
-export function SignOutButton() {
+/** `compact`: an icon button for a coloured card (the sidebar's profile card). */
+export function SignOutButton({ compact = false }: { compact?: boolean }) {
   const [busy, setBusy] = useState(false);
 
   async function onSignOut() {
@@ -20,6 +22,9 @@ export function SignOutButton() {
     window.location.replace("/");
   }
 
+  if (compact) {
+    return <button type="button" onClick={() => void onSignOut()} disabled={busy} aria-label="Sign out" title="Sign out" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-white/20 text-white transition hover:bg-white/30 disabled:opacity-50"><LogOut className="size-4" /></button>;
+  }
   return (
     <Button variant="outline" size="sm" onClick={() => void onSignOut()} disabled={busy}>
       {busy ? "Signing out…" : "Sign out"}
