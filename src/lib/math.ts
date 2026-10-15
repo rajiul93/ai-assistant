@@ -15,7 +15,47 @@ export type MathPart = { type: "text"; value: string } | { type: "math"; value: 
  */
 const MATH = /\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\(([\s\S]+?)\\\)|\$(?=\S)((?:\\\$|[^$\n])+?)(?<=\S)\$(?!\d)/g;
 
-export function splitMath(text: string): MathPart[] {
+const BANGLA_OR_STOP = /[\u0980-\u09FF:।]/;
+const LATEX_COMMAND = /\\[a-zA-Z]+|\^|_\{/;
+
+/**
+ * AI answers sometimes drop one `$` of a pair: "* \sqrt{3}$" or "$\frac{1}{2} হলে". On a line with
+ * an odd number of `$`, the missing one is put back where the formula starts (after the last Bangla
+ * word or bullet) or ends (before the next Bangla word) — only when that side really is LaTeX, so a
+ * lone "$5" stays plain text.
+ */
+function balanceLine(line: string) {
+  if (line.includes("$$")) return line;
+  const dollars = [...line.matchAll(/(?<!\\)\$/g)].map((match) => match.index ?? 0);
+  if (dollars.length % 2 === 0) return line;
+  // A closing "$" whose formula never opened: one that would open a pair, with LaTeX right before it.
+  for (let k = 0; k < dollars.length; k += 2) {
+    const at = dollars[k];
+    const floor = k ? dollars[k - 1] + 1 : 0;
+    let start = at;
+    while (start > floor && !BANGLA_OR_STOP.test(line[start - 1])) start--;
+    while (start < at && /[\s*•\-–]/.test(line[start])) start++;
+    if (start < at && LATEX_COMMAND.test(line.slice(start, at))) return `${line.slice(0, start)}$${line.slice(start)}`;
+  }
+  // An opening "$" never closed: the last "$", with LaTeX after it.
+  const last = dollars.at(-1)!;
+  let end = last + 1;
+  while (end < line.length && !BANGLA_OR_STOP.test(line[end])) end++;
+  while (end > last + 1 && /\s/.test(line[end - 1])) end--;
+  if (end > last + 1 && LATEX_COMMAND.test(line.slice(last + 1, end))) return `${line.slice(0, end)}$${line.slice(end)}`;
+  return line;
+}
+
+/** Older AI replies were saved with "\frac" read as a form feed + "rac" (and "\beta" as a backspace). */
+const restoreEaten = (text: string) => text.replace(/\f(?=[a-zA-Z])/g, "\\f").replace(/\x08(?=[a-zA-Z])/g, "\\b");
+
+export const balanceMath = (input: string) => {
+  const text = restoreEaten(input);
+  return text.includes("$") ? text.split("\n").map(balanceLine).join("\n") : text;
+};
+
+export function splitMath(input: string): MathPart[] {
+  const text = balanceMath(input);
   const parts: MathPart[] = [];
   let last = 0;
   for (const match of text.matchAll(MATH)) {

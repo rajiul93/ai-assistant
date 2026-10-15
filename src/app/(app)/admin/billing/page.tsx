@@ -5,12 +5,12 @@ import { readPagination } from "@/lib/pagination";
 import { prisma } from "@/lib/prisma";
 import { listPaymentsForAdmin } from "@/server/actions/billing";
 import { getPricingAdmin } from "@/server/actions/pricing";
-import { isAdminUser, roleOf } from "@/server/roles";
+import { can, roleOf } from "@/server/roles";
 import { gatewayConfigured } from "@/server/sslcommerz";
 
 export default async function AdminBillingPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const user = await requireUser();
-  if (!(await isAdminUser(user))) notFound();
+  if (!(await can(user, "billing"))) notFound();
   // Page and page size come from the URL, so a reload keeps them.
   const params = await searchParams;
   const { page, limit } = readPagination(params);

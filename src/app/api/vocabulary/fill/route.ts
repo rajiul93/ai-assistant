@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { aiBlockedMessage, type AiLock } from "@/lib/ai-limits";
 import { checkAi } from "@/server/ai-access";
 import { callAI } from "@/server/assistant/ai";
-import { isAdminUser } from "@/server/roles";
+import { can } from "@/server/roles";
 
 const requestSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("verb"), word: z.string().trim().min(1).max(80) }),
@@ -45,7 +45,7 @@ const aiError = (blocked: Exclude<AiLock, null>) => Response.json({ error: aiBlo
 export async function POST(request: Request) {
   const user = await requireUser();
   // Only admins add to the shared tables, so only they need the helper.
-  if (!(await isAdminUser(user))) return Response.json({ error: "শুধু admin এটা ব্যবহার করতে পারে।" }, { status: 403 });
+  if (!(await can(user, "vocabulary"))) return Response.json({ error: "এটা করতে শব্দভান্ডার permission লাগবে।" }, { status: 403 });
   const { blocked } = await checkAi(user, "suggestion");
   if (blocked) return aiError(blocked);
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));

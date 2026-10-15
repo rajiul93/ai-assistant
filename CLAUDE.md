@@ -46,6 +46,8 @@ alone. Record decisions and their reasons; don't restate code.
   `prisma/migrations/<timestamp>_<name>/migration.sql`. Prefer additive changes.
 - After `prisma generate`, the running dev server keeps the **old client** (models missing →
   "Cannot read properties of undefined (reading 'findMany')" or "Unknown field"). **Restart dev.**
+- Run migrations over Neon's **direct** host (the URL without `-pooler`): through the pooler,
+  Prisma's advisory lock can stay stuck on a pooled connection (P1002, seen 2026-10-15).
 - Stop the dev server before `pnpm add`; installing under a running `next dev` breaks pages.
 - Integration tests use a **separate Neon branch** in `.env.test` (git-ignored), never `DATABASE_URL`.
 
@@ -77,9 +79,15 @@ alone. Record decisions and their reasons; don't restate code.
 - `src/lib/auth.ts`: `getCurrentUser()` verifies the Firebase ID-token cookie (cached per request
   and up to 5 minutes); `requireUser()` redirects to `/login`, or to `/blocked` when
   `User.status = BLOCKED` (read fresh).
-- Roles: `USER`, `ADMIN`, and one **super admin** fixed by email in `src/server/roles.ts`
-  (`roleOf`, `isAdminUser`, read fresh from the DB). Admins: no AI limits, admin pages, and they
-  edit shared content (vocabulary).
+- Roles: `USER`, `ADMIN` (= staff), and one **super admin** fixed by email in `src/server/roles.ts`
+  (`roleOf`, `isAdminUser`, read fresh from the DB). Any staff: no AI limits, every exam open, voice.
+- **Staff permissions** (2026-10-15, `User.staffPermissions`, list in `src/lib/staff.ts`): `billing`,
+  `customers`, `question_bank`, `vocabulary`, `staff`. Gate admin work with `can(user, "…")` /
+  `permissionsOf` (super admin = all); the admin menu follows them. Managed on `/admin/staff`
+  (`src/server/actions/staff.ts`): nobody changes the super admin or themselves, and a manager
+  gives/takes only permissions they hold (`mergePermissions`). Customer controls (block, AI pause,
+  cancel) are on `/admin/customers` (`customers` permission; staff targets: super admin only).
+  Phone numbers and phone search stay super-admin only. Prices and the OpenAI balance: super admin only.
 - AI access is gated by plans/entitlements (`src/server/ai-access.ts` `checkAi(user, kind, ref)`):
   pass the kind (`message` / `scan` / `suggestion`) for anything the user starts, so it counts toward
   the tier's per-day limit; automatic follow-ups (the spell check after a scan) pass none.
@@ -152,7 +160,10 @@ alone. Record decisions and their reasons; don't restate code.
 | Typing lab (Bijoy engine) | done | |
 | **Collaboration: friends, sharing, notifications, chat (socket.io)** | **built; awaiting integration run + two-browser check** | plan + decisions: [docs/collaboration-plan.md](docs/collaboration-plan.md) |
 | **Subscription pricing** (System + AI tier + exam, "all exams" discount, durations, per-day AI limits, super-admin pricing panel, SSLCommerz beside bKash/Nagad) | **phase 1 built; migration applied 2026-10-14; Plans page/admin panel not yet tried signed in; SSLCommerz untested** | [docs/subscription-plan.md](docs/subscription-plan.md) — phases 2 (security) and 3 (mobile API) not started |
-| **Video library** (`/videos`: paste a YouTube link, watch it in the app; free 5, a running plan no limit) | **built; migration `20261020000000_study_videos` not yet applied** | Player: youtube-nocookie embed, `rel=0`, our own cover while paused/ended (hides YouTube's "More videos" and end screen); title strip blocked so taps don't leave the app. Limit checked in `addVideo`; videos stay playable after a plan ends |
+| **Video library** (`/videos`: paste a YouTube link, watch it in the app; free 5, a running plan no limit) | **built; migration applied (seen 2026-10-15)** | Player: youtube-nocookie embed, `rel=0`, our own cover while paused/ended (hides YouTube's "More videos" and end screen); title strip blocked so taps don't leave the app. Limit checked in `addVideo`; videos stay playable after a plan ends |
+| **OpenAI balance on /usage** (super admin: dollars added, spent, left) | **built; migration applied 2026-10-15; needs `OPENAI_ADMIN_KEY`** | OpenAI has no API for the prepaid balance, so the owner enters top-ups (`AiCredit`); spending comes from OpenAI's Costs API (`src/server/openai-costs.ts`, admin key only, cached 5 min) from the earliest top-up; left = added − spent |
+| **Customers page** (`/admin/customers`, `customers` permission; staff not listed: Paid now / আগে নিয়েছিল (plan ended) / Free (never bought), search, paging) | built 2026-10-15 | Groups come from `Entitlement.endsAt` (cancel sets it to the cancel time); shows phone, the plan(s) (running ones, or the last bought), total paid, plan end, last AI use. No schema change |
+| **Staff page + permissions** (`/admin/staff`; old `/admin/users` redirects) | **built; migration applied 2026-10-15; not yet tried signed in** | Existing admins get billing, question_bank, vocabulary (what admins could do before) |
 | Set audio (TTS MP3 per set on Cloudflare R2) | planned, not started | owner deferred it |
 | **Question Bank** (BCS / প্রাইমারি / ১১–২০ গ্রেড; sets per exam session; "Preliminary-তে পাঠাও" copies a set; super admin uploads .xlsx) | **built; migration applied 2026-10-13; not yet tried with a real sheet** | [docs/question-bank-plan.md](docs/question-bank-plan.md) — sheet assumptions in §2 |
 | **Profile page (name + phone)** | **built; migration applied to Neon 2026-10-13** | [docs/profile-and-group-chat-plan.md](docs/profile-and-group-chat-plan.md) §1. Sign-in no longer overwrites a name the user saved (`profileUpdatedAt`) |

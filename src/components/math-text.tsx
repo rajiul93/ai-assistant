@@ -28,7 +28,8 @@ export function MathText({ text, book = false }: { text: string; book?: boolean 
  * explanations from the Question Bank.
  */
 export function BookText({ text, className }: { text: string; className?: string }) {
-  const html = text.split(/\r?\n/).map((line) => (line.trim() ? `<p>${textToFormulaHtml(plainMathToLatex(line))}</p>` : "")).join("");
+  // AI answers often start a line with a markdown bullet ("* ", "- "); it shows as a real bullet.
+  const html = text.split(/\r?\n/).map((line) => (line.trim() ? `<p>${textToFormulaHtml(plainMathToLatex(line.replace(/^\s*[*-]\s+/, "• ")))}</p>` : "")).join("");
   return <RichHtml html={html} className={cn("book-text", className)} />;
 }
 

@@ -1,3 +1,4 @@
+import { repairLatexInJson } from "@/lib/ai-json";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -13,7 +14,7 @@ const TOTAL_BUDGET_MS = 40_000;
 const PER_ATTEMPT_WITH_BACKUP_MS = 25_000;
 
 /** Who is using the AI and for what — every call is logged for the AI usage page. */
-export type AiFeature = "assistant" | "file_assistant" | "answer" | "answer_search" | "note_writer" | "speech" | "transcribe" | "voice_fix" | "image" | "bank_beautify";
+export type AiFeature = "assistant" | "file_assistant" | "answer" | "answer_search" | "note_writer" | "speech" | "transcribe" | "voice_fix" | "image" | "bank_beautify" | "bank_solve";
 /** Images/PDFs sent alongside the prompt (base64). */
 type InlineFile = { mimeType: string; data: string; name?: string };
 /** `responseSchema` is written in an OpenAPI style (type: "OBJECT", nullable: true) and converted to JSON Schema. */
@@ -246,7 +247,8 @@ export async function callAI(prompt: string, options: CallOptions) {
       continue;
     }
     logUsage({ userId: options.userId, feature: options.feature, model, httpStatus: attempt.status, latencyMs: Date.now() - started, usage: attempt.usage });
-    if (attempt.text) return attempt.text;
+    // JSON answers: LaTeX written with one backslash ("\frac") would be eaten by JSON.parse.
+    if (attempt.text) return options.responseSchema ? repairLatexInJson(attempt.text) : attempt.text;
     console.warn(`[ai] ${model}${options.search ? " (search)" : ""} failed: HTTP ${attempt.status}`);
     if (options.search && attempt.status === 429) { searchBlockedUntil = Date.now() + 30 * 60_000; return null; }
     // The fallback model only helps when the first was busy or rate-limited.

@@ -10,6 +10,7 @@ import { useLive } from "@/components/collaboration/live-provider";
 import { NotificationBell } from "@/components/collaboration/notification-bell";
 import { adminLinksFor, billingAdminLink, links } from "@/components/nav-links";
 import { PageFinder } from "@/components/page-finder";
+import type { StaffPermission } from "@/lib/staff";
 import { QuickCreate } from "@/components/quick-create";
 import type { AiLock } from "@/lib/ai-limits";
 import { SignOutButton } from "@/components/sign-out-button";
@@ -51,7 +52,7 @@ export function AppShell({
   userImage,
   aiLock,
   admin,
-  superAdmin,
+  permissions,
   pendingPayments,
 }: {
   children: React.ReactNode;
@@ -59,13 +60,14 @@ export function AppShell({
   userImage: string | null;
   aiLock: AiLock;
   admin: boolean;
-  superAdmin: boolean;
+  /** Staff permissions: which admin pages show in the menu. */
+  permissions: StaffPermission[];
   pendingPayments: number;
 }) {
   const pathname = usePathname();
   // Voice features are admin-only; switched on here, in the browser only (never shared on the server).
   useEffect(() => { setVoiceAllowed(admin); }, [admin]);
-  const adminLinks = adminLinksFor(admin, superAdmin);
+  const adminLinks = adminLinksFor(permissions);
   const sideLinks = [...links, ...adminLinks];
   const moreLinks = [...baseMoreLinks, ...adminLinks];
   const { counts } = useLive();
@@ -125,7 +127,7 @@ export function AppShell({
         {/* Phone header, as on the home page design. Voice lives in the assistant's message box. */}
         <header className="sticky top-0 z-30 flex items-center gap-2 bg-[#f4f6fb]/90 px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl lg:hidden">
           <div className="min-w-0 flex-1"><Logo /></div>
-          <PageFinder admin={admin} superAdmin={superAdmin} />
+          <PageFinder permissions={permissions} />
           <NotificationBell className="size-10 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200" />
           <Avatar name={userName} image={userImage} />
         </header>

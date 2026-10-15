@@ -3,7 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { checkAi } from "@/server/ai-access";
 import { callAI } from "@/server/assistant/ai";
-import { isAdminUser } from "@/server/roles";
+import { can } from "@/server/roles";
 
 /** A few questions per call keeps each AI answer well inside the time limit. */
 export const maxDuration = 60;
@@ -66,7 +66,7 @@ const PROMPT = `তুমি বাংলাদেশের চাকরির �
  */
 export async function POST(request: Request) {
   const user = await requireUser();
-  if (!(await isAdminUser(user))) return Response.json({ error: "শুধু admin এটা ব্যবহার করতে পারেন।" }, { status: 403 });
+  if (!(await can(user, "question_bank"))) return Response.json({ error: "এটা করতে প্রশ্ন ব্যাংক permission লাগবে।" }, { status: 403 });
   const { blocked } = await checkAi(user, "suggestion");
   if (blocked) return Response.json({ error: "AI এখন ব্যবহার করা যাচ্ছে না।" }, { status: 403 });
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));

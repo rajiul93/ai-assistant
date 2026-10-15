@@ -19,6 +19,9 @@ model User {
   profileUpdatedAt DateTime?
   /// USER by default. Only the super admin (a fixed email, see src/server/roles.ts) can change roles.
   role             UserRole      @default(USER)
+  /// What an ADMIN (staff) may do: billing, customers, question_bank, vocabulary, staff
+  /// (src/lib/staff.ts). The super admin can do everything; a USER nothing.
+  staffPermissions String[]      @default([])
   /// BLOCKED: the super admin shut the account; the user sees only a "blocked" notice.
   status           AccountStatus @default(ACTIVE)
   /// The super admin paused this user's AI (the plan's days keep running); the rest of the app works.
@@ -329,6 +332,20 @@ model AiUsage {
 
   @@index([createdAt])
   @@index([userId, createdAt])
+}
+
+/// Money the owner put on the OpenAI account (or the balance OpenAI showed on a day). Balance left
+/// = all of these − what OpenAI's Costs API says was spent since the first one. Super admin only.
+model AiCredit {
+  id          String   @id @default(cuid())
+  /// US cents, so sums stay exact.
+  amountCents Int
+  /// The day the money was added; spending is counted from the earliest one.
+  addedAt     DateTime
+  note        String?
+  createdAt   DateTime @default(now())
+
+  @@index([addedAt])
 }
 
 // ---------- Plans & payments ----------

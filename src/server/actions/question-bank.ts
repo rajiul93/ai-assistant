@@ -10,7 +10,7 @@ import { BANK_CHECK_BATCH, BANK_EDITED, BANK_IMPORT_BATCH, placementForSet, ques
 import { placeFor } from "@/server/collaboration/share-copy";
 import { gateNotes } from "@/server/premium";
 import { canOpenExam } from "@/server/pricing";
-import { isAdminUser, isSuperAdminEmail } from "@/server/roles";
+import { can } from "@/server/roles";
 
 /**
  * Question Bank (docs/question-bank-plan.md): shared sets of past exam MCQs, one set per session.
@@ -61,7 +61,7 @@ export async function getBankSet(id: string) {
   });
   if (!set) return null;
   // Solutions open with a running plan that includes this exam.
-  const [canEdit, premium] = await Promise.all([isAdminUser(me), canOpenExam(me, set.exam)]);
+  const [canEdit, premium] = await Promise.all([can(me, "question_bank"), canOpenExam(me, set.exam)]);
   const { copies, questions, ...rest } = set;
   return { ...rest, questions: questions.map((question) => gateNotes(question, premium)), copyId: copies[0]?.id ?? null, canEdit, premium };
 }
@@ -112,11 +112,11 @@ export async function sendBankSetToPreliminary(id: string) {
   }
 }
 
-/* ---------- Super admin ---------- */
+/* ---------- Staff with the Question Bank permission ---------- */
 
-async function requireSuperAdmin() {
+async function requireBankEditor() {
   const me = await requireUser();
-  if (!isSuperAdminEmail(me.email)) throw new Error("শুধু super admin এটা করতে পারেন।");
+  if (!(await can(me, "question_bank"))) throw new Error("এটা করতে প্রশ্ন ব্যাংক permission লাগবে।");
   return me;
 }
 
@@ -136,7 +136,7 @@ const editSchema = z.object({
  */
 export async function updateBankQuestion(input: unknown) {
   const me = await requireUser();
-  if (!(await isAdminUser(me))) throw new Error("শুধু admin প্রশ্ন বদলাতে পারেন।");
+  if (!(await can(me, "question_bank"))) throw new Error("প্রশ্ন বদলাতে প্রশ্ন ব্যাংক permission লাগবে।");
   const { id, ...data } = editSchema.parse(input);
   const saved = await prisma.bankQuestion.update({
     where: { id },
@@ -167,7 +167,7 @@ const rowSchema = z.object({
  * questions instead of adding them twice. Questions missing from the sheet are left as they are.
  */
 export async function importBankRows(input: unknown) {
-  await requireSuperAdmin();
+  await requireBankEditor();
   const rows = z.array(rowSchema).min(1).max(BANK_IMPORT_BATCH).parse(input);
   const groups = new Map<string, typeof rows>();
   for (const row of rows) {
@@ -220,7 +220,7 @@ const checkSchema = z.array(z.object({ exam: examSchema, section: z.string().max
  * Keyed `<set key>|<fingerprint>`.
  */
 export async function checkBankRows(input: unknown) {
-  await requireSuperAdmin();
+  await requireBankEditor();
   const rows = checkSchema.parse(input);
   const bySet = new Map<string, { exam: z.infer<typeof examSchema>; section: string; session: string; prints: string[] }>();
   for (const row of rows) {
@@ -244,7 +244,7 @@ export async function checkBankRows(input: unknown) {
 
 /** All sets for the admin page, every exam. */
 export async function listAllBankSets() {
-  await requireSuperAdmin();
+  await requireBankEditor();
   const sets = await prisma.bankSet.findMany({
     orderBy: [{ exam: "asc" }, { section: "asc" }, { name: "asc" }],
     select: { id: true, exam: true, section: true, name: true, updatedAt: true, _count: { select: { questions: true, copies: true } } },
@@ -254,7 +254,7 @@ export async function listAllBankSets() {
 
 /** Removes sets from the bank (one, or many ticked at once). Copies already in people's Preliminary stay theirs. */
 export async function deleteBankSets(ids: string[]) {
-  await requireSuperAdmin();
+  await requireBankEditor();
   const which = z.array(idSchema).min(1, "কোনো set বাছা হয়নি").max(5000).parse(ids);
   const { count } = await prisma.bankSet.deleteMany({ where: { id: { in: which } } });
   revalidatePath("/question-bank");

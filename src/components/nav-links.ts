@@ -1,4 +1,5 @@
 import {
+  Contact,
   BookOpen,
   BriefcaseBusiness,
   CalendarClock,
@@ -22,6 +23,7 @@ import {
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
+import type { StaffPermission } from "@/lib/staff";
 
 /** Every signed-in page, for the sidebar, the phone "More" sheet and the page search. */
 export type NavLink = { href: string; label: string; short: string; icon: LucideIcon };
@@ -48,11 +50,17 @@ export const links: NavLink[] = [
 ];
 
 export const billingAdminLink: NavLink = { href: "/admin/billing", label: "Billing", short: "Billing", icon: Receipt };
-export const rolesLink: NavLink = { href: "/admin/users", label: "Users & roles", short: "Users", icon: UsersRound };
+export const staffLink: NavLink = { href: "/admin/staff", label: "Staff", short: "Staff", icon: UsersRound };
+export const customersLink: NavLink = { href: "/admin/customers", label: "Customers", short: "Customers", icon: Contact };
 export const bankUploadLink: NavLink = { href: "/admin/question-bank", label: "Bank upload", short: "Bank upload", icon: LibraryBig };
 
-/** The admin pages this user may open. */
-export const adminLinksFor = (admin: boolean, superAdmin: boolean) => [...(admin ? [billingAdminLink] : []), ...(superAdmin ? [rolesLink, bankUploadLink] : [])];
+/** The admin pages this user may open, from their staff permissions (src/lib/staff.ts). */
+export const adminLinksFor = (permissions: readonly StaffPermission[]) => [
+  ...(permissions.includes("billing") ? [billingAdminLink] : []),
+  ...(permissions.includes("customers") ? [customersLink] : []),
+  ...(permissions.includes("staff") ? [staffLink] : []),
+  ...(permissions.includes("question_bank") ? [bankUploadLink] : []),
+];
 
 /** Bangla and English words people search pages by, beyond the label. */
 export const searchWords: Record<string, string> = {
