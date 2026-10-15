@@ -31,27 +31,6 @@ export function startOfMonth(date?: dayjs.ConfigType) {
   return dayjs(date).tz(APP_TIMEZONE).startOf("month");
 }
 
-export function formatRemaining(deadline: Date) {
-  const start = now();
-  const end = dayjs(deadline).tz(APP_TIMEZONE);
-  if (!end.isAfter(start)) {
-    return { overdue: true, label: "OVERDUE" };
-  }
-
-  const years = end.diff(start, "year");
-  const afterYears = start.add(years, "year");
-  const months = end.diff(afterYears, "month");
-  const afterMonths = afterYears.add(months, "month");
-  const days = end.diff(afterMonths, "day");
-
-  const parts: string[] = [];
-  if (years > 0) parts.push(`${years}Y`);
-  if (months > 0) parts.push(`${months}M`);
-  parts.push(`${days}D`);
-
-  return { overdue: false, label: `${parts.join(" ")} LEFT` };
-}
-
 export type CountdownParts = {
   expired: boolean;
   years: number;

@@ -117,7 +117,7 @@ async function subjects(userId: string) {
 async function study(userId: string) {
   const since = dayjs().tz(APP_TIMEZONE).subtract(30, "day").startOf("day").toDate();
   const [plan, sessions] = await Promise.all([
-    prisma.studyPlan.findUnique({ where: { userId }, select: { longTermDeadline: true, preparationDeadline: true, dailyStudyTargetMinutes: true, dateOfBirth: true, ageLimitYears: true } }),
+    prisma.studyPlan.findUnique({ where: { userId }, select: { preparationDeadline: true, dailyStudyTargetMinutes: true, dateOfBirth: true, ageLimitYears: true } }),
     prisma.studySession.findMany({ where: { userId, startedAt: { gte: since } }, select: { startedAt: true, durationSeconds: true, subject: { select: { name: true } } } }),
   ]);
   const today = dayjs().tz(APP_TIMEZONE).format("YYYY-MM-DD");
@@ -134,7 +134,7 @@ async function study(userId: string) {
     bySubject.set(name, (bySubject.get(name) ?? 0) + minutes);
   }
   const lines = [
-    plan ? `Study plan: দৈনিক লক্ষ্য ${plan.dailyStudyTargetMinutes} মিনিট; প্রস্তুতির শেষ তারিখ ${date(plan.preparationDeadline)}; দীর্ঘমেয়াদি লক্ষ্য ${date(plan.longTermDeadline)}${plan.dateOfBirth ? `; চাকরির বয়সসীমা ${plan.ageLimitYears} বছর পূর্ণ হবে ${date(dayjs(plan.dateOfBirth).add(plan.ageLimitYears, "year").toDate())}` : ""}` : "Study plan: সেট করা নেই।",
+    plan ? `Study plan: দৈনিক লক্ষ্য ${plan.dailyStudyTargetMinutes} মিনিট; প্রস্তুতির শেষ তারিখ ${date(plan.preparationDeadline)}${plan.dateOfBirth ? `; চাকরির বয়সসীমা ${plan.ageLimitYears} বছর পূর্ণ হবে ${date(dayjs(plan.dateOfBirth).add(plan.ageLimitYears, "year").toDate())}` : ""}` : "Study plan: সেট করা নেই।",
     `পড়ার সময়: আজ ${Math.round(todayMin)} মিনিট, গত ৭ দিনে ${Math.round(weekMin)} মিনিট`,
     bySubject.size ? `গত ৩০ দিনে subject অনুযায়ী: ${[...bySubject].sort((a, b) => b[1] - a[1]).map(([name, minutes]) => `${name} ${Math.round(minutes)} মিনিট`).join(", ")}` : "গত ৩০ দিনে কোনো পড়ার session সেভ হয়নি।",
   ];

@@ -28,7 +28,7 @@ import { HeroPlanButton, TodayPlanStarter, type FirstTask } from "@/components/d
 import { MathText } from "@/components/math-text";
 import { PageFinder } from "@/components/page-finder";
 import { Progress } from "@/components/ui/progress";
-import { APP_TIMEZONE, dayjs, formatRemaining } from "@/lib/dayjs";
+import { APP_TIMEZONE, dayjs } from "@/lib/dayjs";
 import { lastRevisedLabel, needsRevision } from "@/lib/revisions";
 import { cn } from "@/lib/utils";
 import type { TaskWithRelations } from "@/server/queries";
@@ -58,7 +58,6 @@ const quickAccess: Array<{ href: string; label: string; icon: LucideIcon; tone: 
 const card = "rounded-3xl bg-white shadow-[0_6px_24px_-12px_rgba(15,23,42,0.15)]";
 
 export function DashboardView({
-  longTermDeadline,
   dateOfBirth,
   ageLimitYears,
   preparationDeadline,
@@ -76,7 +75,6 @@ export function DashboardView({
   firstTask,
   firstName,
 }: {
-  longTermDeadline: Date | null;
   dateOfBirth: Date | null;
   ageLimitYears: number;
   preparationDeadline: Date | null;
@@ -97,7 +95,8 @@ export function DashboardView({
   firstTask: FirstTask;
   firstName: string;
 }) {
-  const prep = preparationDeadline ? formatRemaining(preparationDeadline) : null;
+  // Whole calendar days until the preparation deadline (app timezone); negative once it has passed.
+  const prepDays = preparationDeadline ? dayjs(preparationDeadline).tz(APP_TIMEZONE).startOf("day").diff(dayjs(todayMs).tz(APP_TIMEZONE).startOf("day"), "day") : null;
   const hour = dayjs(todayMs).tz(APP_TIMEZONE).hour();
   const greeting = hour < 12 ? "শুভ সকাল" : hour < 17 ? "শুভ দুপুর" : "শুভ সন্ধ্যা";
   const openTasks = todayTasks.filter((task) => task.status !== "FINISHED");
@@ -128,7 +127,7 @@ export function DashboardView({
       {/* Countdown + today's plan, side by side as in the design (wider countdown). */}
       <div className="grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-[clamp(10px,3vw,20px)] lg:grid-cols-[minmax(0,1.9fr)_minmax(0,1fr)]">
         <DeadlineCountdown
-          deadline={longTermDeadline ? longTermDeadline.toISOString() : null}
+          preparationDeadline={preparationDeadline ? preparationDeadline.toISOString() : null}
           dateOfBirth={dateOfBirth ? dateOfBirth.toISOString() : null}
           ageLimitYears={ageLimitYears}
         />
@@ -175,7 +174,7 @@ export function DashboardView({
           <span className="mt-2 block text-2xl font-bold tabular-nums text-blue-700 sm:text-3xl">{progressPercent}%</span>
           <span className="mt-auto block pt-1.5">
             <Progress className="h-1.5 bg-slate-100 sm:h-2" barClassName="bg-blue-600" value={progressPercent} />
-            <span className={cn("mt-1.5 block truncate text-[11px] sm:text-sm", prep?.overdue ? "font-medium text-red-600" : "text-slate-500")}>{prep ? `সময়: ${prep.label}` : "Deadline দিন"}</span>
+            <span className={cn("mt-1.5 block truncate text-[11px] sm:text-sm", prepDays !== null && prepDays < 0 ? "font-medium text-red-600" : prepDays !== null && prepDays <= 30 ? "font-medium text-amber-700" : "text-slate-500")}>{prepDays === null ? "প্রস্তুতি শেষের তারিখ দিন" : prepDays < 0 ? "প্রস্তুতির তারিখ পেরিয়ে গেছে" : prepDays === 0 ? "আজ প্রস্তুতি শেষের দিন" : `প্রস্তুতি শেষ হতে ${prepDays} দিন`}</span>
           </span>
         </Link>
 

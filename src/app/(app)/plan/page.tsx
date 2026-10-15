@@ -10,7 +10,6 @@ export default async function PlanPage() {
     <StudyPlanForm
       saved={Boolean(plan)}
       updatedAt={plan?.updatedAt ?? null}
-      longTermDeadline={plan?.longTermDeadline ?? null}
       preparationDeadline={plan?.preparationDeadline ?? null}
       dailyStudyTargetMinutes={plan?.dailyStudyTargetMinutes ?? 180}
       dateOfBirth={plan?.dateOfBirth ?? null}

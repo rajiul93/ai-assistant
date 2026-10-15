@@ -16,8 +16,10 @@ export async function saveStudyPlan(input: unknown) {
   const user = await requireUser();
   const data = studyPlanSchema.parse(input);
 
-  const longTermDeadline = startOfDay(data.longTermDeadline).toDate();
   const preparationDeadline = startOfDay(data.preparationDeadline).toDate();
+  // The form no longer asks for a long-term deadline, but the column is NOT NULL (dropping it needs a
+  // migration): it mirrors the preparation deadline, and nothing shows it any more.
+  const longTermDeadline = data.longTermDeadline ? startOfDay(data.longTermDeadline).toDate() : preparationDeadline;
   const dateOfBirth = data.dateOfBirth ? startOfDay(data.dateOfBirth).toDate() : null;
 
   await prisma.studyPlan.upsert({
