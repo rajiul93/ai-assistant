@@ -10,12 +10,12 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NativeSelect } from "@/components/ui/select";
 import { QuillEditor } from "@/components/notes/quill-editor";
 import { toEditorHtml } from "@/lib/note-html";
 import { sectorLabels, statusOptions } from "@/lib/applications";
 import { ATTACHMENT_ACCEPT, isAllowedType, MAX_ATTACHMENT_BYTES } from "@/lib/attachments";
 import { dayjs } from "@/lib/dayjs";
+import { cn } from "@/lib/utils";
 import { jobApplicationSchema, type JobApplicationInput } from "@/lib/validations";
 import { createApplication, updateApplication } from "@/server/actions/applications";
 
@@ -40,7 +40,7 @@ function PostsInput({ value, onChange }: { value: string[]; onChange: (posts: st
     if (fresh.length) onChange([...new Set([...value, ...fresh])]);
     setDraft("");
   };
-  return <div className="flex min-h-10 flex-wrap items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1.5 focus-within:border-zinc-400">
+  return <div className="flex min-h-11 flex-wrap items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2 py-1.5 focus-within:border-zinc-400">
     {value.map((post) => <span key={post} className="flex items-center gap-1 rounded-full bg-zinc-100 py-0.5 pl-2.5 pr-1 text-sm">
       {post}
       <button type="button" aria-label={`Remove ${post}`} onClick={() => onChange(value.filter((item) => item !== post))} className="rounded-full p-1.5 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-900 sm:p-0.5"><X className="size-3" /></button>
@@ -55,7 +55,7 @@ function PostsInput({ value, onChange }: { value: string[]; onChange: (posts: st
       }}
       onPaste={(event) => { const text = event.clipboardData.getData("text"); if (/[,\n;]/.test(text)) { event.preventDefault(); add(text); } }}
       onBlur={() => add(draft)}
-      placeholder={value.length ? "Add another post…" : "e.g. Officer (General), then Enter"}
+      placeholder={value.length ? "আরেকটি পদ…" : "যেমন: Officer (General), তারপর Enter"}
       className="h-7 min-w-40 flex-1 bg-transparent px-1 text-sm outline-none"
     />
   </div>;
@@ -123,7 +123,7 @@ export function ApplicationForm({ application, onSuccess }: { application?: JobA
         notes: pick(result.notes, current.notes),
       }, { keepDefaultValues: true });
       setEditorKey((key) => key + 1);
-      toast.success("Filled in from the file — check it, then save.");
+      toast.success("File থেকে পূরণ হয়েছে — একবার দেখে নিয়ে সেভ করুন।");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Couldn't read that file.");
     } finally {
@@ -139,103 +139,105 @@ export function ApplicationForm({ application, onSuccess }: { application?: JobA
       else await createApplication(values);
     },
     onSuccess: async () => {
-      toast.success(application ? "Application updated" : "Application added");
+      toast.success(application ? "আবেদন আপডেট হয়েছে" : "আবেদন যোগ হয়েছে");
       await queryClient.invalidateQueries({ queryKey: ["applications"] });
       onSuccess?.();
     },
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const sector = useWatch({ control: form.control, name: "sector" });
+  const status = useWatch({ control: form.control, name: "status" });
+  const pick = (name: "sector" | "status", value: string) => form.setValue(name, value as never, { shouldDirty: true });
+
   return <form className="space-y-4" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
-    <div className="rounded-xl border border-dashed border-indigo-200 bg-indigo-50/60 p-3">
+    {/* The quickest way in: the applicant copy fills everything. */}
+    <div>
       <input ref={fileRef} type="file" accept={ATTACHMENT_ACCEPT} className="hidden" onChange={(event) => { void fillFromFile(event.target.files?.[0]); event.target.value = ""; }} />
-      <button type="button" onClick={() => fileRef.current?.click()} disabled={reading} className="flex w-full items-center justify-center gap-2 rounded-lg bg-white px-3 py-2.5 text-sm font-medium text-indigo-700 shadow-sm ring-1 ring-indigo-100 transition hover:bg-indigo-50 disabled:opacity-60">
-        {reading ? <Loader2 className="size-4 animate-spin" /> : <FileUp className="size-4" />}
-        {reading ? "Reading the file…" : "Fill from applicant copy (PDF / image)"}
+      <button type="button" onClick={() => fileRef.current?.click()} disabled={reading} className="flex w-full items-center gap-3 rounded-2xl bg-linear-to-br from-indigo-50 to-blue-50 px-3.5 py-3 text-left ring-1 ring-indigo-100 transition hover:from-indigo-100 disabled:opacity-60">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white text-indigo-600 shadow-sm">{reading ? <Loader2 className="size-5 animate-spin" /> : <FileUp className="size-5" />}</span>
+        <span className="min-w-0">
+          <span className="block text-sm font-semibold text-indigo-800">{reading ? "File পড়া হচ্ছে…" : "Applicant copy থেকে পূরণ করুন"}</span>
+          <span className="block text-[11.5px] text-indigo-900/70">PDF বা ছবি দিন — AI সব ঘর পূরণ করবে, বাকিটা বিস্তারিত-এ যাবে</span>
+        </span>
       </button>
-      <p className="mt-1.5 text-center text-[11px] text-indigo-900/70">AI reads it and fills the fields below; everything else goes into Details.</p>
     </div>
-    <div className="grid gap-4 sm:grid-cols-2">
-      <div className="space-y-2 sm:col-span-2">
-        <Label htmlFor="title">Job title</Label>
-        <Input id="title" placeholder="e.g. Bangladesh Bank Officer recruitment 2026" {...form.register("title")} />
-        {errors.title ? <p className="text-sm text-red-600">{errors.title.message}</p> : null}
+
+    <section className="space-y-3">
+      <div className="space-y-1.5">
+        <Label htmlFor="title">পদের নাম / বিজ্ঞপ্তি</Label>
+        <Input id="title" placeholder="যেমন: বাংলাদেশ ব্যাংক Officer নিয়োগ ২০২৬" className="h-11" {...form.register("title")} />
+        {errors.title ? <p className="text-xs text-red-600">পদের নাম দিন।</p> : null}
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="organization">Organization</Label>
-        <Input id="organization" placeholder="e.g. Bangladesh Bank" {...form.register("organization")} />
-        {errors.organization ? <p className="text-sm text-red-600">{errors.organization.message}</p> : null}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="organization">প্রতিষ্ঠান</Label>
+          <Input id="organization" placeholder="যেমন: বাংলাদেশ ব্যাংক" className="h-11" {...form.register("organization")} />
+          {errors.organization ? <p className="text-xs text-red-600">প্রতিষ্ঠানের নাম দিন।</p> : null}
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="location">কোথায়</Label>
+          <Input id="location" placeholder="যেমন: ঢাকা / সারা দেশ" className="h-11" {...form.register("location")} />
+        </div>
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="location">Location</Label>
-        <Input id="location" placeholder="e.g. Dhaka / anywhere in Bangladesh" {...form.register("location")} />
-      </div>
-      <div className="space-y-2 sm:col-span-2">
-        <Label htmlFor="posts">Posts applied for</Label>
+      <div className="space-y-1.5">
+        <Label htmlFor="posts">যে পদে আবেদন</Label>
         <PostsInput value={posts} onChange={(next) => form.setValue("posts", next, { shouldDirty: true })} />
-        <p className="text-xs text-zinc-500">One circular can cover several posts — add each one you applied for.</p>
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="sector">Sector</Label>
-        <NativeSelect id="sector" {...form.register("sector")}>
-          {Object.entries(sectorLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-        </NativeSelect>
+      <div className="space-y-1.5">
+        <span className="text-sm font-medium">ধরন</span>
+        <div role="radiogroup" aria-label="ধরন" className="grid grid-cols-2 gap-1 rounded-2xl bg-slate-100 p-1">
+          {Object.entries(sectorLabels).map(([value, label]) => <button key={value} type="button" role="radio" aria-checked={sector === value} onClick={() => pick("sector", value)} className={cn("h-9 rounded-xl text-sm font-semibold transition", sector === value ? "bg-white text-blue-700 shadow-sm" : "text-slate-500")}>{label}</button>)}
+        </div>
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="status">Status</Label>
-        <NativeSelect id="status" {...form.register("status")}>
-          {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </NativeSelect>
+      <div className="space-y-1.5">
+        <span className="text-sm font-medium">অবস্থা</span>
+        <div role="radiogroup" aria-label="অবস্থা" className="flex flex-wrap gap-1.5">
+          {statusOptions.map((option) => <button key={option.value} type="button" role="radio" aria-checked={status === option.value} onClick={() => pick("status", option.value)} className={cn("h-8 rounded-full px-3 text-[13px] font-semibold transition", status === option.value ? "bg-blue-600 text-white" : option.className)}>{option.label}</button>)}
+        </div>
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="appliedAt">Applied on</Label>
-        <Input id="appliedAt" type="date" {...form.register("appliedAt")} />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="deadline">Application deadline</Label>
-        <Input id="deadline" type="date" {...form.register("deadline")} />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="examDate">Exam / interview date</Label>
-        <Input id="examDate" type="date" {...form.register("examDate")} />
-      </div>
-    </div>
-    <fieldset className="grid gap-4 rounded-xl border border-zinc-200 p-3 sm:grid-cols-3">
-      <legend className="px-1 text-xs font-medium text-zinc-500">Login & roll</legend>
-      <div className="space-y-2">
-        <Label htmlFor="reference">User ID</Label>
-        <Input id="reference" autoComplete="off" placeholder="Portal user ID" className="font-mono" {...form.register("reference")} />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="roll">Roll</Label>
-        <Input id="roll" autoComplete="off" placeholder="Roll number" className="font-mono" {...form.register("roll")} />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="password">Password</Label>
+    </section>
+
+    <section className="grid grid-cols-3 gap-2">
+      {([["appliedAt", "আবেদন"], ["deadline", "শেষ তারিখ"], ["examDate", "পরীক্ষা/ভাইভা"]] as const).map(([name, label]) => <div key={name} className="min-w-0 space-y-1.5">
+        <Label htmlFor={name} className="text-xs">{label}</Label>
+        <Input id={name} type="date" className="compact-date h-11 px-2" {...form.register(name)} />
+      </div>)}
+    </section>
+
+    <fieldset className="space-y-2 rounded-2xl bg-slate-50 p-3">
+      <legend className="sr-only">লগইন তথ্য</legend>
+      <p className="text-xs font-semibold text-slate-500">লগইন তথ্য <span className="font-normal">(card-এ এক চাপে copy হবে)</span></p>
+      <div className="grid gap-2 sm:grid-cols-3">
+        <Input id="reference" aria-label="User ID" autoComplete="off" placeholder="User ID" className="h-11 bg-white font-mono" {...form.register("reference")} />
+        <Input id="roll" aria-label="Roll" autoComplete="off" placeholder="Roll" className="h-11 bg-white font-mono" {...form.register("roll")} />
         <div className="relative">
-          <Input id="password" type={showPassword ? "text" : "password"} autoComplete="off" placeholder="Portal password" className="pr-10 font-mono" {...form.register("password")} />
-          <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Hide password" : "Show password"} className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-zinc-500 hover:text-zinc-900">
+          <Input id="password" aria-label="Password" type={showPassword ? "text" : "password"} autoComplete="off" placeholder="Password" className="h-11 bg-white pr-10 font-mono" {...form.register("password")} />
+          <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Password লুকান" : "Password দেখুন"} className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-zinc-500 hover:text-zinc-900">
             {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
           </button>
         </div>
       </div>
     </fieldset>
-    <div className="space-y-2">
-      <Label htmlFor="link">Circular or portal link</Label>
-      <Input id="link" type="url" placeholder="https://…" {...form.register("link")} />
-      {errors.link ? <p className="text-sm text-red-600">{errors.link.message}</p> : null}
+
+    <div className="space-y-1.5">
+      <Label htmlFor="link">Circular বা portal link</Label>
+      <Input id="link" type="url" inputMode="url" placeholder="https://…" className="h-11" {...form.register("link")} />
+      {errors.link ? <p className="text-xs text-red-600">পুরো link দিন, যেমন https://…</p> : null}
     </div>
-    <div className="space-y-2">
-      <Label>Details</Label>
+    <div className="space-y-1.5">
+      <Label>বিস্তারিত</Label>
       <QuillEditor
         key={editorKey}
         initialHtml={form.getValues("notes") ?? ""}
-        placeholder="Everything else: personal info, education, fee payment steps, documents…"
+        placeholder="বাকি সব: ব্যক্তিগত তথ্য, শিক্ষা, fee দেওয়ার ধাপ, কাগজপত্র…"
         onChange={(html, text) => form.setValue("notes", text.trim() || html.includes("ql-formula") ? html : "", { shouldDirty: true })}
       />
     </div>
-    <div className="flex justify-end">
-      <Button type="submit" disabled={mutation.isPending}>{mutation.isPending ? "Saving…" : application ? "Save changes" : "Add application"}</Button>
+
+    {/* Stays at the bottom of the sheet while the form scrolls. */}
+    <div className="sticky bottom-0 -mx-6 border-t border-slate-100 bg-white/95 px-6 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur sm:pb-4">
+      <Button type="submit" disabled={mutation.isPending} className="h-12 w-full rounded-2xl text-[15px] font-bold">{mutation.isPending ? "সেভ হচ্ছে…" : application ? "পরিবর্তন সেভ করুন" : "আবেদন যোগ করুন"}</Button>
     </div>
   </form>;
 }
