@@ -38,14 +38,18 @@ const kinds = {
 
 const percent = (correct: number, total: number) => (total ? Math.round((correct / total) * 100) : 0);
 
+/** The card's left edge, one colour per status (as on the Jobs and Tasks pages). */
+const statusEdge: Record<QuestionSetStatus, string> = { TODO: "border-l-slate-300", DOING: "border-l-sky-400", TESTING: "border-l-amber-400", DONE: "border-l-emerald-500" };
+const cardBase = "min-w-0 rounded-3xl border-l-4 bg-white p-3.5 shadow-[0_6px_24px_-12px_rgba(15,23,42,0.15)] sm:p-4";
+
 /** A card in "Set মেলাও" mode: the whole card toggles it; the number is its place in the merged set. */
 function SelectableCard({ set, place, order, onToggle }: { set: SetRow; place: string; order: number; onToggle: () => void }) {
   const selected = order > 0;
-  return <button type="button" onClick={onToggle} aria-pressed={selected} className={cn("flex w-full items-start gap-3 rounded-2xl border bg-white p-4 text-left transition", selected ? "border-indigo-400 ring-2 ring-indigo-100" : "border-zinc-200 hover:border-zinc-300")}>
-    <span className={cn("mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ring-1", selected ? "bg-indigo-600 text-white ring-indigo-600" : "bg-white text-transparent ring-zinc-300")}>{selected ? order : <Check className="size-3.5" />}</span>
+  return <button type="button" onClick={onToggle} aria-pressed={selected} className={cn(cardBase, statusEdge[set.status], "flex w-full items-start gap-3 text-left transition", selected && "ring-2 ring-blue-500")}>
+    <span className={cn("mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold ring-1", selected ? "bg-blue-600 text-white ring-blue-600" : "bg-white text-transparent ring-slate-300")}>{selected ? order : <Check className="size-3.5" />}</span>
     <span className="min-w-0">
-      <span className="block truncate text-xs font-medium text-indigo-600">{place}</span>
-      <span className="mt-0.5 block text-base font-semibold leading-snug"><MathText text={set.topicName} /></span>
+      <span className="block truncate text-xs font-medium text-blue-600">{place}</span>
+      <span className="mt-0.5 block text-[15px] font-bold leading-snug text-slate-900 [overflow-wrap:anywhere]"><MathText text={set.topicName} /></span>
       <span className="mt-1 flex flex-wrap items-center gap-x-3 text-xs text-zinc-500">
         <span className="flex items-center gap-1"><CalendarDays className="size-3.5" />{formatDate(set.date)}</span>
         <span className="flex items-center gap-1"><ListChecks className="size-3.5" />{set.questionCount}টি প্রশ্ন</span>
@@ -119,28 +123,29 @@ function SetCard({ kind, set, place, onDelete }: { kind: BoardKind; set: SetRow;
     try { await kinds[kind].setStatus(set.id, status); toast.success(done); router.refresh(); } catch (error) { toast.error(error instanceof Error ? error.message : "Couldn't move it."); }
   });
   const last = set.lastAttempt;
-  const primary = "flex h-10 items-center justify-center gap-1.5 rounded-xl bg-zinc-950 px-3.5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-50";
-  const secondary = "flex h-10 items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-medium text-zinc-700 ring-1 ring-zinc-200 transition hover:bg-zinc-50 disabled:opacity-50";
+  // The main next step fills the row on phones; the rest are quiet pills beside or under it.
+  const primary = "flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full bg-blue-600 px-4 text-sm font-semibold text-white shadow-[0_8px_18px_-10px_rgba(37,99,235,0.9)] transition hover:bg-blue-700 active:scale-[0.98] disabled:opacity-50 sm:flex-none";
+  const secondary = "flex h-10 items-center justify-center gap-1.5 rounded-full bg-slate-100 px-3.5 text-[13px] font-semibold text-slate-700 transition hover:bg-slate-200 disabled:opacity-50";
 
-  return <article className="rounded-2xl border border-zinc-200 bg-white p-4">
+  return <article className={cn(cardBase, statusEdge[set.status])}>
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
-        <p className="flex items-center gap-1.5 text-xs font-medium text-indigo-600"><span className="truncate">{place}</span>{set.bankSetId ? <span className="shrink-0 rounded-full bg-sky-50 px-1.5 py-px text-[10px] font-semibold text-sky-700">প্রশ্ন ব্যাংক</span> : null}</p>
-        <h2 className="mt-0.5 text-base font-semibold leading-snug"><MathText text={set.topicName} /></h2>
-        <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-zinc-500">
+        <p className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-blue-600"><span className="truncate">{place}</span>{set.bankSetId ? <span className="shrink-0 rounded-full bg-sky-50 px-1.5 py-px text-[10px] font-semibold text-sky-700">প্রশ্ন ব্যাংক</span> : null}</p>
+        <h2 className="mt-0.5 text-[15px] font-bold leading-snug text-slate-900 [overflow-wrap:anywhere]"><MathText text={set.topicName} /></h2>
+        <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500">
           <span className="flex items-center gap-1"><CalendarDays className="size-3.5" />{formatDate(set.date)}</span>
           <span className="flex items-center gap-1"><ListChecks className="size-3.5" />{set.questionCount}টি প্রশ্ন</span>
-          {last ? <span className="font-medium text-zinc-700">শেষ test: {last.correct}/{last.total} · {percent(last.correct, last.total)}%</span> : null}
+          {last ? <span className={cn("rounded-full px-2 py-0.5 font-semibold", percent(last.correct, last.total) >= 80 ? "bg-emerald-50 text-emerald-700" : percent(last.correct, last.total) >= 50 ? "bg-amber-50 text-amber-800" : "bg-red-50 text-red-700")}>শেষ test {last.correct}/{last.total} · {percent(last.correct, last.total)}%</span> : null}
         </p>
       </div>
-      <div className="flex shrink-0 items-center gap-0.5">
+      <div className="-mr-1.5 -mt-1 flex shrink-0 items-center">
         <ShareButton type={kind === "short" ? "SHORT_QUESTION_SET" : "PRELIMINARY_SET"} itemId={set.id} title={set.topicName} label={false} className="size-9 justify-center text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900" />
         {set.status !== "TESTING" ? <Link href={`${base}/${set.id}/edit`} aria-label="Edit" className="flex size-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"><Pencil className="size-4" /></Link> : null}
         <button type="button" onClick={onDelete} aria-label="Delete" className="flex size-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-red-50 hover:text-red-700"><Trash2 className="size-4" /></button>
       </div>
     </div>
 
-    <div className="mt-3 flex flex-wrap gap-2">
+    <div className="mt-3 flex flex-wrap gap-1.5">
       {set.status === "TODO" ? <button type="button" disabled={pending} onClick={() => move("DOING", "Doing-এ নেওয়া হলো — এখন পড়ো")} className={primary}><BookOpenCheck className="size-4" /> পড়া শুরু করো</button> : null}
 
       {set.status === "DOING" ? <>
@@ -200,48 +205,53 @@ export function PreliminaryBoard({ kind = "mcq", sets, subjects, topics = [] }: 
     return `${pathname}?${params}`;
   };
 
-  return <div className="mx-auto max-w-3xl space-y-4">
-    <div className="flex items-end justify-between gap-3">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-        <p className="mt-1 text-sm text-zinc-500">{blurb}</p>
+  return <div className="mx-auto max-w-4xl space-y-3">
+    {/* One slim header in the home page's blue: title, merge and new, and the four stages. */}
+    <section className="rounded-3xl bg-linear-to-br from-[#3f6ef3] via-[#5a87f8] to-[#8fa6fb] p-3 text-white shadow-[0_14px_32px_-18px_rgba(37,99,235,0.6)]">
+      <div className="flex items-center gap-2 px-1">
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-lg font-bold leading-tight tracking-tight">{title}</h1>
+          <p className="truncate text-[12px] text-white/80">{blurb}</p>
+        </div>
+        {sets.length > 1 ? <button type="button" onClick={() => (selecting ? stopSelecting() : setSelecting(true))} aria-pressed={selecting} aria-label={selecting ? "বাতিল" : "Set মেলাও"} title={selecting ? "বাতিল" : "Set মেলাও"} className={cn("flex size-10 shrink-0 items-center justify-center rounded-full ring-1 transition active:scale-95", selecting ? "bg-white text-blue-700 ring-white" : "bg-white/20 ring-white/30 hover:bg-white/30")}>{selecting ? <X className="size-4" /> : <Combine className="size-4" />}</button> : null}
+        <Link href={`${base}/new`} className="flex h-10 shrink-0 items-center gap-1 rounded-full bg-white px-3.5 text-[13.5px] font-semibold text-blue-700 shadow-sm transition active:scale-95"><Plus className="size-4" /> নতুন</Link>
       </div>
-      <div className="flex shrink-0 gap-2">
-        {sets.length > 1 ? <button type="button" onClick={() => (selecting ? stopSelecting() : setSelecting(true))} aria-pressed={selecting} className={cn("flex h-10 items-center gap-1.5 rounded-xl px-3 text-sm font-medium ring-1 transition", selecting ? "bg-indigo-50 text-indigo-900 ring-indigo-300" : "text-zinc-700 ring-zinc-200 hover:bg-zinc-50")}>{selecting ? <X className="size-4" /> : <Combine className="size-4" />} {selecting ? "বাতিল" : "Set মেলাও"}</button> : null}
-        <Link href={`${base}/new`} className="flex h-10 items-center gap-1.5 rounded-xl bg-zinc-950 px-3.5 text-sm font-semibold text-white hover:bg-zinc-800"><Plus className="size-4" /> নতুন set</Link>
+      <div role="tablist" aria-label="Status" className="mt-2.5 grid grid-cols-4 gap-1 rounded-full bg-white/15 p-1 ring-1 ring-white/20">
+        {statusOrder.map((status) => {
+          const on = active === status;
+          return <button
+            key={status}
+            type="button"
+            role="tab"
+            aria-selected={on}
+            onClick={() => router.replace(statusHref(status), { scroll: false })}
+            className={cn("flex h-9 min-w-0 items-center justify-center gap-0.5 rounded-full px-0.5 text-[12px] font-semibold transition min-[360px]:gap-1 min-[360px]:text-[13px]", on ? "bg-white text-blue-700 shadow-sm" : "text-white/90")}
+          >
+            <span className="truncate">{statusInfo[status].label}</span>
+            {counts[status] ? <span className={cn("text-[11px] tabular-nums", on ? "text-blue-500" : "text-white/70")}>{counts[status]}</span> : null}
+          </button>;
+        })}
       </div>
-    </div>
+    </section>
 
     <SubjectTopicFilter subjects={subjects} topics={topics} items={sets} selection={filter.selection} onSelect={filter.select} matches={filter.matches} />
 
-    <div role="tablist" aria-label="Status" className="grid grid-cols-4 gap-1 rounded-2xl bg-zinc-100 p-1">
-      {statusOrder.map((status) => <button
-        key={status}
-        type="button"
-        role="tab"
-        aria-selected={active === status}
-        onClick={() => router.replace(statusHref(status), { scroll: false })}
-        className={cn("flex h-10 items-center justify-center gap-1.5 rounded-xl text-sm font-medium transition", active === status ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-500 hover:text-zinc-800")}
-      >
-        <span className={cn("hidden size-2 rounded-full sm:inline-block", statusInfo[status].dot)} aria-hidden />
-        {statusInfo[status].label}
-        {counts[status] ? <span className="rounded-full bg-zinc-200/70 px-1.5 text-[11px] tabular-nums text-zinc-600">{counts[status]}</span> : null}
-      </button>)}
-    </div>
-    {selecting ? <p className="text-xs text-indigo-700">যে set-গুলো এক করতে চাও সেগুলোতে চাপো — যে ক্রমে চাপবে, প্রশ্নগুলো সেই ক্রমে বসবে। অন্য tab থেকেও বাছা যায়।</p>
-      : <p className={cn("text-xs", statusInfo[active].tone)}>{statusInfo[active].hint}</p>}
+    {selecting ? <p className="rounded-2xl bg-blue-50 px-3 py-2 text-[12.5px] text-blue-800">যে set-গুলো এক করতে চাও সেগুলোতে চাপো — যে ক্রমে চাপবে, প্রশ্নগুলো সেই ক্রমে বসবে। অন্য tab থেকেও বাছা যায়।</p>
+      : <p className={cn("flex items-center gap-1.5 px-1 text-[12.5px]", statusInfo[active].tone)}><span className={cn("size-2 shrink-0 rounded-full", statusInfo[active].dot)} aria-hidden />{statusInfo[active].hint}</p>}
 
-    {visible.length ? <div className={cn("space-y-3", selecting && "pb-20")}>{visible.map((set) => selecting
+    {visible.length ? <div className={cn("grid grid-cols-[minmax(0,1fr)] gap-2.5 lg:grid-cols-[repeat(2,minmax(0,1fr))] lg:gap-3", selecting && "pb-20")}>{visible.map((set) => selecting
       ? <SelectableCard key={set.id} set={set} place={placeOf(set)} order={picked.indexOf(set.id) + 1} onToggle={() => togglePick(set.id)} />
       : <SetCard key={set.id} kind={kind} set={set} place={placeOf(set)} onDelete={() => setDeleting(set)} />)}</div>
-      : <div className="rounded-2xl border border-dashed border-zinc-300 bg-white px-4 py-12 text-center text-sm text-zinc-500">
-        {active === "TODO" ? <>কোনো set নেই। <Link href={`${base}/new`} className="font-medium text-zinc-900 underline underline-offset-2">নতুন set বানাও</Link></> : `${statusInfo[active].label}-এ এখন কিছু নেই।`}
+      : <div className="rounded-3xl bg-white px-6 py-10 text-center shadow-[0_6px_24px_-12px_rgba(15,23,42,0.15)]">
+        <span className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-rose-50"><ListChecks className="size-6 text-rose-500" /></span>
+        <p className="font-semibold text-slate-800">{active === "TODO" ? "কোনো set নেই" : `${statusInfo[active].label}-এ এখন কিছু নেই`}</p>
+        {active === "TODO" ? <Link href={`${base}/new`} className="mt-3 inline-flex h-10 items-center gap-1 rounded-full bg-blue-600 px-4 text-sm font-semibold text-white"><Plus className="size-4" /> নতুন set বানাও</Link> : null}
       </div>}
 
     {selecting ? <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 border-t border-zinc-200 bg-white/90 px-4 py-3 backdrop-blur-xl lg:bottom-0 lg:pl-64">
-      <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
+      <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
         <p className="text-xs text-zinc-600">{pickedSets.length ? <><span className="font-semibold text-zinc-900">{pickedSets.length}টি set</span> · {pickedSets.reduce((sum, set) => sum + set.questionCount, 0)}টি প্রশ্ন</> : "অন্তত ২টা set বাছো"}</p>
-        <button type="button" onClick={() => setMerging(true)} disabled={pickedSets.length < 2} className="flex h-11 items-center gap-1.5 rounded-xl bg-zinc-950 px-5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50"><Combine className="size-4" /> এক করো</button>
+        <button type="button" onClick={() => setMerging(true)} disabled={pickedSets.length < 2} className="flex h-11 items-center gap-1.5 rounded-full bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"><Combine className="size-4" /> এক করো</button>
       </div>
     </div> : null}
 

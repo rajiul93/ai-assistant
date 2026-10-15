@@ -24,11 +24,14 @@ export function useSubjectTopicFilter(subjects: SubjectNode[], topics: TopicNode
   return { selection, select, matches };
 }
 
+// Home-look chips: white with a soft shadow, the chosen one solid blue.
 const chip = (active: boolean, empty = false) => cn(
-  "flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-medium ring-1 transition",
-  active ? "bg-zinc-950 text-white ring-zinc-950" : empty ? "bg-white text-zinc-400 ring-zinc-200 hover:ring-zinc-300" : "bg-white text-zinc-700 ring-zinc-200 hover:ring-zinc-400",
+  "flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-[13px] font-semibold transition",
+  active ? "bg-blue-600 text-white" : empty ? "bg-white text-slate-400 shadow-[0_2px_8px_-4px_rgba(15,23,42,0.2)]" : "bg-white text-slate-600 shadow-[0_2px_8px_-4px_rgba(15,23,42,0.2)] hover:text-slate-900",
 );
-const count = (active: boolean, value: number) => <span className={cn("tabular-nums", active ? "text-white/70" : "text-zinc-400")}>{value}</span>;
+// Phones: one sideways-scrolling row (edge to edge) instead of lines of chips; from sm they wrap.
+const row = "-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden";
+const count = (active: boolean, value: number) => <span className={cn("text-[11.5px] tabular-nums", active ? "text-white/80" : "text-slate-400")}>{value}</span>;
 
 /**
  * Chips for the user's subjects (each with how many items it holds), "Other" for items without a
@@ -48,7 +51,7 @@ export function SubjectTopicFilter({ subjects, topics, items, selection, onSelec
   const subjectTopics = selection.subject && selection.subject !== OTHER ? topicsOf(selection.subject, topics) : [];
 
   return <div className="space-y-2">
-    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Subject">
+    <div className={row} role="group" aria-label="Subject">
       <button type="button" onClick={() => onSelect({ subject: null, topic: null })} aria-pressed={!selection.subject} className={chip(!selection.subject)}>সব {count(!selection.subject, items.length)}</button>
       {subjects.map((subject) => {
         const active = selection.subject === subject.id;
@@ -58,7 +61,7 @@ export function SubjectTopicFilter({ subjects, topics, items, selection, onSelec
       {otherCount || selection.subject === OTHER ? <button type="button" onClick={() => onSelect({ subject: OTHER, topic: null })} aria-pressed={selection.subject === OTHER} title="যেগুলোতে কোনো subject দেওয়া নেই" className={chip(selection.subject === OTHER)}>Other {count(selection.subject === OTHER, otherCount)}</button> : null}
     </div>
 
-    {selection.subject && selection.subject !== OTHER ? <div className="flex flex-wrap gap-1.5 border-l-2 border-indigo-200 pl-2.5" role="group" aria-label="Topic">
+    {selection.subject && selection.subject !== OTHER ? <div className={row} role="group" aria-label="Topic">
       <button type="button" onClick={() => onSelect({ subject: selection.subject, topic: null })} aria-pressed={!selection.topic} className={chip(!selection.topic)}>সব topic</button>
       {subjectTopics.map((topic) => {
         const active = selection.topic === topic.id;
@@ -70,7 +73,7 @@ export function SubjectTopicFilter({ subjects, topics, items, selection, onSelec
         const active = selection.topic === NO_TOPIC;
         return value || active ? <button type="button" onClick={() => onSelect({ subject: selection.subject, topic: NO_TOPIC })} aria-pressed={active} className={chip(active)}>Topic নেই {count(active, value)}</button> : null;
       })()}
-      {!subjectTopics.length ? <span className="self-center text-xs text-zinc-400">এই subject-এ এখনো topic নেই (Subjects পাতা থেকে যোগ করা যায়)</span> : null}
+      {!subjectTopics.length ? <span className="shrink-0 self-center text-xs text-slate-400">এই subject-এ এখনো topic নেই (Subjects পাতা থেকে যোগ করা যায়)</span> : null}
     </div> : null}
   </div>;
 }
