@@ -9,7 +9,6 @@ import { setVoiceAllowed } from "@/lib/voice-access";
 import { useLive } from "@/components/collaboration/live-provider";
 import { NotificationBell } from "@/components/collaboration/notification-bell";
 import { adminLinksFor, billingAdminLink, links } from "@/components/nav-links";
-import { PageFinder } from "@/components/page-finder";
 import type { StaffPermission } from "@/lib/staff";
 import { QuickCreate } from "@/components/quick-create";
 import type { AiLock } from "@/lib/ai-limits";
@@ -17,6 +16,7 @@ import { SignOutButton } from "@/components/sign-out-button";
 import { StudyAssistant } from "@/components/study-assistant";
 import { Calculator } from "@/components/calculator";
 import { CalendarSheet } from "@/components/calendar-sheet";
+import { ToolDock } from "@/components/tool-dock";
 import { SessionBar } from "@/components/timer/session-bar";
 import { SubjectPickerDialog } from "@/components/timer/subject-picker-dialog";
 import { TimerAlarm } from "@/components/timer/timer-alarm";
@@ -89,7 +89,7 @@ export function AppShell({
   };
 
   return (
-    <div className="min-h-full bg-[#f4f6fb]">
+    <div className="min-h-full bg-[#f3f3ef]">
       <aside className="fixed inset-y-0 left-0 hidden w-60 border-r border-slate-200/70 bg-white lg:flex lg:flex-col">
         <div className="flex items-start justify-between gap-2 px-5 pb-4 pt-6">
           <Logo />
@@ -111,18 +111,22 @@ export function AppShell({
 
       <div className="lg:pl-60">
         {/* Phone header, as on the home page design. Voice lives in the assistant's message box. */}
-        <header className="sticky top-0 z-30 flex items-center gap-2 bg-[#f4f6fb]/90 px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl lg:hidden">
+        <header className="sticky top-0 z-30 flex items-center gap-2 bg-[#f3f3ef]/90 px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-xl lg:hidden">
           <div className="min-w-0 flex-1"><Logo /></div>
-          <PageFinder permissions={permissions} />
+          {/* A running study session: its time, tap for the controls. */}
+          <SessionBar variant="chip" />
           <NotificationBell className="size-10 rounded-full bg-slate-100 text-slate-700 hover:bg-slate-200" />
           <Avatar name={userName} image={userImage} />
         </header>
         <StudyAssistant aiLock={aiLock} />
+        {/* One tools button (calendar, calculator) above the assistant's; the sheets open from it. */}
+        <ToolDock />
         <Calculator />
         <CalendarSheet />
         <TimerAlarm />
         <SubjectPickerDialog />
-        <SessionBar />
+        {/* Desktop only; phones have the chip in the top bar. */}
+        <div className="hidden lg:block"><SessionBar /></div>
         {/* Bottom padding leaves room for the tab bar and a running session bar. */}
         <main className="mx-auto w-full max-w-6xl px-4 pt-2 sm:pt-4 pb-[calc(11rem+env(safe-area-inset-bottom))] lg:px-8 lg:py-10 lg:pb-28">
           {children}
@@ -145,7 +149,7 @@ export function AppShell({
         </nav>
 
         <Dialog open={moreOpen} onOpenChange={setMoreOpen}>
-          <DialogContent className="bg-[#f4f6fb] p-0 pt-0 pb-0 sm:max-w-md sm:rounded-3xl sm:pb-0 sm:pt-0">
+          <DialogContent className="bg-[#f3f3ef] p-0 pt-0 pb-0 sm:max-w-md sm:rounded-3xl sm:pb-0 sm:pt-0">
             <MoreSheet links={baseMoreLinks} adminLinks={adminLinks} userName={userName} userImage={userImage} isActive={isActive} badge={badge} onClose={() => setMoreOpen(false)} />
           </DialogContent>
         </Dialog>

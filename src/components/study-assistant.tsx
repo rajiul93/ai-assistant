@@ -245,19 +245,8 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
     void send(value);
   }
 
+  // Opened from the floating dock (ToolDock), which also shows when the AI is busy.
   return <>
-    <button
-      type="button"
-      onClick={() => (open ? close() : setOpen(true))}
-      aria-label={t.panelTitle}
-      aria-expanded={open}
-      className={cn("group fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-4 z-40 flex size-14 items-center justify-center rounded-full bg-zinc-950 text-white shadow-[0_12px_32px_-8px_rgba(0,0,0,0.5)] transition-transform duration-200 hover:scale-105 active:scale-95 lg:bottom-6 lg:right-6", open && "max-sm:hidden")}
-    >
-      {busy ? <span className="assistant-orb absolute inset-0 rounded-full opacity-80" /> : null}
-      <span className={cn("absolute flex items-center justify-center rounded-full bg-zinc-950", busy ? "inset-0.75" : "inset-0")}>
-        {open ? <X className="size-5" /> : <Sparkles className="size-5 transition-transform group-hover:rotate-12" />}
-      </span>
-    </button>
 
     {open ? <section
       aria-label={t.panelTitle}

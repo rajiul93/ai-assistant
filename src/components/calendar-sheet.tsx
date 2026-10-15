@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight, Minus, Plus, X } from "lucide-react";
 import {
   BANGLA_MONTHS, ENGLISH_MONTHS, HIJRI_MONTHS, HIJRI_MONTHS_ARABIC, WEEKDAYS, WEEKDAYS_LONG,
   banglaDate, dayOf, formatBangla, formatEnglish, formatHijri, hijriDate, toBanglaDigits, type CalendarDate,
 } from "@/lib/calendars";
+import { onOpenTool } from "@/components/tool-dock";
 import { cn } from "@/lib/utils";
 
 const ADJUST_KEY = "prep:hijri-adjust";
@@ -23,7 +24,7 @@ function span(first: CalendarDate | null, last: CalendarDate | null, names: stri
 const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
 /**
- * A floating button above the calculator's that opens a full-screen calendar: one English month
+ * Opened from the tools button (ToolDock): a full-screen calendar: one English month
  * where every day also shows its Bangla (বঙ্গাব্দ) and Hijri date, and the picked day in all three.
  */
 export function CalendarSheet() {
@@ -38,7 +39,7 @@ export function CalendarSheet() {
     try { localStorage.setItem(ADJUST_KEY, String(value)); } catch { /* not saved; fine for this visit */ }
   };
 
-  function show() {
+  const show = useCallback(() => {
     // Opening always lands on today (the app may have stayed open past midnight).
     const now = new Date();
     setToday(now);
@@ -46,7 +47,9 @@ export function CalendarSheet() {
     setView({ year: now.getFullYear(), month: now.getMonth() });
     try { setAdjust(Math.max(-2, Math.min(2, Number(localStorage.getItem(ADJUST_KEY)) || 0))); } catch { /* storage blocked: keep 0 */ }
     setOpen(true);
-  }
+  }, []);
+  // Opened from the tools button (ToolDock).
+  useEffect(() => onOpenTool("calendar", show), [show]);
 
   useEffect(() => {
     if (!open) return;
@@ -69,17 +72,8 @@ export function CalendarSheet() {
   const isThisMonth = view.year === today.getFullYear() && view.month === today.getMonth();
 
   return <>
-    <button
-      type="button"
-      onClick={show}
-      aria-label="ক্যালেন্ডার"
-      title="ক্যালেন্ডার"
-      className="fixed bottom-[calc(12rem+env(safe-area-inset-bottom))] right-[1.375rem] z-40 flex size-11 items-center justify-center rounded-full bg-white text-emerald-700 shadow-[0_10px_26px_-10px_rgba(15,23,42,0.45)] ring-1 ring-slate-200 transition hover:scale-105 active:scale-95 lg:bottom-[8.75rem] lg:right-[1.875rem]"
-    >
-      <CalendarDays className="size-5" />
-    </button>
 
-    {open ? <div role="dialog" aria-modal="true" aria-label="ক্যালেন্ডার" className="assistant-panel-in fixed inset-0 z-[60] flex flex-col overflow-y-auto bg-[#f4f6fb] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:inset-auto sm:bottom-6 sm:right-6 sm:max-h-[calc(100dvh-3rem)] sm:w-[26rem] sm:rounded-3xl sm:shadow-[0_24px_80px_-20px_rgba(0,0,0,0.35)] sm:ring-1 sm:ring-slate-200">
+    {open ? <div role="dialog" aria-modal="true" aria-label="ক্যালেন্ডার" className="assistant-panel-in fixed inset-0 z-[60] flex flex-col overflow-y-auto bg-[#f3f3ef] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:inset-auto sm:bottom-6 sm:right-6 sm:max-h-[calc(100dvh-3rem)] sm:w-[26rem] sm:rounded-3xl sm:shadow-[0_24px_80px_-20px_rgba(0,0,0,0.35)] sm:ring-1 sm:ring-slate-200">
       <header className="flex items-center gap-2 px-4 pb-2 pt-3">
         <span className="flex size-9 items-center justify-center rounded-2xl bg-linear-to-br from-[#3f6ef3] to-[#7f9cfa] text-white"><CalendarDays className="size-5" /></span>
         <h2 className="flex-1 text-[17px] font-bold text-slate-900">ক্যালেন্ডার</h2>
