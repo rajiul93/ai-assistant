@@ -83,3 +83,47 @@ export const searchWords: Record<string, string> = {
   "/billing": "plans billing প্ল্যান কেনা package প্যাকেজ",
   "/profile": "profile প্রোফাইল নাম phone ফোন",
 };
+
+/** Each page's own colour (a gradient), the same in the sidebar and the phone "More" sheet. */
+const TONES: Record<string, string> = {
+  "/dashboard": "from-blue-400 to-blue-600",
+  "/tasks": "from-indigo-400 to-blue-600",
+  "/notes": "from-orange-400 to-amber-500",
+  "/jobs": "from-teal-400 to-emerald-600",
+  "/subjects": "from-sky-400 to-blue-600",
+  "/progress": "from-emerald-400 to-teal-600",
+  "/plan": "from-violet-400 to-purple-600",
+  "/videos": "from-rose-400 to-red-500",
+  "/typing": "from-slate-500 to-slate-700",
+  "/preliminary": "from-blue-400 to-indigo-600",
+  "/short-questions": "from-cyan-400 to-sky-600",
+  "/question-bank": "from-amber-400 to-orange-500",
+  "/confusions": "from-fuchsia-400 to-pink-600",
+  "/vocabulary": "from-lime-400 to-green-600",
+  "/messages": "from-blue-500 to-indigo-600",
+  "/usage": "from-orange-400 to-amber-600",
+  "/billing": "from-yellow-400 to-amber-500",
+  "/profile": "from-slate-400 to-slate-600",
+  "/admin/billing": "from-emerald-500 to-green-700",
+  "/admin/customers": "from-pink-400 to-rose-600",
+  "/admin/staff": "from-indigo-400 to-violet-600",
+  "/admin/question-bank": "from-orange-400 to-red-500",
+};
+
+export const toneOf = (href: string) => TONES[href] ?? "from-blue-400 to-blue-600";
+
+/**
+ * Pages in groups, four to a group where possible so the phone sheet's rows fill. The phone tab
+ * bar holds Home, Tasks, Notes and Jobs; the sidebar lists them first as "মূল".
+ */
+export const NAV_GROUPS: Array<{ title: string; hrefs: string[] }> = [
+  { title: "পড়াশোনা", hrefs: ["/subjects", "/plan", "/progress", "/typing"] },
+  { title: "প্রশ্ন ও অনুশীলন", hrefs: ["/preliminary", "/short-questions", "/question-bank", "/confusions"] },
+  { title: "আরো", hrefs: ["/videos", "/vocabulary", "/messages"] },
+];
+
+/** Account pages: on the phone they ride on the profile card, in the sidebar they are a group. */
+export const ACCOUNT_LINKS = [
+  { href: "/billing", label: "আমার প্ল্যান" },
+  { href: "/usage", label: "AI ব্যবহার" },
+];
