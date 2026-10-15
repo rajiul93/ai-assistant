@@ -1,3 +1,5 @@
+import { backslashAt } from "@/lib/ai-json";
+
 /**
  * Pulls the "reply" text out of the assistant's JSON while the model is still writing it, so the
  * answer can be shown and spoken sentence by sentence instead of after the whole JSON is done.
@@ -39,9 +41,12 @@ export function createReplyStreamer(onText: (text: string) => void, streamAction
         const char = raw[at];
         if (char === '"') { done = true; break; }
         if (char !== "\\") { text += char; at++; continue; }
-        // An escape: wait until all of it has arrived.
+        // An escape: wait until all of it has arrived. LaTeX with one backslash ("\frac", "\sqrt")
+        // is shown as written, the same way callAI repairs the finished JSON.
+        const kind = backslashAt(raw, at, false);
+        if (kind === "wait") break;
+        if (kind === "latex") { text += "\\"; at += 1; continue; }
         const next = raw[at + 1];
-        if (next === undefined) break;
         if (next === "u") {
           const hex = raw.slice(at + 2, at + 6);
           if (hex.length < 4) break;
