@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Hind_Siliguri } from "next/font/google";
+import { Geist, Geist_Mono, Tiro_Bangla } from "next/font/google";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Providers } from "@/components/providers";
 import "katex/dist/katex.min.css";
@@ -11,11 +11,13 @@ const geistSans = Geist({
 });
 
 // Geist has no Bangla letters, so Bangla used to fall back to the phone's own (often heavy) font.
-// The browser takes English from Geist and Bangla from Hind Siliguri, which the design uses.
-const bangla = Hind_Siliguri({
+// The browser takes English from Geist and all Bangla from Tiro Bangla (the owner's choice,
+// 2026-10-15). It has one weight, so bold Bangla is drawn bold by the browser.
+const bangla = Tiro_Bangla({
   variable: "--font-bangla",
   subsets: ["bengali", "latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: "400",
+  fallback: ["serif"],
 });
 
 const geistMono = Geist_Mono({
