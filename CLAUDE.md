@@ -63,6 +63,8 @@ alone. Record decisions and their reasons; don't restate code.
 - **Route handlers** (`src/app/api/*`) for AI calls, streams, uploads and polling GETs. They call
   `requireUser()` too and return JSON `{ error }` with a status code on failure.
 - Shared server-only helpers in `src/server/*`; pure helpers usable on both sides in `src/lib/*`.
+- **Light mode only** (owner's choice, 2026-10-15): no dark palette, `color-scheme: light` in
+  `globals.css` and the viewport; don't add `dark:` styles.
 - UI copy is **Bangla** (English for technical terms). Mobile first: no horizontal page scroll; wide
   tables scroll inside their own container.
 - Comments explain *why* or a non-obvious rule; JSDoc on exported functions in that style.

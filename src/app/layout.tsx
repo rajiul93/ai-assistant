@@ -34,10 +34,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   // Draw under the iPhone notch/home bar; the layout pads itself with the safe-area insets.
   viewportFit: "cover",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#141417" },
-  ],
+  // Light only (no dark mode), so the browser bar stays white too.
+  themeColor: "#ffffff",
+  colorScheme: "light",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
