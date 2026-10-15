@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Check, Eye, EyeOff, Loader2, Pencil, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
+import { BookOpenText, Check, ChevronDown, Eye, EyeOff, Loader2, Lock, Pencil, Plus, Search, Sparkles, Trash2, Volume2, X } from "lucide-react";
 import { toast } from "sonner";
+import { canPronounce, pronounce, useSpeaking } from "@/lib/pronounce";
 import { cn } from "@/lib/utils";
 import { bareAffix } from "@/lib/vocabulary/affixes";
 import { banglaVerbForms } from "@/lib/vocabulary/bangla-verb";
@@ -15,18 +17,22 @@ type Affix = Awaited<ReturnType<typeof listAffixes>>[number];
 type AffixKind = Affix["kind"];
 type Noun = Awaited<ReturnType<typeof listNouns>>[number];
 type LearnKind = "VERB" | "NOUN" | "AFFIX" | "PERSON";
+type ExplainKind = "VERB" | "NOUN" | "AFFIX";
 
 const tabs = [
   { id: "verbs", label: "Verb" },
   { id: "persons", label: "Person" },
   { id: "nouns", label: "Singular · Plural" },
-  { id: "affixes", label: "Prefix & Suffix" },
+  { id: "affixes", label: "Prefix · Suffix" },
 ] as const;
 type Tab = (typeof tabs)[number]["id"];
 
-const input = "h-10 w-full min-w-0 rounded-lg border border-zinc-200 bg-white px-2.5 text-sm outline-none transition focus:border-zinc-400";
-const iconButton = "flex size-8 shrink-0 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 disabled:opacity-40";
-const rowColour = (learned: boolean) => (learned ? "bg-emerald-50/70" : "odd:bg-white even:bg-zinc-100");
+const input = "h-11 w-full min-w-0 rounded-xl bg-slate-100 px-3 text-[15px] outline-none ring-blue-500 transition placeholder:text-slate-400 focus:bg-white focus:ring-2";
+const iconButton = "flex size-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40";
+const card = (learned: boolean) => cn("rounded-3xl bg-white p-3.5 shadow-[0_6px_24px_-14px_rgba(15,23,42,0.18)] ring-1 transition", learned ? "ring-emerald-200 bg-emerald-50/40" : "ring-transparent");
+// Phones: one sideways-scrolling row of chips; wider screens wrap.
+const chipRow = "-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 [&::-webkit-scrollbar]:hidden";
+const chip = (active: boolean) => cn("flex h-9 shrink-0 items-center gap-1 rounded-full px-3.5 text-[13px] font-semibold transition active:scale-95", active ? "bg-blue-600 text-white shadow-[0_6px_14px_-8px_rgba(37,99,235,0.9)]" : "bg-white text-slate-600 shadow-[0_2px_8px_-4px_rgba(15,23,42,0.2)]");
 
 /** The user's own ticks: which rows they have finished learning. */
 type Learned = { has: (kind: LearnKind, id: string) => boolean; toggle: (kind: LearnKind, id: string) => void };
@@ -39,36 +45,49 @@ async function fillWithAI(kind: "verb" | "noun" | AffixKind, word: string): Prom
   return payload;
 }
 
+/** 🔊 — says the English word with the browser's voice. Free for everyone. */
+function Speak({ text, className }: { text: string; className?: string }) {
+  const speaking = useSpeaking(text);
+  if (!text || text === "-") return null;
+  return <button
+    type="button"
+    onClick={(event) => { event.stopPropagation(); if (!canPronounce()) { toast.error("এই browser-এ উচ্চারণ শোনা যায় না।"); return; } pronounce(text); }}
+    aria-label={`${text} — উচ্চারণ শোনো`}
+    title="উচ্চারণ শোনো"
+    className={cn("flex size-8 shrink-0 items-center justify-center rounded-full transition active:scale-90", speaking ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-600 hover:bg-blue-100", className)}
+  ><Volume2 className={cn("size-4", speaking && "animate-pulse")} /></button>;
+}
+
 function AiButton({ busy, disabled, onClick }: { busy: boolean; disabled: boolean; onClick: () => void }) {
-  return <button type="button" onClick={onClick} disabled={busy || disabled} title="বাকি ঘরগুলো AI দিয়ে পূরণ করো — মিলিয়ে নিয়ে Add করো" className="flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-medium text-indigo-700 ring-1 ring-indigo-200 transition hover:bg-indigo-50 disabled:opacity-50">
+  return <button type="button" onClick={onClick} disabled={busy || disabled} title="বাকি ঘরগুলো AI দিয়ে পূরণ করো — মিলিয়ে নিয়ে Add করো" className="flex h-11 shrink-0 items-center gap-1.5 rounded-xl bg-violet-50 px-3.5 text-sm font-semibold text-violet-700 transition hover:bg-violet-100 disabled:opacity-50">
     {busy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} AI
   </button>;
 }
 
 function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
   return <label className="relative block">
-    <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />
-    <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className={cn(input, "pl-8")} />
+    <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+    <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="h-11 w-full rounded-full bg-white pl-10 pr-4 text-[15px] shadow-[0_2px_10px_-4px_rgba(15,23,42,0.2)] outline-none ring-blue-500 placeholder:text-slate-400 focus:ring-2" />
   </label>;
 }
 
-/** A cell that can be hidden for self-testing; tap it to peek. */
+/** Content that can be hidden for self-testing; tap it to peek. */
 function QuizCell({ hidden, children }: { hidden: boolean; children: React.ReactNode }) {
   const [peek, setPeek] = useState(false);
   if (!hidden || peek) return <>{children}</>;
-  return <button type="button" onClick={() => setPeek(true)} className="rounded-md bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500 hover:bg-indigo-50 hover:text-indigo-700">দেখো</button>;
+  return <button type="button" onClick={() => setPeek(true)} className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500 hover:bg-blue-50 hover:text-blue-700">দেখো</button>;
 }
 
 function HideToggle({ label, hidden, onToggle }: { label: string; hidden: boolean; onToggle: () => void }) {
-  return <button type="button" onClick={onToggle} aria-pressed={hidden} className={cn("flex h-8 items-center gap-1 rounded-full px-2.5 text-xs font-medium ring-1 transition", hidden ? "bg-zinc-950 text-white ring-zinc-950" : "bg-white text-zinc-600 ring-zinc-200 hover:ring-zinc-400")}>
+  return <button type="button" onClick={onToggle} aria-pressed={hidden} className={cn(chip(hidden), hidden && "bg-slate-900 shadow-none")}>
     {hidden ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />} {label}
   </button>;
 }
 
-/** The "learned" tick at the start of a row. */
+/** The round "learned" tick on each card. */
 function LearnedBox({ checked, onToggle, label }: { checked: boolean; onToggle: () => void; label: string }) {
   return <button type="button" role="checkbox" aria-checked={checked} aria-label={`${label} — শেখা হয়েছে`} title={checked ? "শেখা হয়েছে — চাপলে উঠে যাবে" : "শেখা হলে টিক দাও"} onClick={onToggle}
-    className={cn("flex size-6 items-center justify-center rounded-md border-2 transition", checked ? "border-emerald-600 bg-emerald-600 text-white" : "border-zinc-300 bg-white hover:border-emerald-500")}>
+    className={cn("mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border-2 transition active:scale-90", checked ? "border-emerald-500 bg-emerald-500 text-white" : "border-slate-300 bg-white hover:border-emerald-500")}>
     {checked ? <Check className="size-4" strokeWidth={3} /> : null}
   </button>;
 }
@@ -78,14 +97,15 @@ type Status = "all" | "left" | "done";
 /** How much of a table this user has ticked, and a filter for what is left. */
 function ProgressBar({ done, total, status, onStatus }: { done: number; total: number; status: Status; onStatus: (status: Status) => void }) {
   const percent = total ? Math.round((done / total) * 100) : 0;
-  return <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-zinc-200 bg-white px-3 py-2.5">
-    <div className="min-w-40 flex-1">
-      <p className="text-sm"><span className="font-semibold text-emerald-700">শেখা হয়েছে {done}</span> <span className="text-zinc-500">/ {total} · {percent}%</span></p>
-      <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-zinc-100"><div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${percent}%` }} /></div>
+  return <div className="rounded-3xl bg-white p-3.5 shadow-[0_6px_24px_-14px_rgba(15,23,42,0.18)]">
+    <div className="flex items-baseline justify-between gap-2">
+      <p className="text-sm font-semibold text-slate-800">শেখা হয়েছে <span className="text-emerald-600">{done}</span><span className="text-slate-400"> / {total}</span></p>
+      <p className="text-sm font-bold tabular-nums text-emerald-600">{percent}%</p>
     </div>
-    <div className="flex rounded-full bg-zinc-100 p-0.5 text-xs font-medium">
-      {([["all", "সব"], ["left", `বাকি (${total - done})`], ["done", `শেখা হয়েছে (${done})`]] as const).map(([id, label]) => (
-        <button key={id} type="button" onClick={() => onStatus(id)} className={cn("h-8 rounded-full px-3", status === id ? "bg-white shadow-sm" : "text-zinc-500")}>{label}</button>
+    <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-linear-to-r from-emerald-400 to-teal-500 transition-all" style={{ width: `${percent}%` }} /></div>
+    <div className="mt-3 grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1 text-[12.5px] font-semibold">
+      {([["all", "সব"], ["left", `বাকি ${total - done}`], ["done", `শেখা ${done}`]] as const).map(([id, label]) => (
+        <button key={id} type="button" onClick={() => onStatus(id)} className={cn("h-8 rounded-xl transition", status === id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500")}>{label}</button>
       ))}
     </div>
   </div>;
@@ -94,18 +114,93 @@ function ProgressBar({ done, total, status, onStatus }: { done: number; total: n
 const matches = (query: string, ...fields: string[]) => !query.trim() || fields.some((field) => field.toLowerCase().includes(query.trim().toLowerCase()));
 const inStatus = (status: Status, learned: boolean) => status === "all" || (status === "done") === learned;
 
-/** One form with its Bangla under it; the Bangla can be hidden for practice (tap to peek). */
-function FormCell({ english, bangla, hideBangla, badge }: { english: string; bangla: string; hideBangla: boolean; badge?: boolean }) {
-  return <div>
-    <p className="text-lg font-semibold leading-snug">{english}{badge ? <span className="ml-1.5 rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">নতুন</span> : null}</p>
-    {bangla ? <p className="mt-0.5 text-base text-zinc-700"><QuizCell hidden={hideBangla}>{bangla}</QuizCell></p> : null}
+/**
+ * The word explained in Bangla: closed until tapped. Paid users (and staff) read it; others see a
+ * lock that leads to Plans (the text never reached their page). Staff can write it with AI.
+ */
+function Explain({ kind, id, explanation, hasExplanation, canEdit }: { kind: ExplainKind; id: string; explanation: string | null; hasExplanation: boolean; canEdit: boolean }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState(explanation);
+  const [busy, setBusy] = useState(false);
+  const locked = hasExplanation && text === null;
+
+  async function write() {
+    setBusy(true);
+    try {
+      const response = await fetch("/api/vocabulary/explain", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, id }) });
+      const payload = (await response.json().catch(() => ({}))) as { explanation?: string; error?: string };
+      if (!response.ok || !payload.explanation) { toast.error(payload.error ?? "AI লিখতে পারল না।"); return; }
+      setText(payload.explanation);
+      setOpen(true);
+      toast.success("ব্যাখ্যা লেখা হলো — সবাই (paid) দেখতে পাবে");
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!hasExplanation && !text && !canEdit) return null;
+  return <div className="mt-2.5">
+    <div className="flex flex-wrap items-center gap-1.5">
+      {locked
+        ? <Link href="/billing" className="inline-flex h-8 items-center gap-1.5 rounded-full bg-amber-50 px-3 text-[12.5px] font-semibold text-amber-800 ring-1 ring-amber-200"><Lock className="size-3.5" /> বাংলায় ব্যাখ্যা · Plan নিলে দেখবে</Link>
+        : text ? <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className={cn("inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold transition", open ? "bg-violet-600 text-white" : "bg-violet-50 text-violet-700 hover:bg-violet-100")}>
+          <BookOpenText className="size-3.5" /> বাংলায় ব্যাখ্যা <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
+        </button> : null}
+      {canEdit ? <button type="button" onClick={() => void write()} disabled={busy} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-linear-to-r from-violet-500 to-fuchsia-500 px-3 text-[12.5px] font-semibold text-white shadow-[0_6px_14px_-8px_rgba(139,92,246,0.9)] disabled:opacity-60">
+        {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />} {text || hasExplanation ? "AI দিয়ে আবার লেখো" : "AI দিয়ে বোঝাও"}
+      </button> : null}
+    </div>
+    {open && text ? <div className="mt-2 whitespace-pre-line rounded-2xl bg-violet-50/70 px-3.5 py-3 text-[14.5px] leading-relaxed text-slate-800 ring-1 ring-violet-100">{text}</div> : null}
   </div>;
+}
+
+function NewBadge() {
+  return <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">নতুন</span>;
+}
+
+/** Edit and delete, for staff with the Vocabulary permission. */
+function EditButtons({ label, pending, onEdit, onDelete }: { label: string; pending: boolean; onEdit: () => void; onDelete: () => void }) {
+  return <span className="ml-auto flex shrink-0">
+    <button type="button" onClick={onEdit} aria-label={`${label} edit`} className={iconButton}><Pencil className="size-4" /></button>
+    <button type="button" onClick={onDelete} disabled={pending} aria-label={`${label} মুছে ফেলো`} className={cn(iconButton, "hover:bg-red-50 hover:text-red-600")}><Trash2 className="size-4" /></button>
+  </span>;
+}
+
+/** A form of a word in a small tile: label, the English with 🔊, and its Bangla (both can be hidden). */
+function FormTile({ label, english, bangla, hideEnglish, hideBangla, tone }: { label: string; english: string; bangla: string; hideEnglish: boolean; hideBangla: boolean; tone: string }) {
+  return <div className={cn("min-w-0 rounded-2xl px-3 py-2", tone)}>
+    <p className="text-[10.5px] font-bold uppercase tracking-wide opacity-70">{label}</p>
+    <QuizCell hidden={hideEnglish}>
+      <div className="mt-0.5 flex items-center gap-1.5">
+        <p className="min-w-0 flex-1 text-[16px] font-bold leading-snug text-slate-900 [overflow-wrap:anywhere]">{english}</p>
+        <Speak text={english} className="size-7" />
+      </div>
+      {bangla ? <p className="text-[13.5px] text-slate-600"><QuizCell hidden={hideBangla}>{bangla}</QuizCell></p> : null}
+    </QuizCell>
+  </div>;
+}
+
+/** The admin's add form, folded away behind one button. */
+function AddPanel({ label, children }: { label: string; children: (close: () => void) => React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  if (!open) return <button type="button" onClick={() => setOpen(true)} className="flex h-11 w-full items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-blue-200 bg-white/60 text-sm font-semibold text-blue-700 transition hover:bg-white"><Plus className="size-4" /> {label}</button>;
+  return <div className="relative rounded-3xl bg-white p-3.5 shadow-[0_6px_24px_-14px_rgba(15,23,42,0.18)]">
+    <button type="button" onClick={() => setOpen(false)} aria-label="বন্ধ করো" className={cn(iconButton, "absolute right-2 top-2")}><X className="size-4" /></button>
+    <p className="mb-2.5 text-sm font-bold text-slate-900">{label}</p>
+    {children(() => setOpen(false))}
+  </div>;
+}
+
+function SaveBar({ pending, disabled, label = "Add" }: { pending: boolean; disabled: boolean; label?: string }) {
+  return <button type="submit" disabled={pending || disabled} className="flex h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-linear-to-r from-[#3f6ef3] to-[#5a87f8] text-sm font-bold text-white shadow-[0_10px_20px_-12px_rgba(37,99,235,0.9)] disabled:opacity-50">{pending ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />} {label}</button>;
 }
 
 /* ---------- Verb: present · past · past participle, each with its Bangla ---------- */
 
 type VerbDraft = { present: string; past: string; pastParticiple: string; meaning: string };
-const PAGE = 150;
+const PAGE = 60;
 const letters = "abcdefghijklmnopqrstuvwxyz".split("");
 const emptyVerb: VerbDraft = { present: "", past: "", pastParticiple: "", meaning: "" };
 
@@ -152,81 +247,73 @@ function VerbTable({ verbs, canEdit, learned }: { verbs: Verb[]; canEdit: boolea
   });
 
   const columns = [
-    { key: "present", label: "Present" },
-    { key: "past", label: "Past" },
-    { key: "pastParticiple", label: "Past participle" },
-    { key: "meaning", label: "অর্থ" },
+    { key: "present", label: "Present (go)" },
+    { key: "past", label: "Past (went)" },
+    { key: "pastParticiple", label: "Past participle (gone)" },
+    { key: "meaning", label: "অর্থ (যাওয়া)" },
   ] as const;
 
   return <section className="space-y-3">
-    {canEdit ? <form onSubmit={(event) => { event.preventDefault(); if (complete(draft)) add(); }} className="space-y-2 rounded-2xl border border-zinc-200 bg-white p-3">
-      <div className="grid gap-2 sm:grid-cols-[1fr_auto_1fr_1fr_1.3fr]">
+    {canEdit ? <AddPanel label="নতুন verb যোগ করো">{() => <form onSubmit={(event) => { event.preventDefault(); if (complete(draft)) add(); }} className="space-y-2">
+      <div className="flex gap-2">
         <input value={draft.present} onChange={(event) => setDraft({ ...draft, present: event.target.value })} placeholder="Present (go)" aria-label="Present" className={input} autoCapitalize="off" />
         <AiButton busy={filling} disabled={!draft.present.trim()} onClick={() => void fill()} />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
         <input value={draft.past} onChange={(event) => setDraft({ ...draft, past: event.target.value })} placeholder="Past (went)" aria-label="Past" className={input} autoCapitalize="off" />
-        <input value={draft.pastParticiple} onChange={(event) => setDraft({ ...draft, pastParticiple: event.target.value })} placeholder="Past participle (gone)" aria-label="Past participle" className={input} autoCapitalize="off" />
-        <input value={draft.meaning} onChange={(event) => setDraft({ ...draft, meaning: event.target.value })} placeholder="অর্থ (যাওয়া)" aria-label="অর্থ" className={input} />
+        <input value={draft.pastParticiple} onChange={(event) => setDraft({ ...draft, pastParticiple: event.target.value })} placeholder="P.P. (gone)" aria-label="Past participle" className={input} autoCapitalize="off" />
       </div>
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs text-zinc-500">Present লিখে <span className="font-medium text-indigo-700">AI</span> চাপলে বাকি ঘর বসে যাবে — মিলিয়ে নাও। যোগ করা verb সবাই দেখবে।</p>
-        <button type="submit" disabled={pending || !complete(draft)} className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-zinc-950 px-3.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50"><Plus className="size-4" /> Add</button>
-      </div>
-    </form> : null}
+      <input value={draft.meaning} onChange={(event) => setDraft({ ...draft, meaning: event.target.value })} placeholder="অর্থ (যাওয়া)" aria-label="অর্থ" className={input} />
+      <p className="text-xs text-slate-500">Present লিখে <span className="font-semibold text-violet-700">AI</span> চাপলে বাকি ঘর বসে যাবে — মিলিয়ে নাও। যোগ করা verb সবাই দেখবে।</p>
+      <SaveBar pending={pending} disabled={!complete(draft)} />
+    </form>}</AddPanel> : null}
 
     <ProgressBar done={done} total={rows.length} status={status} onStatus={(value) => narrow(() => setStatus(value))} />
-
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="min-w-48 flex-1"><SearchBox value={query} onChange={(value) => narrow(() => setQuery(value))} placeholder="খুঁজো — go, went, যাওয়া…" /></div>
-      <span className="text-xs text-zinc-500">লুকাও:</span>
+    <SearchBox value={query} onChange={(value) => narrow(() => setQuery(value))} placeholder="খুঁজো — go, went, যাওয়া…" />
+    <div className={chipRow}>
       <HideToggle label="Past" hidden={hidden.past} onToggle={() => setHidden({ ...hidden, past: !hidden.past })} />
       <HideToggle label="P.P." hidden={hidden.pastParticiple} onToggle={() => setHidden({ ...hidden, pastParticiple: !hidden.pastParticiple })} />
       <HideToggle label="বাংলা" hidden={hidden.bangla} onToggle={() => setHidden({ ...hidden, bangla: !hidden.bangla })} />
     </div>
-    <div className="flex flex-wrap gap-1" aria-label="প্রথম অক্ষর">
-      {["", ...letters].map((item) => <button key={item || "all"} type="button" onClick={() => narrow(() => setLetter(item))} aria-pressed={letter === item} className={cn("h-7 min-w-7 rounded-md px-1.5 text-xs font-semibold uppercase transition", letter === item ? "bg-zinc-950 text-white" : "bg-white text-zinc-500 ring-1 ring-zinc-200 hover:text-zinc-900")}>{item || "সব"}</button>)}
+    <div className={chipRow} aria-label="প্রথম অক্ষর">
+      {["", ...letters].map((item) => <button key={item || "all"} type="button" onClick={() => narrow(() => setLetter(item))} aria-pressed={letter === item} className={cn("h-8 min-w-8 shrink-0 rounded-full px-2 text-[13px] font-bold uppercase transition", letter === item ? "bg-slate-900 text-white" : "bg-white text-slate-500 shadow-[0_2px_8px_-4px_rgba(15,23,42,0.2)]")}>{item || "সব"}</button>)}
     </div>
 
-    <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white">
-      <table className="w-full min-w-150 text-left text-base">
-        <thead className="bg-zinc-100 text-sm text-zinc-600"><tr>
-          <th className="w-12 px-3 py-2.5 font-medium" title="শেখা হয়েছে">✓</th>
-          <th className="w-10 px-1 py-2.5 font-medium">#</th>
-          <th className="px-3 py-2.5 font-medium">Present <span className="font-normal">· অর্থ</span></th>
-          <th className="px-3 py-2.5 font-medium">Past <span className="font-normal">· অর্থ</span></th>
-          <th className="px-3 py-2.5 font-medium">Past participle <span className="font-normal">· অর্থ</span></th>
-          {canEdit ? <th className="w-20" /> : null}
-        </tr></thead>
-        <tbody>
-          {shown.map((verb, index) => editing?.id === verb.id
-            ? <tr key={verb.id} className="bg-indigo-50/40">
-              <td className="px-3 py-2" />
-              <td className="px-1 py-2 text-zinc-400 tabular-nums">{index + 1}</td>
-              <td colSpan={3} className="px-1.5 py-1.5"><div className="grid grid-cols-4 gap-1.5">
-                {columns.map((column) => <input key={column.key} value={editing.values[column.key]} onChange={(event) => setEditing({ ...editing, values: { ...editing.values, [column.key]: event.target.value } })} aria-label={column.label} placeholder={column.label} className={input} autoCapitalize="off" />)}
-              </div></td>
-              <td className="px-1.5"><div className="flex">
-                <button type="button" onClick={save} disabled={pending || !complete(editing.values)} aria-label="Save" className={cn(iconButton, "text-emerald-700")}><Check className="size-4" /></button>
-                <button type="button" onClick={() => setEditing(null)} aria-label="Cancel" className={iconButton}><X className="size-4" /></button>
-              </div></td>
-            </tr>
-            : <tr key={verb.id} className={rowColour(verb.learned)}>
-              <td className="px-3 py-2.5 align-top"><LearnedBox checked={verb.learned} onToggle={() => learned.toggle("VERB", verb.id)} label={verb.present} /></td>
-              <td className="px-1 py-2.5 align-top text-zinc-400 tabular-nums">{index + 1}</td>
-              <td className="px-3 py-2.5 align-top"><FormCell english={verb.present} bangla={verb.meaning} hideBangla={hidden.bangla} badge={Boolean(verb.userId)} /></td>
-              <td className="px-3 py-2.5 align-top"><QuizCell hidden={hidden.past}><FormCell english={verb.past} bangla={verb.bangla.past} hideBangla={hidden.bangla} /></QuizCell></td>
-              <td className="px-3 py-2.5 align-top"><QuizCell hidden={hidden.pastParticiple}><FormCell english={verb.pastParticiple} bangla={verb.bangla.pastParticiple} hideBangla={hidden.bangla} /></QuizCell></td>
-              {canEdit ? <td className="px-1.5 align-top"><div className="flex">
-                <button type="button" onClick={() => setEditing({ id: verb.id, values: { present: verb.present, past: verb.past, pastParticiple: verb.pastParticiple, meaning: verb.meaning } })} aria-label={`${verb.present} edit`} className={iconButton}><Pencil className="size-4" /></button>
-                <button type="button" onClick={() => remove(verb)} disabled={pending} aria-label={`${verb.present} মুছে ফেলো`} className={cn(iconButton, "hover:bg-red-50 hover:text-red-700")}><Trash2 className="size-4" /></button>
-              </div></td> : null}
-            </tr>)}
-        </tbody>
-      </table>
-      {!shown.length ? <p className="px-4 py-10 text-center text-sm text-zinc-500">{rows.length ? "কিছু মিলল না।" : "এখনো কোনো verb নেই।"}</p> : null}
-    </div>
+    <ul className="space-y-2.5">
+      {shown.map((verb) => editing?.id === verb.id
+        ? <li key={verb.id} className="rounded-3xl bg-blue-50/60 p-3.5 ring-1 ring-blue-200">
+          <div className="grid grid-cols-2 gap-2">
+            {columns.map((column) => <input key={column.key} value={editing.values[column.key]} onChange={(event) => setEditing({ ...editing, values: { ...editing.values, [column.key]: event.target.value } })} aria-label={column.label} placeholder={column.label} className={cn(input, "bg-white")} autoCapitalize="off" />)}
+          </div>
+          <div className="mt-2 flex gap-2">
+            <button type="button" onClick={() => setEditing(null)} className="h-10 flex-1 rounded-xl bg-white text-sm font-semibold text-slate-700 ring-1 ring-slate-200">বাতিল</button>
+            <button type="button" onClick={save} disabled={pending || !complete(editing.values)} className="h-10 flex-1 rounded-xl bg-blue-600 text-sm font-bold text-white disabled:opacity-50">সেভ</button>
+          </div>
+        </li>
+        : <li key={verb.id} className={card(verb.learned)}>
+          <div className="flex gap-3">
+            <LearnedBox checked={verb.learned} onToggle={() => learned.toggle("VERB", verb.id)} label={verb.present} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-[21px] font-bold leading-tight tracking-tight text-slate-900">{verb.present}</h3>
+                <Speak text={verb.present} />
+                {verb.userId ? <NewBadge /> : null}
+                {canEdit ? <EditButtons label={verb.present} pending={pending} onEdit={() => setEditing({ id: verb.id, values: { present: verb.present, past: verb.past, pastParticiple: verb.pastParticiple, meaning: verb.meaning } })} onDelete={() => remove(verb)} /> : null}
+              </div>
+              <p className="text-[15px] text-slate-600"><QuizCell hidden={hidden.bangla}>{verb.meaning}</QuizCell></p>
+              <div className="mt-2.5 grid grid-cols-2 gap-2">
+                <FormTile label="Past" english={verb.past} bangla={verb.bangla.past} hideEnglish={hidden.past} hideBangla={hidden.bangla} tone="bg-sky-50 text-sky-800" />
+                <FormTile label="Past participle" english={verb.pastParticiple} bangla={verb.bangla.pastParticiple} hideEnglish={hidden.pastParticiple} hideBangla={hidden.bangla} tone="bg-violet-50 text-violet-800" />
+              </div>
+              <Explain kind="VERB" id={verb.id} explanation={verb.explanation} hasExplanation={verb.hasExplanation} canEdit={canEdit} />
+            </div>
+          </div>
+        </li>)}
+    </ul>
+    {!shown.length ? <p className="rounded-3xl bg-white px-4 py-10 text-center text-sm text-slate-500">{rows.length ? "কিছু মিলল না।" : "এখনো কোনো verb নেই।"}</p> : null}
     <div className="flex items-center justify-between gap-2">
-      <p className="text-xs text-zinc-500">{filtered.length}টির মধ্যে {shown.length}টি দেখানো হচ্ছে</p>
-      {filtered.length > shown.length ? <button type="button" onClick={() => setLimit((value) => value + PAGE)} className="h-9 shrink-0 rounded-lg px-3 text-sm font-medium text-zinc-700 ring-1 ring-zinc-200 hover:bg-zinc-50">আরও দেখাও</button> : null}
+      <p className="text-xs text-slate-500">{filtered.length}টির মধ্যে {shown.length}টি</p>
+      {filtered.length > shown.length ? <button type="button" onClick={() => setLimit((value) => value + PAGE)} className="h-10 shrink-0 rounded-full bg-white px-4 text-sm font-semibold text-blue-700 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.25)]">আরও দেখাও</button> : null}
     </div>
   </section>;
 }
@@ -254,8 +341,14 @@ const agreementRows: Array<{ verb: string; first: string; second: string; third:
 const pronounKey = (form: string) => `pronoun-${form.toLowerCase().replace(/\s+/g, "-")}`;
 const agreementKey = (verb: string) => `agreement-${verb.toLowerCase().replace(/[^a-z]+/g, "-").replace(/-$/, "")}`;
 
-function Forms({ forms }: { forms: Form[] }) {
-  return <ul className="space-y-1">{forms.map(([english, bangla]) => <li key={english}><span className="font-semibold">{english}</span> <span className="text-zinc-600">— {bangla}</span></li>)}</ul>;
+const PERSON_TONES = ["bg-sky-50", "bg-violet-50", "bg-amber-50"];
+
+/** Each pronoun as a chip: tap it to hear it, its Bangla under it. */
+function PronounChips({ forms }: { forms: Form[] }) {
+  return <div className="flex flex-wrap gap-1.5">{forms.map(([english, bangla]) => <button key={english} type="button" onClick={() => canPronounce() && pronounce(english)} title="উচ্চারণ শোনো" className="rounded-xl bg-white px-2.5 py-1 text-left shadow-[0_2px_6px_-3px_rgba(15,23,42,0.25)] transition active:scale-95">
+    <span className="flex items-center gap-1 text-[15px] font-bold text-slate-900">{english}<Volume2 className="size-3 text-blue-500" /></span>
+    <span className="block text-[11.5px] text-slate-500">{bangla}</span>
+  </button>)}</div>;
 }
 
 function PersonTable({ learned }: { learned: Learned }) {
@@ -265,54 +358,54 @@ function PersonTable({ learned }: { learned: Learned }) {
   const pronouns = personRows.filter((row) => inStatus(status, learned.has("PERSON", pronounKey(row.form))));
   const agreements = agreementRows.filter((row) => inStatus(status, learned.has("PERSON", agreementKey(row.verb))));
 
-  return <section className="space-y-5">
+  return <section className="space-y-3">
     <ProgressBar done={done} total={keys.length} status={status} onStatus={setStatus} />
-    <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white">
-      <table className="w-full min-w-170 text-left text-base">
-        <thead className="bg-zinc-100 text-sm text-zinc-600"><tr>
-          <th className="w-12 px-3 py-2.5 font-medium" title="শেখা হয়েছে">✓</th>
-          <th className="px-3 py-2.5 font-medium">রূপ</th>
-          <th className="px-3 py-2.5 font-medium">First person <span className="font-normal">(বক্তা)</span></th>
-          <th className="px-3 py-2.5 font-medium">Second person <span className="font-normal">(শ্রোতা)</span></th>
-          <th className="px-3 py-2.5 font-medium">Third person <span className="font-normal">(অন্য কেউ)</span></th>
-        </tr></thead>
-        <tbody>
-          {pronouns.map((row) => {
-            const key = pronounKey(row.form);
-            const checked = learned.has("PERSON", key);
-            return <tr key={row.form} className={cn("align-top", rowColour(checked))}>
-              <td className="px-3 py-3"><LearnedBox checked={checked} onToggle={() => learned.toggle("PERSON", key)} label={row.form} /></td>
-              <td className="px-3 py-3"><p className="font-semibold text-indigo-700">{row.form}</p><p className="text-sm text-zinc-600">{row.hint}</p><p className="mt-1 text-sm italic text-zinc-500">{row.example}</p></td>
-              <td className="px-3 py-3"><Forms forms={row.first} /></td>
-              <td className="px-3 py-3"><Forms forms={row.second} /></td>
-              <td className="px-3 py-3"><Forms forms={row.third} /></td>
-            </tr>;
-          })}
-        </tbody>
-      </table>
-      {!pronouns.length ? <p className="px-4 py-6 text-center text-sm text-zinc-500">এখানে কিছু নেই।</p> : null}
-    </div>
+    <ul className="space-y-2.5">
+      {pronouns.map((row) => {
+        const key = pronounKey(row.form);
+        const checked = learned.has("PERSON", key);
+        return <li key={row.form} className={card(checked)}>
+          <div className="flex gap-3">
+            <LearnedBox checked={checked} onToggle={() => learned.toggle("PERSON", key)} label={row.form} />
+            <div className="min-w-0 flex-1">
+              <h3 className="text-[18px] font-bold text-blue-700">{row.form} <span className="text-sm font-medium text-slate-500">· {row.hint}</span></h3>
+              <p className="mt-0.5 flex items-center gap-1.5 text-sm italic text-slate-500">{row.example} <Speak text={row.example} className="size-7" /></p>
+              <div className="mt-2.5 space-y-2">
+                {([["First person · বক্তা", row.first], ["Second person · শ্রোতা", row.second], ["Third person · অন্য কেউ", row.third]] as const).map(([label, forms], index) => <div key={label} className={cn("rounded-2xl p-2.5", PERSON_TONES[index])}>
+                  <p className="mb-1.5 text-[10.5px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
+                  <PronounChips forms={forms} />
+                </div>)}
+              </div>
+            </div>
+          </div>
+        </li>;
+      })}
+    </ul>
 
-    <div>
-      <h3 className="mb-2 text-sm font-semibold">Person অনুযায়ী verb</h3>
-      <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white">
-        <table className="w-full min-w-150 text-left text-base">
-          <thead className="bg-zinc-100 text-sm text-zinc-600"><tr><th className="w-12 px-3 py-2.5 font-medium" title="শেখা হয়েছে">✓</th><th className="px-3 py-2.5 font-medium">Verb</th><th className="px-3 py-2.5 font-medium">First person</th><th className="px-3 py-2.5 font-medium">Second person</th><th className="px-3 py-2.5 font-medium">Third person</th></tr></thead>
-          <tbody>
-            {agreements.map((row) => {
-              const key = agreementKey(row.verb);
-              const checked = learned.has("PERSON", key);
-              return <tr key={row.verb} className={rowColour(checked)}>
-                <td className="px-3 py-2.5"><LearnedBox checked={checked} onToggle={() => learned.toggle("PERSON", key)} label={row.verb} /></td>
-                <td className="px-3 py-2.5 font-semibold text-indigo-700">{row.verb}</td><td className="px-3 py-2.5">{row.first}</td><td className="px-3 py-2.5">{row.second}</td><td className="px-3 py-2.5">{row.third}</td>
-              </tr>;
-            })}
-          </tbody>
-        </table>
-        {!agreements.length ? <p className="px-4 py-6 text-center text-sm text-zinc-500">এখানে কিছু নেই।</p> : null}
-      </div>
-      <p className="mt-2 text-xs text-zinc-500">মনে রাখো: Present simple-এ শুধু third person singular (he/she/it) হলে verb-এর সাথে s/es বসে।</p>
-    </div>
+    <h3 className="pt-2 text-[15px] font-bold text-slate-900">Person অনুযায়ী verb</h3>
+    <ul className="space-y-2">
+      {agreements.map((row) => {
+        const key = agreementKey(row.verb);
+        const checked = learned.has("PERSON", key);
+        return <li key={row.verb} className={card(checked)}>
+          <div className="flex gap-3">
+            <LearnedBox checked={checked} onToggle={() => learned.toggle("PERSON", key)} label={row.verb} />
+            <div className="min-w-0 flex-1">
+              <p className="font-bold text-blue-700">{row.verb}</p>
+              <dl className="mt-1.5 space-y-1 text-[14.5px]">
+                {([["1st", row.first], ["2nd", row.second], ["3rd", row.third]] as const).map(([label, text]) => <div key={label} className="flex items-center gap-2">
+                  <dt className="w-9 shrink-0 text-xs font-bold text-slate-400">{label}</dt>
+                  <dd className="min-w-0 flex-1 text-slate-800">{text}</dd>
+                  <Speak text={text.replace(/·/g, ",")} className="size-7" />
+                </div>)}
+              </dl>
+            </div>
+          </div>
+        </li>;
+      })}
+    </ul>
+    {!pronouns.length && !agreements.length ? <p className="rounded-3xl bg-white px-4 py-8 text-center text-sm text-slate-500">এখানে কিছু নেই।</p> : null}
+    <p className="text-xs text-slate-500">মনে রাখো: Present simple-এ শুধু third person singular (he/she/it) হলে verb-এর সাথে s/es বসে।</p>
   </section>;
 }
 
@@ -345,6 +438,7 @@ function NounTable({ nouns, canEdit, learned }: { nouns: Noun[]; canEdit: boolea
   const [hidden, setHidden] = useState({ plural: false, bangla: false });
   const [showRules, setShowRules] = useState(false);
   const [filling, setFilling] = useState(false);
+  const [limit, setLimit] = useState(PAGE);
   const [pending, start] = useTransition();
 
   const rows = nouns
@@ -352,12 +446,14 @@ function NounTable({ nouns, canEdit, learned }: { nouns: Noun[]; canEdit: boolea
     .sort((a, b) => nounKey(a).localeCompare(nounKey(b)));
   const done = rows.filter((row) => row.learned).length;
   const inState = rows.filter((row) => inStatus(status, row.learned));
-  const shown = inState.filter((row) => (!ruleFilter || row.rule === ruleFilter) && matches(query, row.singular, row.plural, row.meaning));
+  const filtered = inState.filter((row) => (!ruleFilter || row.rule === ruleFilter) && matches(query, row.singular, row.plural, row.meaning));
+  const shown = filtered.slice(0, limit);
   const ruleCounts = new Map<string, number>();
   for (const row of inState) ruleCounts.set(row.rule, (ruleCounts.get(row.rule) ?? 0) + 1);
   const complete = (values: NounDraft) => Object.values(values).every((value) => value.trim());
   // Already in the table (the server checks again).
   const taken = (noun: NounDraft, exceptId?: string) => rows.some((row) => nounKey(row) === nounKey(noun) && row.id !== exceptId);
+  const narrow = (change: () => void) => { change(); setLimit(PAGE); };
 
   async function fill() {
     setFilling(true);
@@ -379,91 +475,85 @@ function NounTable({ nouns, canEdit, learned }: { nouns: Noun[]; canEdit: boolea
   });
 
   const fields = [
-    { key: "singular", label: "Singular", placeholder: "Singular (child)" },
-    { key: "plural", label: "Plural", placeholder: "Plural (children)" },
-    { key: "meaning", label: "অর্থ", placeholder: "অর্থ (শিশু)" },
+    { key: "singular", label: "Singular (child)" },
+    { key: "plural", label: "Plural (children)" },
+    { key: "meaning", label: "অর্থ (শিশু)" },
   ] as const;
 
   return <section className="space-y-3">
-    <div className="rounded-2xl border border-zinc-200 bg-white">
-      <button type="button" onClick={() => setShowRules(!showRules)} aria-expanded={showRules} className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-semibold">
-        Plural করার নিয়মগুলো <span className="text-xs font-normal text-zinc-500">{showRules ? "লুকাও" : "দেখো"}</span>
+    <div className="rounded-3xl bg-white shadow-[0_6px_24px_-14px_rgba(15,23,42,0.18)]">
+      <button type="button" onClick={() => setShowRules(!showRules)} aria-expanded={showRules} className="flex w-full items-center justify-between gap-2 px-4 py-3.5 text-left text-sm font-bold text-slate-900">
+        <span className="flex items-center gap-2"><BookOpenText className="size-4 text-blue-600" /> Plural করার নিয়মগুলো</span>
+        <ChevronDown className={cn("size-4 text-slate-400 transition-transform", showRules && "rotate-180")} />
       </button>
-      {showRules ? <ul className="space-y-1.5 border-t border-zinc-100 px-4 py-3 text-base">
-        {pluralRules.map(([rule, text]) => <li key={rule} className="flex gap-2"><span className="w-36 shrink-0 font-semibold text-indigo-700">{rule}</span><span className="text-zinc-700">{text}</span></li>)}
+      {showRules ? <ul className="space-y-2 border-t border-slate-100 px-4 py-3 text-[14.5px]">
+        {pluralRules.map(([rule, text]) => <li key={rule}><span className="mr-2 inline-block rounded-full bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-700">{rule}</span><span className="text-slate-700">{text}</span></li>)}
       </ul> : null}
     </div>
 
-    {canEdit ? <form onSubmit={(event) => { event.preventDefault(); if (complete(draft)) add(); }} className="space-y-2 rounded-2xl border border-zinc-200 bg-white p-3">
-      <div className="grid gap-2 sm:grid-cols-[1fr_auto_1fr_1.3fr]">
-        <input value={draft.singular} onChange={(event) => setDraft({ ...draft, singular: event.target.value })} placeholder={fields[0].placeholder} aria-label="Singular" className={input} autoCapitalize="off" />
+    {canEdit ? <AddPanel label="নতুন noun যোগ করো">{() => <form onSubmit={(event) => { event.preventDefault(); if (complete(draft)) add(); }} className="space-y-2">
+      <div className="flex gap-2">
+        <input value={draft.singular} onChange={(event) => setDraft({ ...draft, singular: event.target.value })} placeholder={fields[0].label} aria-label="Singular" className={input} autoCapitalize="off" />
         <AiButton busy={filling} disabled={!draft.singular.trim() || draft.singular.trim() === "-"} onClick={() => void fill()} />
-        <input value={draft.plural} onChange={(event) => setDraft({ ...draft, plural: event.target.value })} placeholder={fields[1].placeholder} aria-label="Plural" className={input} autoCapitalize="off" />
-        <input value={draft.meaning} onChange={(event) => setDraft({ ...draft, meaning: event.target.value })} placeholder={fields[2].placeholder} aria-label="অর্থ" className={input} />
       </div>
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs text-zinc-500">Singular লিখে <span className="font-medium text-indigo-700">AI</span> চাপলে plural আর অর্থ বসবে। Plural না থাকলে “-” (information), singular না থাকলে “-” (scissors)। যোগ করা শব্দ সবাই দেখবে।</p>
-        <button type="submit" disabled={pending || !complete(draft)} className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-zinc-950 px-3.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50"><Plus className="size-4" /> Add</button>
+      <div className="grid grid-cols-2 gap-2">
+        <input value={draft.plural} onChange={(event) => setDraft({ ...draft, plural: event.target.value })} placeholder={fields[1].label} aria-label="Plural" className={input} autoCapitalize="off" />
+        <input value={draft.meaning} onChange={(event) => setDraft({ ...draft, meaning: event.target.value })} placeholder={fields[2].label} aria-label="অর্থ" className={input} />
       </div>
-    </form> : null}
+      <p className="text-xs text-slate-500">Singular লিখে <span className="font-semibold text-violet-700">AI</span> চাপলে plural আর অর্থ বসবে। Plural না থাকলে “-” (information), singular না থাকলে “-” (scissors)।</p>
+      <SaveBar pending={pending} disabled={!complete(draft)} />
+    </form>}</AddPanel> : null}
 
-    <ProgressBar done={done} total={rows.length} status={status} onStatus={setStatus} />
-
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="min-w-48 flex-1"><SearchBox value={query} onChange={setQuery} placeholder="খুঁজো — child, children, শিশু…" /></div>
-      <span className="text-xs text-zinc-500">লুকাও:</span>
+    <ProgressBar done={done} total={rows.length} status={status} onStatus={(value) => narrow(() => setStatus(value))} />
+    <SearchBox value={query} onChange={(value) => narrow(() => setQuery(value))} placeholder="খুঁজো — child, children, শিশু…" />
+    <div className={chipRow}>
       <HideToggle label="Plural" hidden={hidden.plural} onToggle={() => setHidden({ ...hidden, plural: !hidden.plural })} />
       <HideToggle label="বাংলা" hidden={hidden.bangla} onToggle={() => setHidden({ ...hidden, bangla: !hidden.bangla })} />
     </div>
-    <div className="flex flex-wrap gap-1.5" aria-label="নিয়ম অনুযায়ী">
-      {["", ...ruleCounts.keys()].map((rule) => <button key={rule || "all"} type="button" onClick={() => setRuleFilter(rule)} aria-pressed={ruleFilter === rule} className={cn("h-8 rounded-full px-3 text-xs font-medium ring-1 transition", ruleFilter === rule ? "bg-zinc-950 text-white ring-zinc-950" : "bg-white text-zinc-600 ring-zinc-200 hover:ring-zinc-400")}>
-        {rule || "সব নিয়ম"}{rule ? ` (${ruleCounts.get(rule)})` : ""}
+    <div className={chipRow} aria-label="নিয়ম অনুযায়ী">
+      {["", ...ruleCounts.keys()].map((rule) => <button key={rule || "all"} type="button" onClick={() => narrow(() => setRuleFilter(rule))} aria-pressed={ruleFilter === rule} className={chip(ruleFilter === rule)}>
+        {rule || "সব নিয়ম"}{rule ? <span className="opacity-70">{ruleCounts.get(rule)}</span> : null}
       </button>)}
     </div>
 
-    <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white">
-      <table className="w-full min-w-160 text-left text-base">
-        <thead className="bg-zinc-100 text-sm text-zinc-600"><tr>
-          <th className="w-12 px-3 py-2.5 font-medium" title="শেখা হয়েছে">✓</th>
-          <th className="w-10 px-1 py-2.5 font-medium">#</th>
-          <th className="px-3 py-2.5 font-medium">Singular <span className="font-normal">· অর্থ</span></th>
-          <th className="px-3 py-2.5 font-medium">Plural <span className="font-normal">· অর্থ</span></th>
-          <th className="px-3 py-2.5 font-medium">নিয়ম</th>
-          {canEdit ? <th className="w-20" /> : null}
-        </tr></thead>
-        <tbody>
-          {shown.map((row, index) => editing?.id === row.id
-            ? <tr key={row.id} className="bg-indigo-50/40">
-              <td className="px-3 py-2" />
-              <td className="px-1 py-2 text-zinc-400 tabular-nums">{index + 1}</td>
-              <td colSpan={3} className="px-1.5 py-1.5"><div className="grid grid-cols-3 gap-1.5">
-                {fields.map((field) => <input key={field.key} value={editing.values[field.key]} onChange={(event) => setEditing({ ...editing, values: { ...editing.values, [field.key]: event.target.value } })} aria-label={field.label} placeholder={field.label} className={input} autoCapitalize="off" />)}
-              </div></td>
-              <td className="px-1.5"><div className="flex">
-                <button type="button" onClick={save} disabled={pending || !complete(editing.values)} aria-label="Save" className={cn(iconButton, "text-emerald-700")}><Check className="size-4" /></button>
-                <button type="button" onClick={() => setEditing(null)} aria-label="Cancel" className={iconButton}><X className="size-4" /></button>
-              </div></td>
-            </tr>
-            : <tr key={row.id} className={rowColour(row.learned)}>
-              <td className="px-3 py-2.5 align-top"><LearnedBox checked={row.learned} onToggle={() => learned.toggle("NOUN", row.id)} label={nounKey(row)} /></td>
-              <td className="px-1 py-2.5 align-top text-zinc-400 tabular-nums">{index + 1}</td>
-              <td className="px-3 py-2.5 align-top">{row.singular === "-"
-                ? <p className="text-zinc-400">— <span className="text-sm">(singular নেই)</span></p>
-                : <FormCell english={row.singular} bangla={row.meaning} hideBangla={hidden.bangla} badge={Boolean(row.userId)} />}</td>
-              <td className="px-3 py-2.5 align-top"><QuizCell hidden={hidden.plural}>{row.plural === "-"
-                ? <p className="text-zinc-400">— <span className="text-sm">(plural হয় না)</span></p>
-                : <FormCell english={row.plural} bangla={row.singular === "-" ? row.meaning : banglaPlural(row.meaning, row.person)} hideBangla={hidden.bangla} badge={row.singular === "-" && Boolean(row.userId)} />}</QuizCell></td>
-              <td className="px-3 py-2.5 align-top"><span className={cn("inline-block rounded-full px-2 py-0.5 text-xs font-medium", row.rule === "+s" || row.rule === "+es" || row.rule === "y → ies" ? "bg-zinc-200/70 text-zinc-700" : "bg-amber-50 text-amber-800")}>{row.rule}</span></td>
-              {canEdit ? <td className="px-1.5 align-top"><div className="flex">
-                <button type="button" onClick={() => setEditing({ id: row.id, values: { singular: row.singular, plural: row.plural, meaning: row.meaning } })} aria-label={`${nounKey(row)} edit`} className={iconButton}><Pencil className="size-4" /></button>
-                <button type="button" onClick={() => remove(row)} disabled={pending} aria-label={`${nounKey(row)} মুছে ফেলো`} className={cn(iconButton, "hover:bg-red-50 hover:text-red-700")}><Trash2 className="size-4" /></button>
-              </div></td> : null}
-            </tr>)}
-        </tbody>
-      </table>
-      {!shown.length ? <p className="px-4 py-10 text-center text-sm text-zinc-500">{rows.length ? "কিছু মিলল না।" : "এখনো কোনো noun নেই।"}</p> : null}
+    <ul className="space-y-2.5">
+      {shown.map((row) => editing?.id === row.id
+        ? <li key={row.id} className="rounded-3xl bg-blue-50/60 p-3.5 ring-1 ring-blue-200">
+          <div className="grid grid-cols-2 gap-2">
+            {fields.map((field) => <input key={field.key} value={editing.values[field.key]} onChange={(event) => setEditing({ ...editing, values: { ...editing.values, [field.key]: event.target.value } })} aria-label={field.label} placeholder={field.label} className={cn(input, "bg-white", field.key === "meaning" && "col-span-2")} autoCapitalize="off" />)}
+          </div>
+          <div className="mt-2 flex gap-2">
+            <button type="button" onClick={() => setEditing(null)} className="h-10 flex-1 rounded-xl bg-white text-sm font-semibold text-slate-700 ring-1 ring-slate-200">বাতিল</button>
+            <button type="button" onClick={save} disabled={pending || !complete(editing.values)} className="h-10 flex-1 rounded-xl bg-blue-600 text-sm font-bold text-white disabled:opacity-50">সেভ</button>
+          </div>
+        </li>
+        : <li key={row.id} className={card(row.learned)}>
+          <div className="flex gap-3">
+            <LearnedBox checked={row.learned} onToggle={() => learned.toggle("NOUN", row.id)} label={nounKey(row)} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-bold", row.rule === "+s" || row.rule === "+es" || row.rule === "y → ies" ? "bg-slate-100 text-slate-600" : "bg-amber-100 text-amber-800")}>{row.rule}</span>
+                {row.userId ? <NewBadge /> : null}
+                {canEdit ? <EditButtons label={nounKey(row)} pending={pending} onEdit={() => setEditing({ id: row.id, values: { singular: row.singular, plural: row.plural, meaning: row.meaning } })} onDelete={() => remove(row)} /> : null}
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {row.singular === "-"
+                  ? <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-400">Singular নেই</div>
+                  : <FormTile label="Singular" english={row.singular} bangla={row.meaning} hideEnglish={false} hideBangla={hidden.bangla} tone="bg-sky-50 text-sky-800" />}
+                {row.plural === "-"
+                  ? <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-400">Plural হয় না</div>
+                  : <FormTile label="Plural" english={row.plural} bangla={row.singular === "-" ? row.meaning : banglaPlural(row.meaning, row.person)} hideEnglish={hidden.plural} hideBangla={hidden.bangla} tone="bg-emerald-50 text-emerald-800" />}
+              </div>
+              <Explain kind="NOUN" id={row.id} explanation={row.explanation} hasExplanation={row.hasExplanation} canEdit={canEdit} />
+            </div>
+          </div>
+        </li>)}
+    </ul>
+    {!shown.length ? <p className="rounded-3xl bg-white px-4 py-10 text-center text-sm text-slate-500">{rows.length ? "কিছু মিলল না।" : "এখনো কোনো noun নেই।"}</p> : null}
+    <div className="flex items-center justify-between gap-2">
+      <p className="text-xs text-slate-500">{filtered.length}টির মধ্যে {shown.length}টি · হলুদ নিয়মগুলো পরীক্ষায় বেশি আসে</p>
+      {filtered.length > shown.length ? <button type="button" onClick={() => setLimit((value) => value + PAGE)} className="h-10 shrink-0 rounded-full bg-white px-4 text-sm font-semibold text-blue-700 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.25)]">আরও দেখাও</button> : null}
     </div>
-    <p className="text-xs text-zinc-500">{shown.length}টি দেখানো হচ্ছে · হলুদ নিয়মগুলো পরীক্ষায় বেশি আসে</p>
   </section>;
 }
 
@@ -472,12 +562,14 @@ function NounTable({ nouns, canEdit, learned }: { nouns: Noun[]; canEdit: boolea
 type AffixDraft = { kind: AffixKind; affix: string; meaning: string; example: string };
 const kindLabel: Record<AffixKind, string> = { PREFIX: "Prefix", SUFFIX: "Suffix" };
 
-function KindSelect({ value, onChange }: { value: AffixKind; onChange: (kind: AffixKind) => void }) {
-  return <select value={value} onChange={(event) => onChange(event.target.value as AffixKind)} aria-label="Prefix না Suffix" className={input}>
-    <option value="PREFIX">Prefix</option>
-    <option value="SUFFIX">Suffix</option>
-  </select>;
+function KindSwitch({ value, onChange }: { value: AffixKind; onChange: (kind: AffixKind) => void }) {
+  return <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1" role="radiogroup" aria-label="Prefix না Suffix">
+    {(["PREFIX", "SUFFIX"] as const).map((kind) => <button key={kind} type="button" role="radio" aria-checked={value === kind} onClick={() => onChange(kind)} className={cn("h-9 rounded-lg text-sm font-semibold transition", value === kind ? "bg-white text-slate-900 shadow-sm" : "text-slate-500")}>{kindLabel[kind]}</button>)}
+  </div>;
 }
+
+/** The first English word of an example ("unhappy — অসুখী" → "unhappy"), to say aloud. */
+const exampleWord = (example: string) => example.split(/[—,–-]/)[0]?.trim().match(/^[A-Za-z' ]+/)?.[0]?.trim() ?? "";
 
 function AffixTable({ affixes, canEdit, learned }: { affixes: Affix[]; canEdit: boolean; learned: Learned }) {
   const router = useRouter();
@@ -519,72 +611,65 @@ function AffixTable({ affixes, canEdit, learned }: { affixes: Affix[]; canEdit: 
   });
 
   return <section className="space-y-3">
-    {canEdit ? <form onSubmit={(event) => { event.preventDefault(); if (complete(draft)) add(); }} className="space-y-2 rounded-2xl border border-zinc-200 bg-white p-3">
-      <div className="grid gap-2 sm:grid-cols-[7rem_1fr_auto_1.2fr_1.6fr]">
-        <KindSelect value={draft.kind} onChange={(kind) => setDraft({ ...draft, kind })} />
+    {canEdit ? <AddPanel label="নতুন prefix / suffix যোগ করো">{() => <form onSubmit={(event) => { event.preventDefault(); if (complete(draft)) add(); }} className="space-y-2">
+      <KindSwitch value={draft.kind} onChange={(kind) => setDraft({ ...draft, kind })} />
+      <div className="flex gap-2">
         <input value={draft.affix} onChange={(event) => setDraft({ ...draft, affix: event.target.value })} placeholder={draft.kind === "PREFIX" ? "un-" : "-less"} aria-label="Prefix/Suffix" className={input} autoCapitalize="off" />
         <AiButton busy={filling} disabled={!draft.affix.trim()} onClick={() => void fill()} />
-        <input value={draft.meaning} onChange={(event) => setDraft({ ...draft, meaning: event.target.value })} placeholder="অর্থ (না/বিপরীত)" aria-label="অর্থ" className={input} />
-        <input value={draft.example} onChange={(event) => setDraft({ ...draft, example: event.target.value })} placeholder="উদাহরণ (unhappy — অসুখী)" aria-label="উদাহরণ" className={input} />
       </div>
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs text-zinc-500">Prefix/Suffix লিখে <span className="font-medium text-indigo-700">AI</span> চাপলে অর্থ আর উদাহরণ বসে যাবে — মিলিয়ে নাও। যোগ করা শব্দ সবাই দেখবে।</p>
-        <button type="submit" disabled={pending || !complete(draft)} className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-zinc-950 px-3.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50"><Plus className="size-4" /> Add</button>
-      </div>
-    </form> : null}
+      <input value={draft.meaning} onChange={(event) => setDraft({ ...draft, meaning: event.target.value })} placeholder="অর্থ (না/বিপরীত)" aria-label="অর্থ" className={input} />
+      <input value={draft.example} onChange={(event) => setDraft({ ...draft, example: event.target.value })} placeholder="উদাহরণ (unhappy — অসুখী)" aria-label="উদাহরণ" className={input} />
+      <SaveBar pending={pending} disabled={!complete(draft)} />
+    </form>}</AddPanel> : null}
 
     <ProgressBar done={done} total={rows.length} status={status} onStatus={setStatus} />
-
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="flex rounded-full bg-zinc-100 p-0.5 text-xs font-medium">
-        {(["ALL", "PREFIX", "SUFFIX"] as const).map((kind) => <button key={kind} type="button" onClick={() => setKindFilter(kind)} className={cn("h-8 rounded-full px-3", kindFilter === kind ? "bg-white shadow-sm" : "text-zinc-500")}>
-          {kind === "ALL" ? "সব" : kindLabel[kind]} ({kind === "ALL" ? inState.length : inState.filter((entry) => entry.kind === kind).length})
-        </button>)}
-      </div>
-      <div className="min-w-40 flex-1"><SearchBox value={query} onChange={setQuery} placeholder="খুঁজো — un, less, অসুখী…" /></div>
+    <SearchBox value={query} onChange={setQuery} placeholder="খুঁজো — un, less, অসুখী…" />
+    <div className={chipRow}>
+      {(["ALL", "PREFIX", "SUFFIX"] as const).map((kind) => <button key={kind} type="button" onClick={() => setKindFilter(kind)} aria-pressed={kindFilter === kind} className={chip(kindFilter === kind)}>
+        {kind === "ALL" ? "সব" : kindLabel[kind]} <span className="opacity-70">{kind === "ALL" ? inState.length : inState.filter((entry) => entry.kind === kind).length}</span>
+      </button>)}
       <HideToggle label="অর্থ লুকাও" hidden={hideMeaning} onToggle={() => setHideMeaning(!hideMeaning)} />
     </div>
 
-    <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white">
-      <table className="w-full min-w-160 text-left text-base">
-        <thead className="bg-zinc-100 text-sm text-zinc-600"><tr>
-          <th className="w-12 px-3 py-2.5 font-medium" title="শেখা হয়েছে">✓</th>
-          <th className="w-24 px-3 py-2.5 font-medium">ধরন</th><th className="px-3 py-2.5 font-medium">Prefix / Suffix</th><th className="px-3 py-2.5 font-medium">অর্থ</th><th className="px-3 py-2.5 font-medium">উদাহরণ</th>
-          {canEdit ? <th className="w-20" /> : null}
-        </tr></thead>
-        <tbody>
-          {shown.map((entry) => editing?.id === entry.id
-            ? <tr key={entry.id} className="bg-indigo-50/40">
-              <td className="px-3 py-2" />
-              <td className="px-1.5 py-1.5"><KindSelect value={editing.values.kind} onChange={(kind) => setEditing({ ...editing, values: { ...editing.values, kind } })} /></td>
-              {(["affix", "meaning", "example"] as const).map((key) => <td key={key} className="px-1.5 py-1.5"><input value={editing.values[key]} onChange={(event) => setEditing({ ...editing, values: { ...editing.values, [key]: event.target.value } })} aria-label={key} className={input} autoCapitalize="off" /></td>)}
-              <td className="px-1.5"><div className="flex">
-                <button type="button" onClick={save} disabled={pending || !complete(editing.values)} aria-label="Save" className={cn(iconButton, "text-emerald-700")}><Check className="size-4" /></button>
-                <button type="button" onClick={() => setEditing(null)} aria-label="Cancel" className={iconButton}><X className="size-4" /></button>
-              </div></td>
-            </tr>
-            : <tr key={entry.id} className={rowColour(entry.learned)}>
-              <td className="px-3 py-2.5"><LearnedBox checked={entry.learned} onToggle={() => learned.toggle("AFFIX", entry.id)} label={entry.affix} /></td>
-              <td className="px-3 py-2.5"><span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", entry.kind === "PREFIX" ? "bg-sky-50 text-sky-700" : "bg-violet-50 text-violet-700")}>{kindLabel[entry.kind]}</span></td>
-              <td className="px-3 py-2.5 text-lg font-semibold">{entry.affix}{entry.userId ? <span className="ml-1.5 rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">নতুন</span> : null}</td>
-              <td className="px-3 py-2.5 text-zinc-700"><QuizCell hidden={hideMeaning}>{entry.meaning}</QuizCell></td>
-              <td className="px-3 py-2.5 text-zinc-700">{entry.example || <span className="text-zinc-300">—</span>}</td>
-              {canEdit ? <td className="px-1.5"><div className="flex">
-                <button type="button" onClick={() => setEditing({ id: entry.id, values: { kind: entry.kind, affix: entry.affix, meaning: entry.meaning, example: entry.example } })} aria-label={`${entry.affix} edit`} className={iconButton}><Pencil className="size-4" /></button>
-                <button type="button" onClick={() => remove(entry)} disabled={pending} aria-label={`${entry.affix} মুছে ফেলো`} className={cn(iconButton, "hover:bg-red-50 hover:text-red-700")}><Trash2 className="size-4" /></button>
-              </div></td> : null}
-            </tr>)}
-        </tbody>
-      </table>
-      {!shown.length ? <p className="px-4 py-10 text-center text-sm text-zinc-500">{rows.length ? "কিছু মিলল না।" : "এখনো কিছু নেই।"}</p> : null}
-    </div>
-    <p className="text-xs text-zinc-500">{shown.length}টি দেখানো হচ্ছে</p>
+    <ul className="space-y-2.5">
+      {shown.map((entry) => editing?.id === entry.id
+        ? <li key={entry.id} className="space-y-2 rounded-3xl bg-blue-50/60 p-3.5 ring-1 ring-blue-200">
+          <KindSwitch value={editing.values.kind} onChange={(kind) => setEditing({ ...editing, values: { ...editing.values, kind } })} />
+          {(["affix", "meaning", "example"] as const).map((key) => <input key={key} value={editing.values[key]} onChange={(event) => setEditing({ ...editing, values: { ...editing.values, [key]: event.target.value } })} aria-label={key} className={cn(input, "bg-white")} autoCapitalize="off" />)}
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setEditing(null)} className="h-10 flex-1 rounded-xl bg-white text-sm font-semibold text-slate-700 ring-1 ring-slate-200">বাতিল</button>
+            <button type="button" onClick={save} disabled={pending || !complete(editing.values)} className="h-10 flex-1 rounded-xl bg-blue-600 text-sm font-bold text-white disabled:opacity-50">সেভ</button>
+          </div>
+        </li>
+        : <li key={entry.id} className={card(entry.learned)}>
+          <div className="flex gap-3">
+            <LearnedBox checked={entry.learned} onToggle={() => learned.toggle("AFFIX", entry.id)} label={entry.affix} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-bold", entry.kind === "PREFIX" ? "bg-sky-100 text-sky-700" : "bg-violet-100 text-violet-700")}>{kindLabel[entry.kind]}</span>
+                <h3 className="text-[21px] font-bold leading-tight text-slate-900">{entry.affix}</h3>
+                {entry.userId ? <NewBadge /> : null}
+                {canEdit ? <EditButtons label={entry.affix} pending={pending} onEdit={() => setEditing({ id: entry.id, values: { kind: entry.kind, affix: entry.affix, meaning: entry.meaning, example: entry.example } })} onDelete={() => remove(entry)} /> : null}
+              </div>
+              <p className="mt-0.5 text-[15px] font-medium text-slate-700"><QuizCell hidden={hideMeaning}>{entry.meaning}</QuizCell></p>
+              {entry.example ? <div className="mt-2 flex items-center gap-2 rounded-2xl bg-amber-50 px-3 py-2">
+                <p className="min-w-0 flex-1 text-[14px] text-amber-950 [overflow-wrap:anywhere]">{entry.example}</p>
+                <Speak text={exampleWord(entry.example)} className="size-7" />
+              </div> : null}
+              <Explain kind="AFFIX" id={entry.id} explanation={entry.explanation} hasExplanation={entry.hasExplanation} canEdit={canEdit} />
+            </div>
+          </div>
+        </li>)}
+    </ul>
+    {!shown.length ? <p className="rounded-3xl bg-white px-4 py-10 text-center text-sm text-slate-500">{rows.length ? "কিছু মিলল না।" : "এখনো কিছু নেই।"}</p> : null}
+    <p className="text-xs text-slate-500">{shown.length}টি দেখানো হচ্ছে</p>
   </section>;
 }
 
 /**
  * Vocabulary: verb forms, pronouns by person, singular/plural and prefixes/suffixes, with Bangla.
- * The tables are shared (admins add to them); each user ticks off what they have learned.
+ * The tables are shared (admins add to them); each user ticks off what they have learned. Every
+ * word can be heard (🔊, free); its Bangla explanation is for paid users.
  */
 export function VocabularyView({ verbs, affixes, nouns, learnedKeys, canEdit }: { verbs: Verb[]; affixes: Affix[]; nouns: Noun[]; learnedKeys: string[]; canEdit: boolean }) {
   const router = useRouter();
@@ -606,24 +691,38 @@ export function VocabularyView({ verbs, affixes, nouns, learnedKeys, canEdit }: 
     },
   };
   const doneOf = (kind: LearnKind) => [...learnedSet].filter((key) => key.startsWith(`${kind}:`)).length;
-  const counts: Record<Tab, string> = {
-    verbs: `${doneOf("VERB")}/${verbs.length}`,
-    persons: `${doneOf("PERSON")}/${personRows.length + agreementRows.length}`,
-    nouns: `${doneOf("NOUN")}/${nouns.length}`,
-    affixes: `${doneOf("AFFIX")}/${affixes.length}`,
+  const totals: Record<Tab, [number, number]> = {
+    verbs: [doneOf("VERB"), verbs.length],
+    persons: [doneOf("PERSON"), personRows.length + agreementRows.length],
+    nouns: [doneOf("NOUN"), nouns.length],
+    affixes: [doneOf("AFFIX"), affixes.length],
   };
+  const allDone = Object.values(totals).reduce((sum, [done]) => sum + done, 0);
+  const allTotal = Object.values(totals).reduce((sum, [, total]) => sum + total, 0);
 
-  return <div className="mx-auto max-w-4xl space-y-4">
-    <div>
-      <h1 className="text-2xl font-semibold tracking-tight">Vocabulary</h1>
-      <p className="mt-1 text-sm text-zinc-500">Verb-এর রূপ, Person অনুযায়ী pronoun, Singular–Plural আর Prefix–Suffix — বাংলা অর্থসহ। শেখা হলে বাঁ পাশে টিক দাও।</p>
-    </div>
-    <div role="tablist" aria-label="Vocabulary" className="grid grid-cols-2 gap-1 rounded-2xl bg-zinc-100 p-1 sm:grid-cols-4">
-      {tabs.map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={active === tab.id} onClick={() => router.replace(`${pathname}?tab=${tab.id}`, { scroll: false })} className={cn("flex h-10 items-center justify-center gap-1.5 rounded-xl text-sm font-medium transition", active === tab.id ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-500 hover:text-zinc-800")}>
+  return <div className="mx-auto max-w-2xl space-y-3">
+    {/* The home page's blue: the overall progress, then the four lists. */}
+    <section className="rounded-3xl bg-linear-to-br from-[#3f6ef3] via-[#5a87f8] to-[#8fa6fb] p-4 text-white shadow-[0_14px_32px_-18px_rgba(37,99,235,0.7)]">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-[22px] font-bold tracking-tight">Vocabulary</h1>
+          <p className="mt-0.5 text-[13px] text-white/85">শব্দ শোনো 🔊, অর্থ শেখো, শেখা হলে টিক দাও।</p>
+        </div>
+        <div className="shrink-0 rounded-2xl bg-white/20 px-3 py-1.5 text-center ring-1 ring-white/30">
+          <p className="text-lg font-bold leading-tight tabular-nums">{allDone}<span className="text-sm font-medium text-white/75">/{allTotal}</span></p>
+          <p className="text-[10.5px] text-white/85">শেখা হয়েছে</p>
+        </div>
+      </div>
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/25"><div className="h-full rounded-full bg-white transition-all" style={{ width: `${allTotal ? Math.round((allDone / allTotal) * 100) : 0}%` }} /></div>
+    </section>
+
+    <div role="tablist" aria-label="Vocabulary" className={chipRow}>
+      {tabs.map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={active === tab.id} onClick={() => router.replace(`${pathname}?tab=${tab.id}`, { scroll: false })} className={chip(active === tab.id)}>
         {tab.label}
-        <span className="rounded-full bg-zinc-200/70 px-1.5 text-[11px] tabular-nums text-zinc-600">{counts[tab.id]}</span>
+        <span className={cn("rounded-full px-1.5 text-[11px] tabular-nums", active === tab.id ? "bg-white/25" : "bg-slate-100 text-slate-500")}>{totals[tab.id][0]}/{totals[tab.id][1]}</span>
       </button>)}
     </div>
+
     {active === "verbs" ? <VerbTable verbs={verbs} canEdit={canEdit} learned={learned} />
       : active === "persons" ? <PersonTable learned={learned} />
       : active === "nouns" ? <NounTable nouns={nouns} canEdit={canEdit} learned={learned} />

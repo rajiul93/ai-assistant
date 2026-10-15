@@ -56,14 +56,14 @@ export function OpenAiBalance({ credits, costs, today }: { credits: CreditRow[];
     });
   }
 
-  return <section className="rounded-2xl border border-zinc-200 bg-white p-5">
+  return <section className="rounded-3xl bg-white p-5 shadow-[0_6px_24px_-12px_rgba(15,23,42,0.15)]">
     <div className="flex items-center gap-2">
-      <span className="flex size-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700"><Wallet className="size-5" /></span>
+      <span className="flex size-10 items-center justify-center rounded-2xl bg-linear-to-br from-emerald-400 to-teal-600 text-white shadow-[0_8px_16px_-10px_rgba(5,150,105,0.9)]"><Wallet className="size-5" /></span>
       <div className="min-w-0 flex-1">
-        <h2 className="text-sm font-semibold">OpenAI balance</h2>
+        <h2 className="text-[15px] font-bold tracking-tight text-slate-900">OpenAI balance</h2>
         <p className="text-xs text-zinc-500">শুধু আপনি (super admin) দেখছেন · খরচ OpenAI-এর হিসাব থেকে</p>
       </div>
-      {!adding ? <button type="button" onClick={() => setAdding(true)} className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-zinc-950 px-3 text-sm font-semibold text-white hover:bg-zinc-800"><Plus className="size-4" /> ডলার যোগ</button> : null}
+      {!adding ? <button type="button" onClick={() => setAdding(true)} className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-linear-to-r from-[#3f6ef3] to-[#5a87f8] px-3.5 text-sm font-semibold text-white shadow-[0_8px_16px_-10px_rgba(37,99,235,0.9)] hover:brightness-105"><Plus className="size-4" /> ডলার যোগ</button> : null}
     </div>
 
     {costs.ok ? null : costs.reason === "no_key"
@@ -72,13 +72,13 @@ export function OpenAiBalance({ credits, costs, today }: { credits: CreditRow[];
 
     {credits.length ? <>
       <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-        <div className="rounded-xl bg-zinc-50 px-2 py-3"><p className="text-[11px] text-zinc-500">যোগ করেছেন</p><p className="mt-0.5 text-lg font-semibold tabular-nums">{usd(addedUsd)}</p></div>
-        <div className="rounded-xl bg-zinc-50 px-2 py-3"><p className="text-[11px] text-zinc-500">খরচ হয়েছে</p><p className="mt-0.5 text-lg font-semibold tabular-nums">{spent === null || !costs.ok ? "—" : usd(spent)}</p></div>
-        <div className="rounded-xl bg-zinc-50 px-2 py-3"><p className="text-[11px] text-zinc-500">বাকি আছে</p><p className={cn("mt-0.5 text-lg font-bold tabular-nums", tone)}>{left === null || !costs.ok ? "—" : usd(left)}</p></div>
+        <div className="rounded-2xl bg-blue-50 px-2 py-3"><p className="text-[11px] font-semibold text-blue-700/80">যোগ করেছেন</p><p className="mt-0.5 text-lg font-semibold tabular-nums">{usd(addedUsd)}</p></div>
+        <div className="rounded-2xl bg-orange-50 px-2 py-3"><p className="text-[11px] font-semibold text-orange-700/80">খরচ হয়েছে</p><p className="mt-0.5 text-lg font-semibold tabular-nums">{spent === null || !costs.ok ? "—" : usd(spent)}</p></div>
+        <div className="rounded-2xl bg-emerald-50 px-2 py-3"><p className="text-[11px] font-semibold text-emerald-700/80">বাকি আছে</p><p className={cn("mt-0.5 text-lg font-bold tabular-nums", tone)}>{left === null || !costs.ok ? "—" : usd(left)}</p></div>
       </div>
       {costs.ok ? <>
         <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-zinc-100" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={usedPercent} aria-label="Balance used">
-          <div className={cn("h-full rounded-full", usedPercent >= 100 ? "bg-red-500" : usedPercent >= 85 ? "bg-amber-500" : "bg-emerald-600")} style={{ width: `${usedPercent}%` }} />
+          <div className={cn("h-full rounded-full bg-linear-to-r", usedPercent >= 100 ? "from-rose-500 to-red-600" : usedPercent >= 85 ? "from-amber-400 to-orange-500" : "from-emerald-400 to-teal-600")} style={{ width: `${usedPercent}%` }} />
         </div>
         <p className="mt-2 text-xs text-zinc-500">
           {usedPercent}% খরচ · আজ {usd(sumFrom(today))} · গত ৭ দিনে গড়ে দিনে {usd(perDay)}

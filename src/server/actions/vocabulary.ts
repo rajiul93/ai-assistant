@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { bareAffix } from "@/lib/vocabulary/affixes";
 import { namesAPerson, nounKey } from "@/lib/vocabulary/nouns";
+import { hasPremium } from "@/server/premium";
 import { can } from "@/server/roles";
 
 /**
@@ -20,6 +21,14 @@ async function requireEditor() {
   const user = await requireUser();
   if (!(await can(user, "vocabulary"))) throw new Error("যোগ, বদল বা মুছতে শব্দভান্ডার permission লাগবে।");
   return user;
+}
+
+/**
+ * A word's Bangla explanation is for paid users (and staff) only: others get only whether one
+ * exists, so the text never reaches their page (owner, 2026-10-15).
+ */
+function gateExplanation<T extends { explanation: string | null }>(rows: T[], premium: boolean) {
+  return rows.map((row) => ({ ...row, explanation: premium ? row.explanation : null, hasExplanation: Boolean(row.explanation) }));
 }
 
 const alreadyThere = (word: string) => new Error(`“${word}” আগেই table-এ আছে।`);
@@ -39,11 +48,12 @@ async function verbExists(present: string, exceptId?: string) {
 }
 
 export async function listVerbs() {
-  await requireUser();
-  return prisma.verbEntry.findMany({
+  const user = await requireUser();
+  const [rows, premium] = await Promise.all([prisma.verbEntry.findMany({
     orderBy: { present: "asc" },
-    select: { id: true, present: true, past: true, pastParticiple: true, meaning: true, userId: true },
-  });
+    select: { id: true, present: true, past: true, pastParticiple: true, meaning: true, explanation: true, userId: true },
+  }), hasPremium(user)]);
+  return gateExplanation(rows, premium);
 }
 
 export async function createVerb(input: unknown) {
@@ -84,11 +94,12 @@ async function affixExists(kind: "PREFIX" | "SUFFIX", affix: string, exceptId?: 
 }
 
 export async function listAffixes() {
-  await requireUser();
-  return prisma.affixEntry.findMany({
+  const user = await requireUser();
+  const [rows, premium] = await Promise.all([prisma.affixEntry.findMany({
     orderBy: [{ kind: "asc" }, { affix: "asc" }],
-    select: { id: true, kind: true, affix: true, meaning: true, example: true, userId: true },
-  });
+    select: { id: true, kind: true, affix: true, meaning: true, example: true, explanation: true, userId: true },
+  }), hasPremium(user)]);
+  return gateExplanation(rows, premium);
 }
 
 export async function createAffix(input: unknown) {
@@ -129,8 +140,12 @@ async function nounExists(noun: { singular: string; plural: string }, exceptId?:
 }
 
 export async function listNouns() {
-  await requireUser();
-  return prisma.nounEntry.findMany({ orderBy: { singular: "asc" }, select: { id: true, singular: true, plural: true, meaning: true, person: true, userId: true } });
+  const user = await requireUser();
+  const [rows, premium] = await Promise.all([
+    prisma.nounEntry.findMany({ orderBy: { singular: "asc" }, select: { id: true, singular: true, plural: true, meaning: true, person: true, explanation: true, userId: true } }),
+    hasPremium(user),
+  ]);
+  return gateExplanation(rows, premium);
 }
 
 export async function createNoun(input: unknown) {

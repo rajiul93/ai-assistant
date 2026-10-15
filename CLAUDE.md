@@ -94,7 +94,8 @@ alone. Record decisions and their reasons; don't restate code.
 - **No AI without a plan**: every OpenAI call goes through `checkAi` first (no plan, expired, out
   of tokens or paused → refused; admins always pass). Audited 2026-10-13: 14 entry points, all gated.
 - **Voice is admin-only** (mic, speech-to-text, read-aloud, voice chat, voice forms — including the
-  browser's own recognizer and voice): `src/lib/voice-access.ts` is switched on by `AppShell` for
+  browser's own recognizer and voice). One exception (owner, 2026-10-15): the 🔊 next to vocabulary
+  words (`src/lib/pronounce.ts`, browser speechSynthesis, no AI) is free for everyone. `src/lib/voice-access.ts` is switched on by `AppShell` for
   admins only, and `/api/speech`, `/api/transcribe`, `/api/transcribe/live` check `isAdminUser`.
 - Solutions/explanations need a running plan (admins always): `hasPremium` / `gateNotes` in
   `src/server/premium.ts`. Question-bank content (and copies of bank sets) is per exam:
@@ -156,7 +157,7 @@ alone. Record decisions and their reasons; don't restate code.
 | Core study app (tasks, notes, subjects, plan, timer, revisions, progress) | done | |
 | Preliminary / Short Question sets (AI read from photos twice + spellcheck, paste, voice, merge without duplicates, exam, results) | done | |
 | Confusions (photo → text) | done | Confusion + clarification are Quill rich text (math via the fx formula button, live preview) since 2026-10-14; older rows are plain text, shown via `toEditorHtml` |
-| Vocabulary (verbs, persons, singular/plural, prefix/suffix; admin-only adding; per-user learned ticks) | done | data via `pnpm db:seed-vocabulary` |
+| Vocabulary (verbs, persons, singular/plural, prefix/suffix; admin-only adding; per-user learned ticks) | done | data via `pnpm db:seed-vocabulary`. Mobile cards since 2026-10-15: 🔊 per word (free); "AI দিয়ে বোঝাও" (`/api/vocabulary/explain`, `vocabulary` permission) saves a Bangla `explanation` on the word; it opens on tap and only paid users (and staff) get the text — `gateExplanation` in the list actions (migration `20261024000000_vocab_explanation` applied) |
 | Typing lab (Bijoy engine) | done | |
 | **Collaboration: friends, sharing, notifications, chat (socket.io)** | **built; awaiting integration run + two-browser check** | plan + decisions: [docs/collaboration-plan.md](docs/collaboration-plan.md) |
 | **Subscription pricing** (System + AI tier + exam, "all exams" discount, durations, per-day AI limits, super-admin pricing panel, SSLCommerz beside bKash/Nagad) | **phase 1 built; migration applied 2026-10-14; Plans page/admin panel not yet tried signed in; SSLCommerz untested** | [docs/subscription-plan.md](docs/subscription-plan.md) — phases 2 (security) and 3 (mobile API) not started |
