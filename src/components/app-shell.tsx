@@ -20,6 +20,7 @@ import { ToolDock } from "@/components/tool-dock";
 import { SessionBar } from "@/components/timer/session-bar";
 import { SubjectPickerDialog } from "@/components/timer/subject-picker-dialog";
 import { TimerAlarm } from "@/components/timer/timer-alarm";
+import { TimerSync } from "@/components/timer/timer-sync";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { MoreSheet } from "@/components/more-sheet";
 import { SideNav } from "@/components/side-nav";
@@ -124,6 +125,8 @@ export function AppShell({
         <Calculator />
         <CalendarSheet />
         <TimerAlarm />
+        {/* One timer across the user's devices (see TimerSync). */}
+        <TimerSync />
         <SubjectPickerDialog />
         {/* Desktop only; phones have the chip in the top bar. */}
         <div className="hidden lg:block"><SessionBar /></div>

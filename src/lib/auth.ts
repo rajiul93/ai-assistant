@@ -6,6 +6,7 @@ import { getAuth } from "firebase-admin/auth";
 import { prisma } from "@/lib/prisma";
 import { adminAuth, isFirebaseAdminConfigured } from "@/lib/firebase/admin";
 import { loginCookieOptions, SESSION_COOKIE } from "@/lib/session";
+import { DEVICE_COOKIE, deviceIsValid } from "@/server/devices";
 import { freshUserFlags } from "@/server/user-flags";
 
 export { SESSION_COOKIE };
@@ -131,7 +132,7 @@ export async function createSessionCookie(idToken: string) {
   const decoded = requireVerifiedEmail(await verifyFirebaseIdToken(idToken));
   const user = await upsertUserFromToken(decoded.uid, decoded.email, decoded.name, decoded.picture);
   if (user.status === "BLOCKED") throw new Error("This account has been blocked. Please contact the admin.");
-  return idToken;
+  return { token: idToken, userId: user.id };
 }
 
 export async function upsertUserFromToken(
@@ -207,6 +208,10 @@ export async function requireUser() {
     redirect("/login");
   }
   if (await isBlocked(user.id)) redirect("/blocked");
+  // Two devices at most: a browser without a valid device (removed from another device, or signed
+  // in before devices were counted) goes through /api/auth/device, which can set cookies.
+  const deviceId = (await cookies()).get(DEVICE_COOKIE)?.value;
+  if (!(await deviceIsValid(user.id, deviceId))) redirect("/api/auth/device");
   return user;
 }
 

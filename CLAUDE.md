@@ -85,6 +85,15 @@ alone. Record decisions and their reasons; don't restate code.
 - `src/lib/auth.ts`: `getCurrentUser()` verifies the Firebase ID-token cookie (cached per request
   and up to 5 minutes); `requireUser()` redirects to `/login`, or to `/blocked` when
   `User.status = BLOCKED` (read fresh).
+- **Two devices at most** (owner, 2026-10-15): each signed-in browser is a `UserDevice` (id in the
+  httpOnly `prep_device` cookie, `src/server/devices.ts`). A third sign-in gets 409 `DEVICE_LIMIT`
+  with the other two, and the login screen lets the user remove one. `requireUser` checks the device
+  every request; a missing/removed one goes to `/api/auth/device` (registers old sessions, or signs
+  out with `/login?device=removed|limit`). Sign-out removes only this device and no longer revokes the
+  account's refresh tokens (that signed the other device out too). Unused 30 days → no longer counts.
+- **One study timer across devices**: `ActiveTimer` (one row per user, `src/server/actions/timer.ts`)
+  synced by `TimerSync` (claim on start — if another device's timer runs, that one is shown instead;
+  pause/resume/stop passed on; polled every 15 s and on focus). The local zustand store still ticks.
 - Roles: `USER`, `ADMIN` (= staff), and one **super admin** fixed by email in `src/server/roles.ts`
   (`roleOf`, `isAdminUser`, read fresh from the DB). Any staff: no AI limits, every exam open, voice.
 - **Staff permissions** (2026-10-15, `User.staffPermissions`, list in `src/lib/staff.ts`): `billing`,
@@ -171,6 +180,7 @@ alone. Record decisions and their reasons; don't restate code.
 | **OpenAI balance on /usage** (super admin: dollars added, spent, left) | **built; migration applied 2026-10-15; needs `OPENAI_ADMIN_KEY`** | OpenAI has no API for the prepaid balance, so the owner enters top-ups (`AiCredit`); spending comes from OpenAI's Costs API (`src/server/openai-costs.ts`, admin key only, cached 5 min) from the earliest top-up; left = added − spent |
 | **Customers page** (`/admin/customers`, `customers` permission; staff not listed: Paid now / আগে নিয়েছিল (plan ended) / Free (never bought), search, paging) | built 2026-10-15 | Groups come from `Entitlement.endsAt` (cancel sets it to the cancel time); shows phone, the plan(s) (running ones, or the last bought), total paid, plan end, last AI use. No schema change |
 | **Staff page + permissions** (`/admin/staff`; old `/admin/users` redirects) | **built; migration applied 2026-10-15; not yet tried signed in** | Existing admins get billing, question_bank, vocabulary (what admins could do before) |
+| **Device limit (2) + shared timer** | **built; migration `20261025000000_devices_and_shared_timer` applied 2026-10-15; not yet tried signed in on real devices** | see Auth and roles. Check: sign in on 2 browsers, a 3rd shows the chooser; start a timer on one, the other shows it within 15 s |
 | Set audio (TTS MP3 per set on Cloudflare R2) | planned, not started | owner deferred it |
 | **Question Bank** (BCS / প্রাইমারি / ১১–২০ গ্রেড; sets per exam session; "Preliminary-তে পাঠাও" copies a set; super admin uploads .xlsx) | **built; migration applied 2026-10-13; not yet tried with a real sheet** | [docs/question-bank-plan.md](docs/question-bank-plan.md) — sheet assumptions in §2 |
 | **Profile page (name + phone)** | **built; migration applied to Neon 2026-10-13** | [docs/profile-and-group-chat-plan.md](docs/profile-and-group-chat-plan.md) §1. Sign-in no longer overwrites a name the user saved (`profileUpdatedAt`) |
