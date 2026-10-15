@@ -98,7 +98,7 @@ function NoteEditor({ noteId, subjects, topics, onSaved, onDeleted, onBack }: { 
 
   const saveLabel = { saved: "সেভ হয়েছে", saving: "সেভ হচ্ছে…", unsaved: "সেভ বাকি", error: "সেভ হয়নি — পরের লেখায় আবার চেষ্টা" }[saveState];
 
-  return <div className="flex h-full flex-col">
+  return <div className="flex h-full min-h-0 flex-col">
     {/* Phones: this is the top bar of a full-screen editor (with room for the notch). */}
     <div className="flex items-center gap-1 border-b border-slate-100 px-1.5 pb-1 pt-[calc(0.25rem+env(safe-area-inset-top))] lg:gap-2 lg:px-4 lg:py-2.5">
       <button type="button" onClick={onBack} className="flex size-10 items-center justify-center rounded-full text-slate-700 hover:bg-slate-100 lg:hidden" aria-label="নোটের তালিকায় ফিরুন"><ChevronLeft className="size-6" /></button>
@@ -262,7 +262,9 @@ export function NotesWorkspace({ initialNotes, subjects, topics }: { initialNote
       <button type="button" onClick={() => void newNote()} disabled={creating} className="flex h-10 items-center gap-1.5 rounded-full bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"><Plus className="size-4" /> নতুন নোট</button>
     </div>
 
-    <div className="lg:grid lg:h-[calc(100dvh-13rem)] lg:min-h-[32rem] lg:grid-cols-[19rem_1fr] lg:overflow-hidden lg:rounded-3xl lg:bg-white lg:shadow-[0_6px_24px_-12px_rgba(15,23,42,0.15)]">
+    {/* Desktop: the row is held to the box's height (minmax(0,1fr)), so a long note scrolls inside the
+        editor instead of growing past the box and being cut off. */}
+    <div className="lg:grid lg:h-[calc(100dvh-13rem)] lg:min-h-[32rem] lg:grid-cols-[19rem_1fr] lg:grid-rows-[minmax(0,1fr)] lg:overflow-hidden lg:rounded-3xl lg:bg-white lg:shadow-[0_6px_24px_-12px_rgba(15,23,42,0.15)]">
       {/* Phones: the list is the page; desktop: the left column. */}
       <aside className="flex min-h-0 flex-col lg:border-r lg:border-slate-100">
         <div className="hidden p-3 lg:block">
@@ -301,7 +303,7 @@ export function NotesWorkspace({ initialNotes, subjects, topics }: { initialNote
       {/* Phones: a full-screen editor over everything; desktop: the right column. */}
       <section className={cn(
         "min-w-0",
-        selectedId ? "fixed inset-0 z-45 flex flex-col bg-white lg:static lg:z-auto lg:bg-transparent" : "hidden lg:block",
+        selectedId ? "fixed inset-0 z-45 flex flex-col bg-white lg:static lg:z-auto lg:h-full lg:min-h-0 lg:overflow-hidden lg:bg-transparent" : "hidden lg:block",
       )}>
         {selectedId ? (
           <NoteEditor
