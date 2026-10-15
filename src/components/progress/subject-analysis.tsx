@@ -1,111 +1,82 @@
 import Link from "next/link";
-import { AlertTriangle, Clock, Hourglass, Trophy } from "lucide-react";
-import { formatDateTime, formatDurationFromSeconds } from "@/lib/dayjs";
+import { AlertTriangle, TrendingDown, TrendingUp } from "lucide-react";
+import { formatDurationFromSeconds } from "@/lib/dayjs";
 import { cn } from "@/lib/utils";
 import type { SubjectStat } from "@/server/queries";
 
 export const analysisPeriods = [
-  { key: "30d", label: "Last 30 days", short: "30 days" },
-  { key: "7d", label: "Last 7 days", short: "7 days" },
-  { key: "month", label: "This month", short: "Month" },
-  { key: "all", label: "All time", short: "All" },
+  { key: "30d", label: "৩০ দিন" },
+  { key: "7d", label: "৭ দিন" },
+  { key: "month", label: "এই মাস" },
+  { key: "all", label: "সব সময়" },
 ] as const;
 export type AnalysisPeriod = (typeof analysisPeriods)[number]["key"];
 
-/** `share` (0–100) draws a bar: that subject's part of all study time in the period. */
-type Insight = { icon: React.ReactNode; label: string; value: string; detail: string; warn?: boolean; share?: number };
+const card = "rounded-3xl bg-white p-4 shadow-[0_6px_24px_-12px_rgba(15,23,42,0.15)] sm:p-5";
+const BAR = ["bg-blue-500", "bg-violet-500", "bg-emerald-500", "bg-amber-500", "bg-rose-500"];
+const duration = (seconds: number) => (seconds > 0 && seconds < 60 ? `${seconds}s` : formatDurationFromSeconds(seconds));
+const SHOWN = 5;
 
-function duration(seconds: number) {
-  return seconds > 0 && seconds < 60 ? `${seconds}s` : formatDurationFromSeconds(seconds);
-}
-
-/** Plain-language findings from the numbers: where time went, what lags, what needs attention. */
-function buildInsights(stats: SubjectStat[], now: number): Insight[] {
-  const subjects = stats.filter((stat) => stat.subjectId);
-  const studied = subjects.filter((stat) => stat.seconds > 0);
-  if (studied.length === 0) return [];
-
-  const most = studied[0];
-  const totalSeconds = subjects.reduce((sum, stat) => sum + stat.seconds, 0) || 1;
-  const shareOf = (seconds: number) => Math.round((seconds / totalSeconds) * 100);
-  const minSeconds = Math.min(...subjects.map((stat) => stat.seconds));
-  const least = subjects.filter((stat) => stat.seconds === minSeconds);
-
-  const perTask = subjects
-    .filter((stat) => stat.finishedTasks > 0 && stat.seconds > 0)
-    .map((stat) => ({ stat, seconds: Math.round(stat.seconds / stat.finishedTasks) }))
-    .sort((a, b) => b.seconds - a.seconds);
-
-  const average = subjects.reduce((sum, stat) => sum + stat.seconds, 0) / subjects.length;
+/** Subjects with open tasks but little recent study (under half the average, or none for a week). */
+function needsAttention(subjects: SubjectStat[], now: number) {
+  const average = subjects.reduce((sum, stat) => sum + stat.seconds, 0) / (subjects.length || 1);
   const weekAgo = now - 7 * 86_400_000;
-  const attention = subjects
+  return subjects
     .filter((stat) => stat.openTasks > 0 && (stat.seconds < average * 0.5 || !stat.lastStudiedAt || stat.lastStudiedAt.getTime() < weekAgo))
     .sort((a, b) => a.seconds - b.seconds)
     .slice(0, 3);
-
-  return [
-    { icon: <Trophy className="size-4" />, label: "Most time", value: most.name, share: shareOf(most.seconds), detail: `${duration(most.seconds)} · ${most.sessions} session${most.sessions === 1 ? "" : "s"}` },
-    {
-      icon: <Clock className="size-4" />,
-      label: "Least time",
-      share: shareOf(minSeconds),
-      value: least.length > 2 ? `${least.length} subjects` : least.map((stat) => stat.name).join(", "),
-      detail: minSeconds === 0 ? (least.length > 2 ? `Not studied: ${least.map((stat) => stat.name).join(", ")}` : "Not studied in this period") : duration(minSeconds),
-    },
-    perTask.length
-      ? { icon: <Hourglass className="size-4" />, label: "Takes longest to learn", value: perTask[0].stat.name, detail: `${duration(perTask[0].seconds)} per finished task` }
-      : { icon: <Hourglass className="size-4" />, label: "Takes longest to learn", value: "Not enough data", detail: "Finish tasks with a subject to compare" },
-    attention.length
-      ? { icon: <AlertTriangle className="size-4" />, label: "Needs attention", value: attention.map((stat) => stat.name).join(", "), detail: `Open tasks but little recent study`, warn: true }
-      : { icon: <AlertTriangle className="size-4" />, label: "Needs attention", value: "All on track", detail: "Every subject with open tasks is getting time" },
-  ];
 }
 
-/** Subject-wise study analysis: where the time went, shown as insight cards for the chosen period. */
+/**
+ * Where the study time went, per subject, for the chosen period: a share bar, the time, and the
+ * change against the period before. Shows the top five (fits one phone screen) and names the
+ * subjects that need attention.
+ */
 export function SubjectAnalysis({ stats, period, comparable, now }: { stats: SubjectStat[]; period: AnalysisPeriod; comparable: boolean; now: number }) {
+  const subjects = stats.filter((stat) => stat.subjectId);
   const total = stats.reduce((sum, stat) => sum + stat.seconds, 0);
-  const insights = buildInsights(stats, now);
+  const top = stats.filter((stat) => stat.seconds > 0).slice(0, SHOWN);
+  const rest = stats.filter((stat) => stat.seconds > 0).length - top.length;
+  const attention = needsAttention(subjects, now);
 
-  // Header, a full-width period switch on phones, then the insight cards.
-  return <section className="space-y-4" aria-labelledby="subject-analysis">
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        <h2 id="subject-analysis" className="text-lg font-semibold tracking-tight">Subject analysis</h2>
-        <p className="text-sm text-zinc-500">{duration(total)} studied{comparable ? " · vs. the period before" : ""}</p>
+  return <section className={card} aria-labelledby="subject-analysis">
+    <div className="flex items-center justify-between gap-2">
+      <div className="min-w-0">
+        <h2 id="subject-analysis" className="text-[15px] font-bold text-slate-900">বিষয়ভিত্তিক সময়</h2>
+        <p className="truncate text-[12px] text-slate-500">মোট {duration(total)}{rest > 0 ? ` · আরও ${rest}টি বিষয়` : ""}{comparable ? " · % = আগের তুলনায়" : ""}</p>
       </div>
-      <nav aria-label="Period" className="grid grid-cols-4 gap-1 rounded-xl bg-zinc-100 p-1 sm:flex">
-        {analysisPeriods.map((item) => <Link
-          key={item.key}
-          href={`/progress?period=${item.key}`}
-          scroll={false}
-          aria-current={item.key === period ? "page" : undefined}
-          className={cn("flex min-h-9 items-center justify-center rounded-lg px-2 text-xs font-medium transition sm:px-3", item.key === period ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-500 hover:text-zinc-800")}
-        ><span className="sm:hidden">{item.short}</span><span className="hidden sm:inline">{item.label}</span></Link>)}
-      </nav>
     </div>
+    <nav aria-label="সময়কাল" className="mt-2 grid grid-cols-4 gap-1 rounded-full bg-slate-100 p-1">
+      {analysisPeriods.map((item) => <Link
+        key={item.key}
+        href={`/progress?view=subjects&period=${item.key}`}
+        scroll={false}
+        aria-current={item.key === period ? "page" : undefined}
+        className={cn("flex h-7 items-center justify-center rounded-full text-[12px] font-semibold transition", item.key === period ? "bg-white text-blue-700 shadow-sm" : "text-slate-500")}
+      >{item.label}</Link>)}
+    </nav>
 
-    {insights.length ? <div className="grid grid-cols-2 gap-2.5 xl:grid-cols-4 xl:gap-3">
-      {insights.map((insight) => <div key={insight.label} className={cn("min-w-0 rounded-xl border p-3 sm:p-4", insight.warn ? "border-amber-200 bg-amber-50/60" : "border-zinc-200 bg-white")}>
-        <p className={cn("flex items-center gap-1.5 text-[11px] font-medium sm:text-xs", insight.warn ? "text-amber-800" : "text-zinc-500")}>{insight.icon}<span className="truncate">{insight.label}</span></p>
-        <p className="mt-1.5 truncate text-sm font-semibold text-zinc-950 sm:text-base" title={insight.value}>{insight.value}</p>
-        <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-zinc-500 sm:text-xs">{insight.detail}</p>
-        {insight.share !== undefined ? <div className="mt-2.5">
-          <div className="flex items-center gap-2">
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-100" role="progressbar" aria-valuenow={insight.share} aria-valuemin={0} aria-valuemax={100} aria-label={`${insight.value}: ${insight.share}% of study time`}>
-              <div className="h-full rounded-full bg-zinc-900" style={{ width: `${insight.share}%` }} />
-            </div>
-            <span className="shrink-0 text-[11px] font-medium tabular-nums text-zinc-600">{insight.share}%</span>
-          </div>
-        </div> : null}
-      </div>)}
-    </div> : null}
+    {top.length ? <ul className="mt-3 space-y-2">
+      {top.map((stat, index) => {
+        const share = total ? Math.round((stat.seconds / total) * 100) : 0;
+        const change = comparable && stat.previousSeconds ? Math.round(((stat.seconds - stat.previousSeconds) / stat.previousSeconds) * 100) : null;
+        // One line each: name · share bar · time · change against the period before.
+        return <li key={stat.subjectId ?? "none"} className="flex min-w-0 items-center gap-2 text-[12.5px]" title={`${stat.name}: ${share}%`}>
+          <span className="w-[34%] min-w-0 truncate font-semibold text-slate-800">{stat.name}</span>
+          <span className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-valuenow={share} aria-valuemin={0} aria-valuemax={100} aria-label={`${stat.name}: ${share}%`}>
+            <span className={cn("block h-full rounded-full", BAR[index % BAR.length])} style={{ width: `${Math.max(share, 3)}%` }} />
+          </span>
+          <span className="w-14 shrink-0 text-right tabular-nums text-slate-600">{duration(stat.seconds)}</span>
+          {comparable ? change !== null
+            ? <span className={cn("flex w-11 shrink-0 items-center justify-end gap-0.5 text-[11px] font-semibold tabular-nums", change >= 0 ? "text-emerald-600" : "text-red-600")}>{change >= 0 ? <TrendingUp className="size-3" /> : <TrendingDown className="size-3" />}{Math.abs(change)}%</span>
+            : <span className="w-11 shrink-0 text-right text-[11px] font-semibold text-blue-600">নতুন</span> : null}
+        </li>;
+      })}
+    </ul> : <p className="mt-3 rounded-2xl bg-slate-50 p-4 text-center text-[13px] text-slate-500">{subjects.length ? "এই সময়ে পড়া হয়নি। Timer চালিয়ে subject বেছে নাও — এখানে দেখাবে।" : "Subject যোগ করে timer দিয়ে পড়লে এখানে দেখাবে।"}</p>}
 
-    {stats.length === 0 ? (
-      <p className="rounded-xl border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-500">Add subjects and study with the timer to see your analysis.</p>
-    ) : total === 0 ? (
-      <p className="rounded-xl border border-dashed border-zinc-300 bg-white p-6 text-center text-sm text-zinc-500">No study time in this period yet. Start the timer and pick a subject — it will show up here.</p>
-    ) : null}
-
-    <p className="text-[11px] text-zinc-400 sm:text-xs">Updated {formatDateTime(new Date(now))}. “Takes longest to learn” = study time ÷ tasks finished in the period.</p>
+    {attention.length ? <p className="mt-3 flex items-center gap-1.5 rounded-2xl bg-amber-50 px-3 py-1.5 text-[12px] text-amber-900" title="Task বাকি, কিন্তু সম্প্রতি কম পড়া">
+      <AlertTriangle className="size-3.5 shrink-0" />
+      <span className="min-w-0 truncate"><b>নজর দাও:</b> {attention.map((stat) => stat.name).join(", ")}</span>
+    </p> : null}
   </section>;
 }

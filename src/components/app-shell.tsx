@@ -14,6 +14,8 @@ import { QuickCreate } from "@/components/quick-create";
 import type { AiLock } from "@/lib/ai-limits";
 import { SignOutButton } from "@/components/sign-out-button";
 import { StudyAssistant } from "@/components/study-assistant";
+import { Calculator } from "@/components/calculator";
+import { CalendarSheet } from "@/components/calendar-sheet";
 import { SessionBar } from "@/components/timer/session-bar";
 import { SubjectPickerDialog } from "@/components/timer/subject-picker-dialog";
 import { TimerAlarm } from "@/components/timer/timer-alarm";
@@ -128,6 +130,8 @@ export function AppShell({
           <Avatar name={userName} image={userImage} />
         </header>
         <StudyAssistant aiLock={aiLock} />
+        <Calculator />
+        <CalendarSheet />
         <TimerAlarm />
         <SubjectPickerDialog />
         <SessionBar />

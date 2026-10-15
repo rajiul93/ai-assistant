@@ -178,6 +178,41 @@ export type SubjectWithTopics = Prisma.SubjectGetPayload<{
   };
 }>;
 
+/**
+ * Study time per day for the last `days` days (oldest first, today last), bucketed by the
+ * app-timezone date the session started on. Days without study are included as 0.
+ */
+export async function getDailyStudySeconds(userId: string, days = 14) {
+  const first = startOfDay(now().subtract(days - 1, "day"));
+  const sessions = await prisma.studySession.findMany({
+    where: { userId, startedAt: { gte: first.toDate() } },
+    select: { startedAt: true, durationSeconds: true },
+  });
+  const totals = new Map<string, number>();
+  for (const session of sessions) {
+    const day = startOfDay(session.startedAt).format("YYYY-MM-DD");
+    totals.set(day, (totals.get(day) ?? 0) + session.durationSeconds);
+  }
+  return Array.from({ length: days }, (_, index) => {
+    const day = first.add(index, "day").format("YYYY-MM-DD");
+    return { day, seconds: totals.get(day) ?? 0 };
+  });
+}
+
+/** Preliminary (MCQ) test results: overall accuracy and the latest attempts with their set. */
+export async function getTestSummary(userId: string, take = 5) {
+  const [totals, recent] = await Promise.all([
+    prisma.testAttempt.aggregate({ where: { userId }, _sum: { correct: true, total: true }, _count: { _all: true } }),
+    prisma.testAttempt.findMany({
+      where: { userId },
+      orderBy: { submittedAt: "desc" },
+      take,
+      select: { id: true, correct: true, total: true, submittedAt: true, set: { select: { id: true, topicName: true } } },
+    }),
+  ]);
+  return { tests: totals._count._all, correct: totals._sum.correct ?? 0, total: totals._sum.total ?? 0, recent };
+}
+
 export type SubjectStat = {
   subjectId: string | null;
   name: string;
