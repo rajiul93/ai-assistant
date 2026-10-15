@@ -26,8 +26,19 @@ export function dueRevisionCount(tasks: RevisableTask[], todayMs: number) {
   return tasks.filter((task) => isRevisionTask(task) && needsRevision(task, todayMs)).length;
 }
 
+const bn = (value: number) => String(value).replace(/\d/g, (digit) => "০১২৩৪৫৬৭৮৯"[Number(digit)]);
+
+/** "শেষ: আজ" / "শেষ: ৩ দিন আগে" / "এখনো রিভিশন হয়নি". */
 export function lastRevisedLabel(lastRevisedAt: Date | string | null, todayMs: number) {
   const days = daysSinceRevised(lastRevisedAt, todayMs);
-  if (days === null) return "not revised yet";
-  return days <= 0 ? "last: today" : days === 1 ? "last: yesterday" : `last: ${days} days ago`;
+  if (days === null) return "এখনো রিভিশন হয়নি";
+  return days <= 0 ? "শেষ: আজ" : days === 1 ? "শেষ: গতকাল" : `শেষ: ${bn(days)} দিন আগে`;
+}
+
+/** When the next revision is due, in plain words: "আজই করো", "৪ দিন পর আবার". */
+export function nextRevisionLabel(lastRevisedAt: Date | string | null, todayMs: number) {
+  const days = daysSinceRevised(lastRevisedAt, todayMs);
+  if (days === null || days >= STALE_DAYS) return "আজই রিভিশন দাও";
+  const left = STALE_DAYS - days;
+  return left === 1 ? "কাল আবার রিভিশন" : `${bn(left)} দিন পর আবার রিভিশন`;
 }

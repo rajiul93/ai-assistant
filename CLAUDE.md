@@ -67,6 +67,12 @@ alone. Record decisions and their reasons; don't restate code.
 - Shared server-only helpers in `src/server/*`; pure helpers usable on both sides in `src/lib/*`.
 - **Light mode only** (owner's choice, 2026-10-15): no dark palette, `color-scheme: light` in
   `globals.css` and the viewport; don't add `dark:` styles.
+- **Easy on the eyes** (owner, 2026-10-15): no pure white or near-black. `globals.css` overrides
+  `--color-white` (soft paper `#fdfdfa`), the lightest and darkest zinc/slate shades, and the page
+  background is `#f3f3ef`. Tune colours there, not per component.
+- Floating UI on phones: one draggable dock (`ToolDock`: AI chat, calendar, calculator; snaps to
+  the left or right edge, height remembered) and the running study session as a chip in the top
+  bar that opens a sheet (`SessionBar variant="chip"`; desktop keeps the bottom bar).
 - UI copy is **Bangla** (English for technical terms). Mobile first: no horizontal page scroll; wide
   tables scroll inside their own container.
 - Comments explain *why* or a non-obvious rule; JSDoc on exported functions in that style.

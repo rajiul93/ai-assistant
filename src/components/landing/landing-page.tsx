@@ -144,7 +144,7 @@ function VideoVisual() {
 
 function Showcase({ icon, tone, title, body, visual, plan }: { icon: ReactNode; tone: string; title: string; body: string; visual: ReactNode; plan?: string }) {
   return <article className={cn(card, "flex flex-col overflow-hidden")}>
-    <div className="flex-1 bg-[#f4f6fb] p-4 sm:p-5">{visual}</div>
+    <div className="flex-1 bg-[#f3f3ef] p-4 sm:p-5">{visual}</div>
     <div className="p-4 sm:p-5">
       <div className="flex items-center gap-2">
         <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-xl", tone)}>{icon}</span>
@@ -162,8 +162,8 @@ function Showcase({ icon, tone, title, body, visual, plan }: { icon: ReactNode; 
 export function LandingPage({ pricing }: { pricing: LandingPricing | null }) {
   const cheapest = pricing?.from ?? null;
 
-  return <div className="min-h-full bg-[#f4f6fb] text-slate-900">
-    <header className="sticky top-0 z-30 bg-[#f4f6fb]/85 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
+  return <div className="min-h-full bg-[#f3f3ef] text-slate-900">
+    <header className="sticky top-0 z-30 bg-[#f3f3ef]/85 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
         <Link href="/" aria-label="Prep home" className="min-w-0">
           <span className="flex items-center gap-1 text-[24px] font-extrabold leading-none tracking-tight text-slate-950">Prep<GraduationCap className="size-5 -translate-y-1.5 text-blue-600" strokeWidth={2.5} /></span>

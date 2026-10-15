@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Calculator as CalculatorIcon, Delete, X } from "lucide-react";
 import { evaluate, formatResult, toFraction, toLatex, type AngleMode } from "@/lib/calculator";
 import { renderLatex } from "@/lib/math";
+import { onOpenTool } from "@/components/tool-dock";
 import { cn } from "@/lib/utils";
 
 type Key = { label: string; insert?: string; bracket?: Opener; action?: "clear" | "back" | "equals" | "second" | "ans"; tone?: "fn" | "op" | "eq" | "danger" };
@@ -71,12 +72,14 @@ function Formula({ latex, text, className }: { latex: string | null; text: strin
 const typedKeys: Record<string, string> = { "*": "×", "/": "÷", "-": "−", x: "×", X: "×" };
 
 /**
- * A floating 🧮 button above the AI assistant's button that opens a full-screen scientific
+ * Opened from the tools button above the AI assistant's (ToolDock): a full-screen scientific
  * calculator: trig (degrees/radians, inverses), √, powers, π, e, ln/log, factorial and percent.
  * The result shows live while typing; a physical keyboard works too.
  */
 export function Calculator() {
   const [open, setOpen] = useState(false);
+  // Opened from the tools button (ToolDock).
+  useEffect(() => onOpenTool("calculator", () => setOpen(true)), []);
   const [expression, setExpression] = useState("");
   const [mode, setMode] = useState<AngleMode>("deg");
   const [second, setSecond] = useState(false);
@@ -132,18 +135,8 @@ export function Calculator() {
   });
 
   return <>
-    {/* Sits right above the assistant's button (centred over it), on phones and desktop alike. */}
-    <button
-      type="button"
-      onClick={() => setOpen(true)}
-      aria-label="ক্যালকুলেটর"
-      title="ক্যালকুলেটর"
-      className="fixed bottom-[calc(8.5rem+env(safe-area-inset-bottom))] right-[1.375rem] z-40 flex size-11 items-center justify-center rounded-full bg-white text-blue-700 shadow-[0_10px_26px_-10px_rgba(15,23,42,0.45)] ring-1 ring-slate-200 transition hover:scale-105 active:scale-95 lg:bottom-[5.25rem] lg:right-[1.875rem]"
-    >
-      <CalculatorIcon className="size-5" />
-    </button>
 
-    {open ? <div role="dialog" aria-modal="true" aria-label="ক্যালকুলেটর" className="assistant-panel-in fixed inset-0 z-[60] flex flex-col bg-[#f4f6fb] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:inset-auto sm:bottom-6 sm:right-6 sm:h-[min(44rem,calc(100dvh-3rem))] sm:w-96 sm:overflow-hidden sm:rounded-3xl sm:shadow-[0_24px_80px_-20px_rgba(0,0,0,0.35)] sm:ring-1 sm:ring-slate-200">
+    {open ? <div role="dialog" aria-modal="true" aria-label="ক্যালকুলেটর" className="assistant-panel-in fixed inset-0 z-[60] flex flex-col bg-[#f3f3ef] pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:inset-auto sm:bottom-6 sm:right-6 sm:h-[min(44rem,calc(100dvh-3rem))] sm:w-96 sm:overflow-hidden sm:rounded-3xl sm:shadow-[0_24px_80px_-20px_rgba(0,0,0,0.35)] sm:ring-1 sm:ring-slate-200">
       <header className="flex items-center gap-2 px-4 pb-2 pt-3">
         <span className="flex size-9 items-center justify-center rounded-2xl bg-linear-to-br from-[#3f6ef3] to-[#7f9cfa] text-white"><CalculatorIcon className="size-5" /></span>
         <h2 className="flex-1 text-[17px] font-bold text-slate-900">ক্যালকুলেটর</h2>
