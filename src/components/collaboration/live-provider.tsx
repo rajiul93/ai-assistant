@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Socket } from "socket.io-client";
+import type { SharedTimer } from "@/lib/shared-timer";
 
 /**
  * Live updates for the whole app (docs/collaboration-plan.md §12): a socket.io connection when the
@@ -17,7 +18,8 @@ export type LiveEvent =
   | { type: "message"; conversationId: string; message: { id: string; senderId: string; body: string; createdAt: string } }
   | { type: "read"; conversationId: string }
   | { type: "group_message"; groupId: string; message: { id: string; senderId: string | null; kind: "TEXT" | "SYSTEM"; body: string; createdAt: string } }
-  | { type: "group_changed"; groupId: string };
+  | { type: "group_changed"; groupId: string }
+  | { type: "timer"; timer: SharedTimer | null };
 /** "live": socket connected; "polling": no socket (not configured, or reconnecting). */
 export type LiveStatus = "connecting" | "live" | "polling";
 

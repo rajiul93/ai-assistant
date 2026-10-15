@@ -3,15 +3,19 @@
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import type { SharedTimer } from "@/lib/shared-timer";
+import { emitTo } from "@/server/collaboration/realtime";
 
 /**
  * The study timer shared by the user's devices (owner, 2026-10-15): one ActiveTimer row per user.
  * A device that starts a timer claims the row; if another device already has one running, that
  * one is returned instead and shown everywhere. Pause/resume update it; save or cancel deletes it.
  * Times are epoch milliseconds from the device's clock, the same values the local store keeps.
+ * Every change is also pushed over socket.io (when the realtime server runs) so the other device
+ * updates at once instead of at its next poll.
  */
 
-export type SharedTimer = { startedAt: number | null; accumulatedMs: number; paused: boolean; label: string; taskId: string; subjectId: string; topicId: string; targetMinutes: number | null };
+export type { SharedTimer };
 
 const timerSchema = z.object({
   startedAt: z.number().int().positive().nullable(),
@@ -52,6 +56,7 @@ export async function claimSharedTimer(input: unknown): Promise<{ ok: true } | {
   if (existing) return { ok: false, active: toShared(existing) };
   try {
     await prisma.activeTimer.create({ data: { userId: user.id, ...toRow(timer) } });
+    await emitTo([user.id], { type: "timer", timer });
     return { ok: true };
   } catch {
     // Two devices started at the same moment: the other one won.
@@ -66,6 +71,7 @@ export async function updateSharedTimer(input: unknown) {
   const user = await requireUser();
   const timer = timerSchema.parse(input);
   const result = await prisma.activeTimer.updateMany({ where: { userId: user.id }, data: toRow(timer) });
+  if (result.count) await emitTo([user.id], { type: "timer", timer });
   return result.count > 0;
 }
 
@@ -73,5 +79,6 @@ export async function updateSharedTimer(input: unknown) {
 export async function finishSharedTimer() {
   const user = await requireUser();
   const result = await prisma.activeTimer.deleteMany({ where: { userId: user.id } });
+  if (result.count) await emitTo([user.id], { type: "timer", timer: null });
   return result.count > 0;
 }

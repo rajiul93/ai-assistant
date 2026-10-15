@@ -93,7 +93,12 @@ alone. Record decisions and their reasons; don't restate code.
   account's refresh tokens (that signed the other device out too). Unused 30 days → no longer counts.
 - **One study timer across devices**: `ActiveTimer` (one row per user, `src/server/actions/timer.ts`)
   synced by `TimerSync` (claim on start — if another device's timer runs, that one is shown instead;
-  pause/resume/stop passed on; polled every 15 s and on focus). The local zustand store still ticks.
+  pause/resume/stop passed on). Changes are pushed as a socket.io `timer` event (needs the realtime
+  server, `REALTIME_URL`), else polled every 10 s and on focus. Rules: while a local change is saving
+  — and for any reading that began before it — server readings are ignored (a mid-save poll used to
+  bring a stopped timer back); the server decides on open, so a timer stopped elsewhere while this
+  device was closed stops here too (only a start that never reached the server, or a timer from before
+  sharing — `prep:timer-synced` — is sent again). The local zustand store still ticks.
 - Roles: `USER`, `ADMIN` (= staff), and one **super admin** fixed by email in `src/server/roles.ts`
   (`roleOf`, `isAdminUser`, read fresh from the DB). Any staff: no AI limits, every exam open, voice.
 - **Staff permissions** (2026-10-15, `User.staffPermissions`, list in `src/lib/staff.ts`): `billing`,
