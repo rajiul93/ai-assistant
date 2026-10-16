@@ -7,6 +7,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/user-error";
 
 function SortableItem({ id, className, children }: { id: string; className?: string; children: (handle: ReactNode) => ReactNode }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id });
@@ -56,7 +57,7 @@ export function SortableList<T extends { id: string }>({ items, onReorder, class
     setOrder(next);
     onReorder(next).catch((error: unknown) => {
       setOrder(null);
-      toast.error(error instanceof Error ? error.message : "Couldn't save the new order.");
+      toast.error(errorMessage(error, "Couldn't save the new order."));
     });
   };
   if (!enabled) return <ul className={className}>{items.map((item) => <li key={item.id} className={itemClassName}>{children(item, null)}</li>)}</ul>;

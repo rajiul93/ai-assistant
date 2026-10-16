@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { roleOf } from "@/server/roles";
+import { userError } from "@/lib/user-error";
 
 /**
  * The super admin's price controls (docs/subscription-plan.md): settings, AI tiers, exams and
@@ -15,7 +16,7 @@ import { roleOf } from "@/server/roles";
 
 async function requireSuperAdmin() {
   const user = await requireUser();
-  if ((await roleOf(user)) !== "SUPER_ADMIN") throw new Error("শুধু super admin দাম বদলাতে পারেন।");
+  if ((await roleOf(user)) !== "SUPER_ADMIN") throw userError("শুধু super admin দাম বদলাতে পারেন।");
   return user;
 }
 
@@ -78,7 +79,7 @@ export async function saveTrack(input: unknown) {
   const data = trackSchema.parse(rest);
   if (data.bankExam) {
     const taken = await prisma.examTrack.findFirst({ where: { bankExam: data.bankExam, ...(trackId ? { id: { not: trackId } } : {}) }, select: { name: true } });
-    if (taken) throw new Error(`এই প্রশ্ন ব্যাংক আগেই “${taken.name}”-এর সাথে যুক্ত।`);
+    if (taken) throw userError(`এই প্রশ্ন ব্যাংক আগেই “${taken.name}”-এর সাথে যুক্ত।`);
   }
   if (trackId) await prisma.examTrack.update({ where: { id: trackId }, data });
   else await prisma.examTrack.create({ data });
@@ -89,7 +90,7 @@ export async function saveTrack(input: unknown) {
 export async function deleteTrack(trackId: string) {
   await requireSuperAdmin();
   const target = id.parse(trackId);
-  if (await prisma.payment.count({ where: { trackIds: { has: target } } })) throw new Error("এই পরীক্ষা কেউ কিনেছে — মুছে না ফেলে বন্ধ (inactive) করুন।");
+  if (await prisma.payment.count({ where: { trackIds: { has: target } } })) throw userError("এই পরীক্ষা কেউ কিনেছে — মুছে না ফেলে বন্ধ (inactive) করুন।");
   await prisma.examTrack.delete({ where: { id: target } });
   done();
 }
@@ -107,7 +108,7 @@ export async function saveDuration(input: unknown) {
   const { id: durationId, ...rest } = z.object({ id: id.nullable() }).passthrough().parse(input);
   const data = durationSchema.parse(rest);
   const clash = await prisma.planDuration.findFirst({ where: { days: data.days, ...(durationId ? { id: { not: durationId } } : {}) }, select: { id: true } });
-  if (clash) throw new Error(`${data.days} দিনের মেয়াদ আগেই আছে।`);
+  if (clash) throw userError(`${data.days} দিনের মেয়াদ আগেই আছে।`);
   if (durationId) await prisma.planDuration.update({ where: { id: durationId }, data });
   else await prisma.planDuration.create({ data });
   done();

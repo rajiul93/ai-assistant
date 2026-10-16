@@ -15,6 +15,7 @@ import { dayjs } from "@/lib/dayjs";
 import { cn } from "@/lib/utils";
 import { VoiceFormAssistant } from "@/components/voice-form-assistant";
 import type { TaskWithRelations } from "@/server/queries";
+import { errorMessage } from "@/lib/user-error";
 
 type TopicOption = { id: string; name: string; subjectId: string; parentName?: string | null };
 type SubjectOption = { id: string; name: string };
@@ -90,7 +91,7 @@ export function TaskForm({
       if (!task) form.reset();
       await queryClient.invalidateQueries({ queryKey: ["task-choices"] });
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.error(errorMessage(error)),
   });
 
   const quickActive = QUICK_DUE.find((item) => dueDate === dueAt(item.days));

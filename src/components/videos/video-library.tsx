@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { youTubeThumbnail } from "@/lib/youtube";
 import { addVideo, deleteVideo } from "@/server/actions/videos";
 import { YouTubePlayer } from "./youtube-player";
+import { errorMessage } from "@/lib/user-error";
 
 type Video = { id: string; videoId: string; title: string; channel: string | null; subjectId: string | null; subject: { name: string } | null };
 type Subject = { id: string; name: string };
@@ -45,12 +46,12 @@ export function VideoLibrary({ videos, limit, subjects }: { videos: Video[]; lim
       return result;
     },
     onSuccess: ({ id }) => { toast.success("ভিডিও যোগ হলো"); setUrl(""); router.refresh(); open(id); },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.error(errorMessage(error)),
   });
   const remove = useMutation({
     mutationFn: (video: Video) => deleteVideo(video.id),
     onSuccess: (_, video) => { toast.success("ভিডিও মুছে ফেলা হলো"); if (playing?.id === video.id) open(null); router.refresh(); },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.error(errorMessage(error)),
   });
 
   // Subjects that have videos, for the filter chips.

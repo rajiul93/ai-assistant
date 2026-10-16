@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { htmlToPlainText, toRichHtml } from "@/lib/note-html";
 import { prisma } from "@/lib/prisma";
+import { userError } from "@/lib/user-error";
 
 /**
  * Confusion: doubts noted down to ask in class. Each one sits under Confusion until it is marked
@@ -25,19 +26,19 @@ const confusionSchema = z.object({
 /** Editor HTML (or plain text) → sanitized HTML; null when nothing is written. */
 function richText(value: string | undefined, maxChars: number, tooLong: string) {
   const html = toRichHtml(value);
-  if (html && htmlToPlainText(html).length > maxChars) throw new Error(tooLong);
+  if (html && htmlToPlainText(html).length > maxChars) throw userError(tooLong);
   return html;
 }
 const confusionText = (value: string) => {
   const html = richText(value, 4000, "Confusion ৪০০০ অক্ষরের মধ্যে লেখো।");
-  if (!html) throw new Error("কী নিয়ে confusion লেখো");
+  if (!html) throw userError("কী নিয়ে confusion লেখো");
   return html;
 };
 const clarificationText = (value: string | undefined) => richText(value, 8000, "ব্যাখ্যা ৮০০০ অক্ষরের মধ্যে লেখো।");
 
 async function ownedConfusion(userId: string, id: string) {
   const confusion = await prisma.confusion.findFirst({ where: { id, userId } });
-  if (!confusion) throw new Error("Confusion not found.");
+  if (!confusion) throw userError("Confusion not found.");
   return confusion;
 }
 
@@ -45,14 +46,14 @@ async function ownedConfusion(userId: string, id: string) {
 async function ownedTopic(userId: string, topicId: string | null | undefined, subjectId: string | null) {
   if (!topicId) return null;
   const topic = await prisma.topic.findFirst({ where: { id: topicId, userId }, select: { id: true, subjectId: true } });
-  if (!topic || topic.subjectId !== subjectId) throw new Error("Topic-টা এই subject-এর না।");
+  if (!topic || topic.subjectId !== subjectId) throw userError("Topic-টা এই subject-এর না।");
   return topic.id;
 }
 
 async function ownedSubject(userId: string, subjectId: string | null) {
   if (!subjectId) return null;
   const subject = await prisma.subject.findFirst({ where: { id: subjectId, userId }, select: { id: true } });
-  if (!subject) throw new Error("Subject not found.");
+  if (!subject) throw userError("Subject not found.");
   return subject.id;
 }
 

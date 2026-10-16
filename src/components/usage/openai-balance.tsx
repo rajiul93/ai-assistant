@@ -5,6 +5,7 @@ import { KeyRound, Loader2, Plus, Trash2, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { addAiCredit, deleteAiCredit } from "@/server/actions/ai-credit";
+import { errorMessage } from "@/lib/user-error";
 
 export type CreditRow = { id: string; amountCents: number; addedAt: string; note: string | null };
 export type CostsView = { ok: true; days: Array<{ day: string; usd: number }> } | { ok: false; reason: "no_key" | "failed"; detail?: string };
@@ -44,7 +45,7 @@ export function OpenAiBalance({ credits, costs, today }: { credits: CreditRow[];
         toast.success(`${usd(value)} যোগ হলো`);
         setAdding(false); setAmount(""); setNote(""); setAddedOn(today);
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "সেভ করা গেল না");
+        toast.error(errorMessage(error, "সেভ করা গেল না"));
       }
     });
   }
@@ -52,7 +53,7 @@ export function OpenAiBalance({ credits, costs, today }: { credits: CreditRow[];
   function remove(credit: CreditRow) {
     if (!window.confirm(`${usd(credit.amountCents / 100)} (${dayKey(credit.addedAt)}) মুছে ফেলবেন?`)) return;
     startTransition(async () => {
-      try { await deleteAiCredit(credit.id); toast.success("মুছে ফেলা হলো"); } catch (error) { toast.error(error instanceof Error ? error.message : "মোছা গেল না"); }
+      try { await deleteAiCredit(credit.id); toast.success("মুছে ফেলা হলো"); } catch (error) { toast.error(errorMessage(error, "মোছা গেল না")); }
     });
   }
 

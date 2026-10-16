@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { hasPremium } from "@/server/premium";
 import { canOpenExam } from "@/server/pricing";
 import { isAdminUser } from "@/server/roles";
+import { userError } from "@/lib/user-error";
 
 /**
  * Who may open and take what in the Question Bank (docs/question-bank-v2-plan.md). Checked on the
@@ -62,13 +63,13 @@ const passed = (attempts: Array<{ total: number; correct: number }>) => attempts
  * Throws the Bangla message the page shows.
  */
 export async function assertCanTakeFromBank(user: Viewer, kind: "mcq" | "short") {
-  if (!(await hasPremium(user))) throw new Error(`${kind === "mcq" ? "Preliminary" : "Short Question"}-এ নিতে একটা চালু plan লাগবে।`);
+  if (!(await hasPremium(user))) throw userError(`${kind === "mcq" ? "Preliminary" : "Short Question"}-এ নিতে একটা চালু plan লাগবে।`);
   if (await isAdminUser(user)) return;
   const going = kind === "mcq"
     ? (await prisma.questionSet.findMany({ where: { userId: user.id, fromBank: true }, select: { topicName: true, attempts: { select: { total: true, correct: true } } } }))
     : (await prisma.shortQuestionSet.findMany({ where: { userId: user.id, fromBank: true }, select: { topicName: true, attempts: { select: { total: true, correct: true } } } }));
   const open = going.filter((set) => !passed(set.attempts));
   if (open.length >= BANK_SLOTS) {
-    throw new Error(`প্রশ্ন ব্যাংক থেকে একসাথে ${BANK_SLOTS}টার বেশি ${kind === "mcq" ? "MCQ" : "Short Question"} set নেওয়া যায় না। আগে নেওয়া ${open.map((set) => `"${set.topicName}"`).join(", ")}-এর test দিয়ে ${PASS_PERCENT}% পাও (বা set মুছে দাও), তারপর নতুনটা নাও।`);
+    throw userError(`প্রশ্ন ব্যাংক থেকে একসাথে ${BANK_SLOTS}টার বেশি ${kind === "mcq" ? "MCQ" : "Short Question"} set নেওয়া যায় না। আগে নেওয়া ${open.map((set) => `"${set.topicName}"`).join(", ")}-এর test দিয়ে ${PASS_PERCENT}% পাও (বা set মুছে দাও), তারপর নতুনটা নাও।`);
   }
 }

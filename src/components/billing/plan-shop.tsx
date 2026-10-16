@@ -9,6 +9,7 @@ import { methodNames, taka } from "@/lib/billing-display";
 import { formatBdPhone } from "@/lib/phone";
 import { cn } from "@/lib/utils";
 import { startOnlinePayment, submitPayment, type getBillingOverview } from "@/server/actions/billing";
+import { errorMessage } from "@/lib/user-error";
 
 export type BillingOverview = Awaited<ReturnType<typeof getBillingOverview>>;
 type Quote = BillingOverview["quotes"][number];
@@ -65,7 +66,7 @@ function Checkout({ quote, overview, source, onBack, onSubmitted }: { quote: Quo
       onSubmitted?.();
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Payment জমা দেওয়া গেল না।");
+      toast.error(errorMessage(error, "Payment জমা দেওয়া গেল না।"));
     } finally {
       setSaving(false);
     }
@@ -77,7 +78,7 @@ function Checkout({ quote, overview, source, onBack, onSubmitted }: { quote: Quo
       const { url } = await startOnlinePayment({ ...choice, phone });
       window.location.assign(url);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Online payment খোলা গেল না।");
+      toast.error(errorMessage(error, "Online payment খোলা গেল না।"));
       setSaving(false);
     }
   }

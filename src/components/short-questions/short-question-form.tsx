@@ -34,6 +34,7 @@ import { TopicSelect } from "@/components/subject-topic-filter";
 import type { TopicNode } from "@/lib/subject-filter";
 import { cn } from "@/lib/utils";
 import { createShortQuestionSet, updateShortQuestionSet } from "@/server/actions/short-questions";
+import { errorMessage } from "@/lib/user-error";
 
 const emptyQuestion = (): ReviewedShortQuestion => ({ text: "", answer: "" });
 
@@ -110,7 +111,7 @@ export function ShortQuestionForm({ subjects, topics = [], initial }: {
     },
     onInterim: setHeard,
     onResult: (said) => { const target = dictatingRef.current; endDictation(); if (target) insertSpoken(target, said); },
-    onError: (error) => { endDictation(); toast.error(error.message); },
+    onError: (error) => { endDictation(); toast.error(errorMessage(error)); },
   });
   function dictate(target: DictationTarget) {
     mic.stop();
@@ -157,7 +158,7 @@ export function ShortQuestionForm({ subjects, topics = [], initial }: {
         if (file.type.startsWith("image/")) setPages((value) => [...value, { src: URL.createObjectURL(file), name: file.name }]);
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "পাতাটা পড়া গেল না।");
+      toast.error(errorMessage(error, "পাতাটা পড়া গেল না।"));
     } finally {
       setReading(null);
     }
@@ -183,7 +184,7 @@ export function ShortQuestionForm({ subjects, topics = [], initial }: {
       else { await createShortQuestionSet(payload); toast.success("Set বানানো হলো — Todo-তে আছে"); router.push("/short-questions?status=todo"); }
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't save the set.");
+      toast.error(errorMessage(error, "Couldn't save the set."));
     } finally {
       setSaving(false);
     }
@@ -209,7 +210,7 @@ export function ShortQuestionForm({ subjects, topics = [], initial }: {
           note = ` · AI সাজিয়েছে${noAnswer ? ` · ${noAnswer}টির উত্তর লেখায় নেই — লিখে দাও` : ""}`;
         }
       } catch (error) {
-        if (!local.questions.length) { toast.error(error instanceof Error ? error.message : "কোনো প্রশ্ন চিনতে পারিনি।"); return; }
+        if (!local.questions.length) { toast.error(errorMessage(error, "কোনো প্রশ্ন চিনতে পারিনি।")); return; }
       } finally {
         setSorting(false);
       }

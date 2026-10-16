@@ -1,6 +1,7 @@
 import type { PaymentMethod } from "@prisma/client";
 import { startOfDay } from "@/lib/dayjs";
 import { prisma } from "@/lib/prisma";
+import { userError } from "@/lib/user-error";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -72,7 +73,7 @@ export async function approvePayment(paymentId: string, reviewer: string, note?:
       where: { id: paymentId, status: "PENDING" },
       data: { status: "APPROVED", reviewedAt: new Date(), reviewedBy: reviewer, adminNote: note || null },
     });
-    if (!moved.count) throw new Error("This payment was already reviewed.");
+    if (!moved.count) throw userError("This payment was already reviewed.");
     const payment = await tx.payment.findUniqueOrThrow({ where: { id: paymentId } });
     // An old package payment (no price breakdown) opens every exam, as packages always did.
     const legacy = payment.breakdown === null && !payment.trackIds.length;
@@ -97,7 +98,7 @@ export async function rejectPayment(paymentId: string, reviewer: string, note?: 
     where: { id: paymentId, status: "PENDING" },
     data: { status: "REJECTED", reviewedAt: new Date(), reviewedBy: reviewer, adminNote: note || null },
   });
-  if (!moved.count) throw new Error("This payment was already reviewed.");
+  if (!moved.count) throw userError("This payment was already reviewed.");
 }
 
 /**
@@ -133,7 +134,7 @@ export async function cancelSubscription(userId: string, by: string) {
   const now = new Date();
   return prisma.$transaction(async (tx) => {
     const open = await tx.entitlement.findMany({ where: { userId, endsAt: { gt: now } }, orderBy: { startsAt: "desc" } });
-    if (!open.length) throw new Error("This user has no running plan to cancel.");
+    if (!open.length) throw userError("This user has no running plan to cancel.");
     let toRemove = plan.tokensLeft;
     for (const item of open) {
       // Take the unused allowance off, latest purchase first.

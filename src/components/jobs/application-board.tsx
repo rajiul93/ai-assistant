@@ -22,6 +22,7 @@ import { APP_TIMEZONE, dayjs } from "@/lib/dayjs";
 import { RichHtml, MathText } from "@/components/math-text";
 import { cn } from "@/lib/utils";
 import { deleteApplication, listMyApplications, updateApplicationStatus } from "@/server/actions/applications";
+import { errorMessage } from "@/lib/user-error";
 
 type SectorFilter = "ALL" | JobSector;
 type StatusFilter = "ALL" | ApplicationStatus;
@@ -163,12 +164,12 @@ export function ApplicationBoard({ initialApplications }: { initialApplications:
   const statusMutation = useMutation({
     mutationFn: ({ id, next }: { id: string; next: ApplicationStatus }) => updateApplicationStatus(id, next),
     onSuccess: async (_, { next }) => { toast.success(`Status: ${statusLabels[next]}`); await refresh(); },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.error(errorMessage(error)),
   });
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteApplication(id),
     onSuccess: async () => { toast.success("আবেদনটি মুছে ফেলা হয়েছে"); setDeleting(null); await refresh(); },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.error(errorMessage(error)),
   });
 
   // Sector and search narrow the list first; the status chips then count within that.

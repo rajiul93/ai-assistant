@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { cancelFriendRequest, findUserByEmail, respondFriendRequest, sendFriendRequest } from "@/server/actions/friends";
 import { ChatAvatar } from "./chat-ui";
 import { useLive } from "./live-provider";
+import { errorMessage } from "@/lib/user-error";
 
 type Found = Awaited<ReturnType<typeof findUserByEmail>>;
 const button = "flex h-10 items-center justify-center gap-1.5 rounded-full px-4 text-sm font-semibold disabled:opacity-50";
@@ -32,11 +33,11 @@ export function AddFriendDialog({ open, onOpenChange, onMessage }: { open: boole
   async function search() {
     if (!email.trim()) return;
     setSearching(true);
-    try { setFound(await findUserByEmail(email)); } catch (error) { toast.error(error instanceof Error ? error.message : "খোঁজা গেল না।"); } finally { setSearching(false); }
+    try { setFound(await findUserByEmail(email)); } catch (error) { toast.error(errorMessage(error, "খোঁজা গেল না।")); } finally { setSearching(false); }
   }
   async function run(id: string, work: () => Promise<unknown>, done: string) {
     setBusy(id);
-    try { await work(); toast.success(done); reload(); if (email.trim()) setFound(await findUserByEmail(email)); } catch (error) { toast.error(error instanceof Error ? error.message : "করা গেল না।"); } finally { setBusy(null); }
+    try { await work(); toast.success(done); reload(); if (email.trim()) setFound(await findUserByEmail(email)); } catch (error) { toast.error(errorMessage(error, "করা গেল না।")); } finally { setBusy(null); }
   }
 
   return <Dialog open={open} onOpenChange={(next) => { onOpenChange(next); if (!next) { setEmail(""); setFound(null); } }}>

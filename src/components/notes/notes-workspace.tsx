@@ -26,6 +26,7 @@ import { compressImage } from "@/lib/compress-image";
 import { createNote, deleteNote, generateNoteContent, getNote, listNotes, updateNote } from "@/server/actions/notes";
 import { useAssistantStore } from "@/store/assistant";
 import { MathText } from "@/components/math-text";
+import { errorMessage } from "@/lib/user-error";
 
 type NoteSummary = Awaited<ReturnType<typeof listNotes>>[number];
 type SaveState = "saved" | "saving" | "unsaved" | "error";
@@ -147,7 +148,7 @@ function NoteEditor({ noteId, subjects, topics, premium, onSaved, onDeleted, onB
       setInstruction("");
       setAiOpen(false);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "AI couldn't write this");
+      toast.error(errorMessage(error, "AI couldn't write this"));
     } finally {
       setWriting(false);
       setProgress("");
@@ -258,7 +259,7 @@ function NoteEditor({ noteId, subjects, topics, premium, onSaved, onDeleted, onB
           <AlertDialogAction onClick={() => {
             clearTimeout(timer.current);
             timer.current = undefined;
-            void deleteNote(noteId).then(() => { toast.success("নোট মুছে ফেলা হলো"); onDeleted(); }).catch((error: Error) => toast.error(error.message));
+            void deleteNote(noteId).then(() => { toast.success("নোট মুছে ফেলা হলো"); onDeleted(); }).catch((error: Error) => toast.error(errorMessage(error)));
           }} className="bg-red-600 hover:bg-red-700">মুছে ফেলুন</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -325,7 +326,7 @@ export function NotesWorkspace({ initialNotes, subjects, topics, premium }: { in
       await queryClient.invalidateQueries({ queryKey: ["notes"] });
       openNote(id);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't create a note");
+      toast.error(errorMessage(error, "Couldn't create a note"));
     } finally {
       setCreating(false);
     }

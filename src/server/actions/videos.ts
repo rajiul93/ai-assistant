@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { FREE_VIDEO_LIMIT, parseYouTubeId } from "@/lib/youtube";
 import { hasPremium } from "@/server/premium";
+import { userError } from "@/lib/user-error";
 
 /**
  * Video library: YouTube videos a student saves to watch inside the app, so studying doesn't lead
@@ -24,8 +25,8 @@ async function videoInfo(videoId: string) {
     const watch = `https://www.youtube.com/watch?v=${videoId}`;
     const response = await fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(watch)}`, { signal: AbortSignal.timeout(5000), cache: "no-store" });
     // 401/403: embedding is turned off for this video, so it couldn't play here anyway.
-    if (response.status === 401 || response.status === 403) throw new Error("এই ভিডিওর মালিক YouTube-এর বাইরে চালানো বন্ধ রেখেছেন, তাই এখানে চলবে না — অন্য ভিডিও দিন।");
-    if (response.status === 404 || response.status === 400) throw new Error("ভিডিওটা পাওয়া যায়নি — private বা মুছে ফেলা হতে পারে।");
+    if (response.status === 401 || response.status === 403) throw userError("এই ভিডিওর মালিক YouTube-এর বাইরে চালানো বন্ধ রেখেছেন, তাই এখানে চলবে না — অন্য ভিডিও দিন।");
+    if (response.status === 404 || response.status === 400) throw userError("ভিডিওটা পাওয়া যায়নি — private বা মুছে ফেলা হতে পারে।");
     if (!response.ok) return null;
     const data = (await response.json()) as { title?: string; author_name?: string };
     return { title: data.title?.trim().slice(0, 300) || null, channel: data.author_name?.trim().slice(0, 120) || null };
@@ -89,6 +90,6 @@ export async function addVideo(input: unknown): Promise<{ id: string } | { error
 export async function deleteVideo(id: string) {
   const user = await requireUser();
   const { count } = await prisma.studyVideo.deleteMany({ where: { id: z.string().max(64).parse(id), userId: user.id } });
-  if (!count) throw new Error("ভিডিওটা পাওয়া যায়নি।");
+  if (!count) throw userError("ভিডিওটা পাওয়া যায়নি।");
   revalidatePath("/videos");
 }

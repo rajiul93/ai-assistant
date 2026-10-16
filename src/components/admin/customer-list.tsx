@@ -18,6 +18,7 @@ import { Pagination } from "@/components/pagination";
 import { formatBdPhone } from "@/lib/phone";
 import { cn } from "@/lib/utils";
 import { cancelUserSubscription, setUserAiPaused, setUserBlocked } from "@/server/actions/roles";
+import { errorMessage } from "@/lib/user-error";
 
 export type CustomerTab = "paid" | "ended" | "free";
 type Row = { id: string; name: string | null; email: string; phone: string | null; image: string | null; blocked: boolean; aiPaused: boolean; joinedAt: string; paidBdt: number; payments: number; planEndsAt: string | null; plans: Array<{ label: string; priceBdt: number; endsAt: string }>; lastAiAt: string | null };
@@ -38,7 +39,7 @@ function useRun() {
   const router = useRouter();
   const [pending, start] = useTransition();
   const run = (action: () => Promise<unknown>, done: string) => start(async () => {
-    try { await action(); toast.success(done); router.refresh(); } catch (error) { toast.error(error instanceof Error ? error.message : "করা গেল না।"); }
+    try { await action(); toast.success(done); router.refresh(); } catch (error) { toast.error(errorMessage(error, "করা গেল না।")); }
   });
   return { pending, run };
 }

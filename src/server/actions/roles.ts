@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { cancelSubscription } from "@/server/billing";
 import { can, isSuperAdminEmail } from "@/server/roles";
+import { userError } from "@/lib/user-error";
 
 /**
  * Customer controls (block, AI pause, cancel): staff with the Customers permission. Nothing here
@@ -14,11 +15,11 @@ import { can, isSuperAdminEmail } from "@/server/roles";
  */
 async function customerControl(userId: string) {
   const me = await requireUser();
-  if (!(await can(me, "customers"))) throw new Error("এটা করতে Customers permission লাগবে।");
+  if (!(await can(me, "customers"))) throw userError("এটা করতে Customers permission লাগবে।");
   const target = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, role: true } });
-  if (!target) throw new Error("User পাওয়া যায়নি।");
-  if (isSuperAdminEmail(target.email)) throw new Error("Super admin-এর ওপর এটা করা যায় না।");
-  if (target.role !== "USER" && !isSuperAdminEmail(me.email)) throw new Error("Staff-এর ওপর এটা শুধু super admin করতে পারেন।");
+  if (!target) throw userError("User পাওয়া যায়নি।");
+  if (isSuperAdminEmail(target.email)) throw userError("Super admin-এর ওপর এটা করা যায় না।");
+  if (target.role !== "USER" && !isSuperAdminEmail(me.email)) throw userError("Staff-এর ওপর এটা শুধু super admin করতে পারেন।");
   return me;
 }
 

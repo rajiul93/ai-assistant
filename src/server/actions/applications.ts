@@ -6,6 +6,7 @@ import { startOfDay } from "@/lib/dayjs";
 import { toRichHtml } from "@/lib/note-html";
 import { prisma } from "@/lib/prisma";
 import { applicationStatusSchema, jobApplicationSchema } from "@/lib/validations";
+import { userError } from "@/lib/user-error";
 
 
 function revalidateJobs() {
@@ -37,7 +38,7 @@ function toData(input: unknown) {
 
 async function ownedApplication(userId: string, applicationId: string) {
   const existing = await prisma.jobApplication.findFirst({ where: { id: applicationId, userId } });
-  if (!existing) throw new Error("Application not found.");
+  if (!existing) throw userError("Application not found.");
   return existing;
 }
 

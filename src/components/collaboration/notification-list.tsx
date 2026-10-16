@@ -14,6 +14,7 @@ import { listNotifications } from "@/server/actions/notifications";
 import { respondShare } from "@/server/actions/shares";
 import { useLive } from "./live-provider";
 import { SharePreviewDialog } from "./share-preview-dialog";
+import { errorMessage } from "@/lib/user-error";
 
 type Item = Awaited<ReturnType<typeof listNotifications>>[number];
 
@@ -57,7 +58,7 @@ function QuickAnswer({ item, onDone }: { item: Item; onDone: () => void }) {
       }
       onDone();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "করা গেল না।");
+      toast.error(errorMessage(error, "করা গেল না।"));
     } finally {
       setBusy(false);
     }

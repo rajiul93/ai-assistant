@@ -13,6 +13,7 @@ import { changeTaskRevisionCount, createTask, updateTaskStatus } from "@/server/
 import { findPendingAction, useAssistantStore } from "@/store/assistant";
 import { useTimerStore } from "@/store/timer";
 import { useTimerStartStore } from "@/store/timer-start";
+import { errorMessage } from "@/lib/user-error";
 
 // A reply to a waiting card is a confirmation when every word is a "yes/do it" word, e.g.
 // "হ্যাঁ", "ঠিক আছে, সেভ করো", "ok save it", "yes please". Anything else goes to the AI.
@@ -165,7 +166,7 @@ export function useAssistant() {
     } catch (error) {
       store.update(entry.id, { draftState: "pending" });
       store.setLive({ stage: "result", tone: "warn", text: s.saveFailedStatus });
-      say(s.saveFailedReply(error instanceof Error ? error.message : ""), voice);
+      say(s.saveFailedReply(errorMessage(error, "")), voice);
     }
   }
 

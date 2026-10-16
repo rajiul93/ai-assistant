@@ -8,6 +8,7 @@ import { normalizeEmail, orderPair } from "@/lib/collaboration";
 import { prisma } from "@/lib/prisma";
 import { areFriends, friendIdsOf, personSelect, publicPerson } from "@/server/collaboration/people";
 import { emitTo } from "@/server/collaboration/realtime";
+import { userError } from "@/lib/user-error";
 
 /**
  * Friends: found by exact email, asked with a request, accepted or rejected. Friendship is what
@@ -59,17 +60,17 @@ async function befriend(tx: Prisma.TransactionClient, a: string, b: string) {
 export async function sendFriendRequest(userId: string) {
   const me = await requireUser();
   const toId = idSchema.parse(userId);
-  if (toId === me.id) throw new Error("নিজেকে friend request পাঠানো যায় না।");
+  if (toId === me.id) throw userError("নিজেকে friend request পাঠানো যায় না।");
   const target = await prisma.user.findUnique({ where: { id: toId }, select: { status: true } });
-  if (!target || target.status === "BLOCKED") throw new Error("এই user-কে পাওয়া যায়নি।");
-  if (await areFriends(me.id, toId)) throw new Error("আপনারা আগেই friend।");
+  if (!target || target.status === "BLOCKED") throw userError("এই user-কে পাওয়া যায়নি।");
+  if (await areFriends(me.id, toId)) throw userError("আপনারা আগেই friend।");
 
   const theirs = await prisma.friendRequest.findFirst({ where: { fromId: toId, toId: me.id, status: "PENDING" }, select: { id: true } });
   if (theirs) return respondFriendRequest(theirs.id, true);
 
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
   if ((await prisma.friendRequest.count({ where: { fromId: me.id, createdAt: { gte: since } } })) >= REQUESTS_PER_DAY) {
-    throw new Error("আজ অনেক request পাঠানো হয়েছে — কাল আবার চেষ্টা করো।");
+    throw userError("আজ অনেক request পাঠানো হয়েছে — কাল আবার চেষ্টা করো।");
   }
 
   try {
@@ -79,7 +80,7 @@ export async function sendFriendRequest(userId: string) {
     });
   } catch (error) {
     // The partial unique index: a request between us is already waiting (perhaps sent a moment ago).
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new Error("Request আগেই পাঠানো আছে।");
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw userError("Request আগেই পাঠানো আছে।");
     throw error;
   }
   void emitTo([toId], { type: "notify" });
@@ -95,7 +96,7 @@ export async function respondFriendRequest(requestId: string, accept: boolean) {
   const me = await requireUser();
   const id = idSchema.parse(requestId);
   const request = await prisma.friendRequest.findFirst({ where: { id, toId: me.id }, select: { fromId: true, status: true } });
-  if (!request) throw new Error("Request পাওয়া যায়নি।");
+  if (!request) throw userError("Request পাওয়া যায়নি।");
   if (request.status !== "PENDING") return { status: request.status === "ACCEPTED" ? "accepted" as const : "closed" as const };
 
   const changed = await prisma.$transaction(async (tx) => {
@@ -117,7 +118,7 @@ export async function cancelFriendRequest(requestId: string) {
   const me = await requireUser();
   const id = idSchema.parse(requestId);
   const request = await prisma.friendRequest.findFirst({ where: { id, fromId: me.id }, select: { toId: true } });
-  if (!request) throw new Error("Request পাওয়া যায়নি।");
+  if (!request) throw userError("Request পাওয়া যায়নি।");
   await prisma.$transaction([
     prisma.friendRequest.updateMany({ where: { id, status: "PENDING" }, data: { status: "CANCELLED", respondedAt: new Date() } }),
     // The other person no longer has anything to answer.
@@ -134,7 +135,7 @@ export async function cancelFriendRequest(requestId: string) {
 export async function removeFriend(friendId: string) {
   const me = await requireUser();
   const otherId = idSchema.parse(friendId);
-  if (otherId === me.id) throw new Error("ভুল request।");
+  if (otherId === me.id) throw userError("ভুল request।");
   const [userAId, userBId] = orderPair(me.id, otherId);
   await prisma.$transaction([
     prisma.friendship.deleteMany({ where: { userAId, userBId } }),

@@ -8,6 +8,7 @@ import { bareAffix } from "@/lib/vocabulary/affixes";
 import { namesAPerson, nounKey } from "@/lib/vocabulary/nouns";
 import { hasPremium } from "@/server/premium";
 import { can } from "@/server/roles";
+import { userError } from "@/lib/user-error";
 
 /**
  * Vocabulary: shared tables of verbs, nouns (singular/plural) and prefixes/suffixes, all in the
@@ -19,7 +20,7 @@ import { can } from "@/server/roles";
 /** The signed-in user, if they may change the vocabulary tables. */
 async function requireEditor() {
   const user = await requireUser();
-  if (!(await can(user, "vocabulary"))) throw new Error("যোগ, বদল বা মুছতে শব্দভান্ডার permission লাগবে।");
+  if (!(await can(user, "vocabulary"))) throw userError("যোগ, বদল বা মুছতে শব্দভান্ডার permission লাগবে।");
   return user;
 }
 

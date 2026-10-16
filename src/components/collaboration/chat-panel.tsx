@@ -10,6 +10,7 @@ import { markConversationRead, openConversation, sendMessage } from "@/server/ac
 import type { PublicPerson } from "@/server/collaboration/people";
 import { Bubble, ChatAvatar, ChatFrame, ChatHeader, ChatTitle, Composer, ComposerNote, DayDivider, HeaderMenu, liveLabel, MessageScroller, ScrollerNotice, startsNewDay } from "./chat-ui";
 import { useLive, type LiveEvent } from "./live-provider";
+import { errorMessage } from "@/lib/user-error";
 
 type ChatMessage = { id: string; senderId: string; body: string; createdAt: string; pending?: boolean; failed?: boolean };
 type Page = { messages: Array<Omit<ChatMessage, "createdAt"> & { createdAt: string }>; hasOlder?: boolean; otherId: string; otherLastReadAt: string | null; canSend: boolean };
@@ -137,7 +138,7 @@ export function ChatPanel({ me, friend, isFriend, conversationId: knownId, onBac
       setMessages((current) => merge(current, page.messages));
       setHasOlder(Boolean(page.hasOlder));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "আগের message আনা গেল না।");
+      toast.error(errorMessage(error, "আগের message আনা গেল না।"));
     } finally {
       setLoadingOlder(false);
     }
@@ -151,7 +152,7 @@ export function ChatPanel({ me, friend, isFriend, conversationId: knownId, onBac
       onRead();
     } catch (error) {
       setMessages((current) => current.map((message) => (message.id === tempId ? { ...message, pending: false, failed: true } : message)));
-      toast.error(error instanceof Error ? error.message : "Message পাঠানো গেল না।");
+      toast.error(errorMessage(error, "Message পাঠানো গেল না।"));
     }
   }
 
@@ -175,7 +176,7 @@ export function ChatPanel({ me, friend, isFriend, conversationId: knownId, onBac
       for (const key of ["friends", "conversations"]) void queryClient.invalidateQueries({ queryKey: [key] });
       refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "সরানো গেল না।");
+      toast.error(errorMessage(error, "সরানো গেল না।"));
     }
   }
 

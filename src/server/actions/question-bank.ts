@@ -11,6 +11,7 @@ import { assertCanTakeFromBank, canOpenBankSet, categoryAccess, FREE_SET_UNLOCKS
 import { placeFor } from "@/server/collaboration/share-copy";
 import { gateNotes, hasPremium } from "@/server/premium";
 import { can } from "@/server/roles";
+import { userError } from "@/lib/user-error";
 
 /**
  * Question Bank (docs/question-bank-plan.md, v2: docs/question-bank-v2-plan.md). This file is the
@@ -110,12 +111,12 @@ export async function getBankSet(id: string) {
 export async function unlockBankSet(id: string) {
   const me = await requireUser();
   const set = await prisma.bankSet.findUnique({ where: { id: idSchema.parse(id) }, select: { id: true, free: true, category: { select: { exam: true } } } });
-  if (!set) throw new Error("Set পাওয়া যায়নি।");
+  if (!set) throw userError("Set পাওয়া যায়নি।");
   if (await canOpenBankSet(me, set)) return { used: await unlocksUsed(me) };
   // Counted and added in one transaction, so two quick taps can't open a fourth.
   const used = await prisma.$transaction(async (tx) => {
     const count = await tx.bankSetUnlock.count({ where: { userId: me.id } });
-    if (count >= FREE_SET_UNLOCKS) throw new Error(`বিনা plan-এ ${FREE_SET_UNLOCKS}টা set খোলা হয়ে গেছে — আরও খুলতে একটা plan নাও।`);
+    if (count >= FREE_SET_UNLOCKS) throw userError(`বিনা plan-এ ${FREE_SET_UNLOCKS}টা set খোলা হয়ে গেছে — আরও খুলতে একটা plan নাও।`);
     await tx.bankSetUnlock.create({ data: { userId: me.id, setId: set.id } });
     return count + 1;
   }, { isolationLevel: "Serializable" });
@@ -133,7 +134,7 @@ export async function sendBankSetToPreliminary(id: string) {
   const me = await requireUser();
   const bankSetId = idSchema.parse(id);
   const target = await prisma.bankSet.findUnique({ where: { id: bankSetId }, select: { id: true, free: true, category: { select: { exam: true } } } });
-  if (target && !(await canOpenBankSet(me, target))) throw new Error("Preliminary-তে পাঠাতে এই পরীক্ষাসহ একটা চালু plan লাগবে।");
+  if (target && !(await canOpenBankSet(me, target))) throw userError("Preliminary-তে পাঠাতে এই পরীক্ষাসহ একটা চালু plan লাগবে।");
   const existing = await prisma.questionSet.findFirst({ where: { userId: me.id, bankSetId }, select: { id: true } });
   if (existing) return { id: existing.id, alreadySent: true };
   // A plan, and fewer than two sets from the bank still short of 60%.
@@ -143,9 +144,9 @@ export async function sendBankSetToPreliminary(id: string) {
     where: { id: bankSetId },
     select: { section: true, name: true, questions: { orderBy: [{ serial: "asc" }, { id: "asc" }], select: { text: true, options: true, correctIndex: true, solution: true, explanation: true, sources: true } } },
   });
-  if (!set) throw new Error("Set পাওয়া যায়নি।");
-  if (!set.questions.length) throw new Error("এই set-এ কোনো প্রশ্ন নেই।");
-  if (set.questions.length > SET_MAX) throw new Error(`একটা Preliminary set-এ সর্বোচ্চ ${SET_MAX}টি প্রশ্ন রাখা যায় — এখানে ${set.questions.length}টি।`);
+  if (!set) throw userError("Set পাওয়া যায়নি।");
+  if (!set.questions.length) throw userError("এই set-এ কোনো প্রশ্ন নেই।");
+  if (set.questions.length > SET_MAX) throw userError(`একটা Preliminary set-এ সর্বোচ্চ ${SET_MAX}টি প্রশ্ন রাখা যায় — এখানে ${set.questions.length}টি।`);
 
   const place = placementForSet(set.section, set.questions.map((question) => question.sources));
   try {
@@ -176,7 +177,7 @@ export async function sendBankSetToPreliminary(id: string) {
 
 async function requireBankEditor() {
   const me = await requireUser();
-  if (!(await can(me, "question_bank"))) throw new Error("এটা করতে প্রশ্ন ব্যাংক permission লাগবে।");
+  if (!(await can(me, "question_bank"))) throw userError("এটা করতে প্রশ্ন ব্যাংক permission লাগবে।");
   return me;
 }
 
@@ -196,14 +197,14 @@ const editSchema = z.object({
  */
 export async function updateBankQuestion(input: unknown) {
   const me = await requireUser();
-  if (!(await can(me, "question_bank"))) throw new Error("প্রশ্ন বদলাতে প্রশ্ন ব্যাংক permission লাগবে।");
+  if (!(await can(me, "question_bank"))) throw userError("প্রশ্ন বদলাতে প্রশ্ন ব্যাংক permission লাগবে।");
   const { id, ...data } = editSchema.parse(input);
   const saved = await prisma.bankQuestion.update({
     where: { id },
     data: { ...data, editedAt: new Date() },
     select: { id: true, text: true, options: true, correctIndex: true, solution: true, explanation: true, editedAt: true },
   }).catch(() => null);
-  if (!saved) throw new Error("প্রশ্নটা পাওয়া যায়নি।");
+  if (!saved) throw userError("প্রশ্নটা পাওয়া যায়নি।");
   revalidatePath("/question-bank", "layout");
   return saved;
 }
@@ -246,7 +247,7 @@ export async function importBankRows(input: unknown) {
   for (const group of groups.values()) {
     const { exam, section, session } = group[0];
     const categoryId = categories.get(exam);
-    if (!categoryId) throw new Error("পরীক্ষার category পাওয়া যায়নি — migration চালানো হয়েছে কি?");
+    if (!categoryId) throw userError("পরীক্ষার category পাওয়া যায়নি — migration চালানো হয়েছে কি?");
     // A set someone moved to another category is still found by its exam mirror + section + name.
     const moved = await prisma.bankSet.findFirst({ where: { exam, section, name: session }, select: { id: true } });
     const set = moved ?? await prisma.bankSet.upsert({
@@ -355,7 +356,7 @@ export async function createBankCategory(name: string) {
     revalidateBank();
     return category;
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new Error("এই নামে category আগেই আছে।");
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw userError("এই নামে category আগেই আছে।");
     throw error;
   }
 }
@@ -365,7 +366,7 @@ export async function renameBankCategory(id: string, name: string) {
   try {
     await prisma.bankCategory.update({ where: { id: idSchema.parse(id) }, data: { name: nameSchema.parse(name) } });
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new Error("এই নামে category আগেই আছে।");
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw userError("এই নামে category আগেই আছে।");
     throw error;
   }
   revalidateBank();
@@ -375,9 +376,9 @@ export async function renameBankCategory(id: string, name: string) {
 export async function deleteBankCategory(id: string) {
   await requireBankEditor();
   const category = await prisma.bankCategory.findUnique({ where: { id: idSchema.parse(id) }, select: { id: true, exam: true, _count: { select: { sets: true } } } });
-  if (!category) throw new Error("Category পাওয়া যায়নি।");
-  if (category.exam) throw new Error("মূল তিনটা পরীক্ষার category মুছা যায় না।");
-  if (category._count.sets) throw new Error("আগে ভেতরের set-গুলো অন্য category-তে সরাও বা মুছো।");
+  if (!category) throw userError("Category পাওয়া যায়নি।");
+  if (category.exam) throw userError("মূল তিনটা পরীক্ষার category মুছা যায় না।");
+  if (category._count.sets) throw userError("আগে ভেতরের set-গুলো অন্য category-তে সরাও বা মুছো।");
   await prisma.bankCategory.delete({ where: { id: category.id } });
   revalidateBank();
 }
@@ -396,7 +397,7 @@ export async function updateBankSet(input: unknown) {
   try {
     await prisma.bankSet.update({ where: { id }, data });
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new Error("এই category-তে এই নামে set আগেই আছে।");
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw userError("এই category-তে এই নামে set আগেই আছে।");
     throw error;
   }
   revalidateBank();
@@ -418,7 +419,7 @@ export async function moveBankSets(ids: string[], categoryId: string) {
   await requireBankEditor();
   const which = z.array(idSchema).min(1, "কোনো set বাছা হয়নি").max(5000).parse(ids);
   const target = await prisma.bankCategory.findUnique({ where: { id: idSchema.parse(categoryId) }, select: { id: true, exam: true } });
-  if (!target) throw new Error("Category পাওয়া যায়নি।");
+  if (!target) throw userError("Category পাওয়া যায়নি।");
   let moved = 0, skipped = 0;
   for (const id of which) {
     try {

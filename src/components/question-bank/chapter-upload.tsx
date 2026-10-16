@@ -11,6 +11,7 @@ import {
 } from "@/lib/question-bank";
 import { importChapterRows } from "@/server/actions/question-bank-general";
 import { adminButton } from "./bank-admin";
+import { errorMessage } from "@/lib/user-error";
 
 type Read = { fileName: string; missing: string[]; rows: Array<CheckedChapterRow<ChapterMcqRow | ChapterShortRow>> };
 
@@ -69,7 +70,7 @@ export function ChapterUpload({ chapterId, kind }: { chapterId: string; kind: Ch
       setOpen(false);
       setRead(null);
     } catch (error) {
-      toast.error(`${error instanceof Error ? error.message : "আপলোড থেমে গেছে"} — ${created}টি যোগ হয়েছে।`);
+      toast.error(`${errorMessage(error, "আপলোড থেমে গেছে")} — ${created}টি যোগ হয়েছে।`);
     } finally {
       setProgress(null);
       router.refresh();

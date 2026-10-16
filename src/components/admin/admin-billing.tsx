@@ -11,6 +11,7 @@ import { reviewPayment, savePaymentAccount } from "@/server/actions/billing";
 import { PricingPanel, type PricingAdmin } from "@/components/admin/pricing-panel";
 import { Pagination } from "@/components/pagination";
 import { methodNames, planInfo, taka } from "@/lib/billing-display";
+import { errorMessage } from "@/lib/user-error";
 
 type AdminPayment = Payment & { user: { name: string | null; email: string } };
 type Tab = "payments" | "pricing" | "numbers";
@@ -19,7 +20,7 @@ function useAction() {
   const router = useRouter();
   const [pending, start] = useTransition();
   const run = (action: () => Promise<unknown>, success: string) => start(async () => {
-    try { await action(); toast.success(success); router.refresh(); } catch (error) { toast.error(error instanceof Error ? error.message : "Something went wrong."); }
+    try { await action(); toast.success(success); router.refresh(); } catch (error) { toast.error(errorMessage(error, "Something went wrong.")); }
   });
   return { pending, run };
 }

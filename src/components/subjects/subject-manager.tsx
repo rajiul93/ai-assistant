@@ -21,6 +21,7 @@ import { createTask } from "@/server/actions/tasks";
 import { SortableList } from "@/components/sortable-list";
 import { VoiceFormAssistant } from "@/components/voice-form-assistant";
 import { MathText } from "@/components/math-text";
+import { errorMessage } from "@/lib/user-error";
 
 type Topic = { id: string; name: string; parentId: string | null };
 type Subject = { id: string; name: string; topics: Topic[] };
@@ -55,7 +56,7 @@ function RenameForm({ initial, label, onSave, onCancel }: { initial: string; lab
   const save = useMutation({
     mutationFn: () => onSave(name.trim()),
     onSuccess: () => { toast.success("নাম বদলানো হলো"); onCancel(); router.refresh(); },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.error(errorMessage(error)),
   });
   const submit = () => { if (!name.trim() || name.trim() === initial) { onCancel(); return; } save.mutate(); };
   return <form className="flex min-w-0 flex-1 items-center gap-1.5" onSubmit={(event) => { event.preventDefault(); submit(); }}>
@@ -77,7 +78,7 @@ function AddTopicForm({ subjectId, parentId, placeholder, onDone, autoFocus }: {
       onDone?.();
       router.refresh();
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.error(errorMessage(error)),
   });
   return <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); if (name.trim()) create.mutate(); }}>
     <input value={name} onChange={(event) => setName(event.target.value)} placeholder={placeholder} autoFocus={autoFocus} aria-label={placeholder} className="h-11 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-3.5 text-[15px] outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:bg-white" />
@@ -136,7 +137,7 @@ function TopicRow({ topic, subject, depth, openTasks, onDelete, path, handle }: 
       toast.success(`“${topic.name}” tasks-এ যোগ হলো`, { action: { label: "দেখো", onClick: () => router.push("/tasks") } });
       router.refresh();
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.error(errorMessage(error)),
   });
 
   return <>
@@ -218,7 +219,7 @@ export function SubjectManager({ subjects, openTasks }: { subjects: Subject[]; o
       setName("");
       router.refresh();
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.error(errorMessage(error)),
   });
 
   const remove = useMutation({
@@ -228,7 +229,7 @@ export function SubjectManager({ subjects, openTasks }: { subjects: Subject[]; o
       setPendingDelete(null);
       router.refresh();
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.error(errorMessage(error)),
   });
 
   return (

@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils";
 import { useTimerStore } from "@/store/timer";
 import { useTimerStartStore } from "@/store/timer-start";
 import type { TaskWithRelations } from "@/server/queries";
+import { errorMessage } from "@/lib/user-error";
 
 const filters = [
   { id: "ALL", label: "সব" },
@@ -260,7 +261,7 @@ export function TaskBoard({
       await queryClient.invalidateQueries({ queryKey: ["tasks"] });
       router.refresh();
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.error(errorMessage(error)),
   });
 
   const timerRunning = useTimerStore((state) => state.running);
@@ -290,7 +291,7 @@ export function TaskBoard({
       await queryClient.invalidateQueries({ queryKey: ["tasks"] });
       router.refresh();
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.error(errorMessage(error)),
   });
 
   // Today's tasks done, for the header's progress line.

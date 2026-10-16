@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/user-error";
 
 /**
  * Small pieces the Question Bank's staff controls share (docs/question-bank-v2-plan.md): a name
@@ -26,7 +27,7 @@ export function useBankRun() {
         after?.(result);
         router.refresh();
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "করা গেল না।");
+        toast.error(errorMessage(error, "করা গেল না।"));
       }
     });
   }

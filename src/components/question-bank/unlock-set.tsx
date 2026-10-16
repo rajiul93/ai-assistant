@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { KeyRound, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { unlockBankSet } from "@/server/actions/question-bank";
+import { errorMessage } from "@/lib/user-error";
 
 /**
  * Without a plan: open this past-year set as one of the user's free picks (any 3, kept for good —
@@ -23,7 +24,7 @@ export function UnlockSet({ setId, used, limit, hidden }: { setId: string; used:
       toast.success(`Set খোলা হলো — বিনা plan-এ আর ${Math.max(0, limit - result.used)}টা খোলা যাবে`);
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "খোলা গেল না।");
+      toast.error(errorMessage(error, "খোলা গেল না।"));
     } finally {
       setBusy(false);
     }

@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { startSetStudy } from "@/store/timer-start";
 import { deleteQuestionSet, mergeQuestionSets, setQuestionSetStatus, type listQuestionSets } from "@/server/actions/preliminary";
 import { deleteShortQuestionSet, mergeShortQuestionSets, setShortQuestionSetStatus } from "@/server/actions/short-questions";
+import { errorMessage } from "@/lib/user-error";
 
 // Short Question sets share this board but never come from the Question Bank.
 type SetRow = Omit<Awaited<ReturnType<typeof listQuestionSets>>[number], "bankSetId"> & { bankSetId?: string | null };
@@ -82,7 +83,7 @@ function MergeDialog({ kind, picked, subjects, onClose, onDone }: { kind: BoardK
       router.replace(`${kinds[kind].base}?status=todo`, { scroll: false });
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Set মেলানো গেল না।");
+      toast.error(errorMessage(error, "Set মেলানো গেল না।"));
     }
   });
 
@@ -121,7 +122,7 @@ function SetCard({ kind, set, place, onDelete }: { kind: BoardKind; set: SetRow;
   const router = useRouter();
   const [pending, start] = useTransition();
   const move = (status: QuestionSetStatus, done: string) => start(async () => {
-    try { await kinds[kind].setStatus(set.id, status); toast.success(done); router.refresh(); } catch (error) { toast.error(error instanceof Error ? error.message : "Couldn't move it."); }
+    try { await kinds[kind].setStatus(set.id, status); toast.success(done); router.refresh(); } catch (error) { toast.error(errorMessage(error, "Couldn't move it.")); }
   });
   const last = set.lastAttempt;
   // The main next step fills the row on phones; the rest are quiet pills beside or under it.
@@ -267,7 +268,7 @@ export function PreliminaryBoard({ kind = "mcq", sets, subjects, topics = [] }: 
           <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={() => {
             const target = deleting;
             setDeleting(null);
-            if (target) void remove(target.id).then(() => { toast.success("মুছে ফেলা হলো"); router.refresh(); }).catch((error: Error) => toast.error(error.message));
+            if (target) void remove(target.id).then(() => { toast.success("মুছে ফেলা হলো"); router.refresh(); }).catch((error: Error) => toast.error(errorMessage(error)));
           }}>মুছে ফেলো</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

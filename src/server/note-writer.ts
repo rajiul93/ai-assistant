@@ -5,6 +5,7 @@ import { htmlToPlainText, noteWritingRules, sanitizeNoteHtml } from "@/lib/note-
 import { checkAi } from "@/server/ai-access";
 import { callAI } from "@/server/assistant/ai";
 import { hasPremium } from "@/server/premium";
+import { userError } from "@/lib/user-error";
 
 export const noteWriteSchema = z.object({
   instruction: z.string().trim().max(2000),
@@ -29,8 +30,8 @@ export const noteWriteSchema = z.object({
 export async function writeNoteWithAi(user: { id: string; email: string }, input: unknown) {
   const data = noteWriteSchema.parse(input);
   const references = data.references.map((text) => text.trim()).filter(Boolean);
-  if (!data.instruction && !references.length) throw new Error("কী করতে হবে লেখো, বা একটা ছবি দাও।");
-  if (!(await hasPremium(user))) throw new Error("AI দিয়ে note লেখা paid feature — একটা plan নিলে পাবে।");
+  if (!data.instruction && !references.length) throw userError("কী করতে হবে লেখো, বা একটা ছবি দাও।");
+  if (!(await hasPremium(user))) throw userError("AI দিয়ে note লেখা paid feature — একটা plan নিলে পাবে।");
   const current = sanitizeNoteHtml(data.currentHtml);
   const empty = !htmlToPlainText(current).trim();
   const instruction = data.instruction || "ছবির লেখার সাথে মিলিয়ে note-টা সম্পূর্ণ আর সঠিক করো — যা বাদ পড়েছে যোগ করো, যা ভুল ঠিক করো।";
@@ -66,16 +67,16 @@ ${numbered}`}${imageRule}
 - যে block বদলানোর দরকার নেই সেটা edits-এ রাখবে না। একই কথা দুবার লিখবে না।
 - html হবে note-এর নিয়ম মেনে সরল HTML (তালিকা হলে পুরো <ol>/<ul>, টেবিল হলে পুরো <table>)। Note ফাঁকা হলে পুরো note insert_after 0 দিয়ে দাও।`;
   const { blocked } = await checkAi(user, "suggestion");
-  if (blocked) throw new Error(aiBlockedMessage(blocked, data.lang === "en" ? "en" : "bn"));
+  if (blocked) throw userError(aiBlockedMessage(blocked, data.lang === "en" ? "en" : "bn"));
   const raw = await callAI(prompt, { responseSchema: editsSchema, userId: user.id, feature: "note_writer", timeoutMs: 55_000, reasoning: references.length ? "low" : undefined });
-  if (!raw) throw new Error(data.lang === "en" ? "The AI isn't responding right now. Please try again in a moment." : "AI এখন সাড়া দিচ্ছে না। একটু পরে আবার চেষ্টা করো।");
+  if (!raw) throw userError(data.lang === "en" ? "The AI isn't responding right now. Please try again in a moment." : "AI এখন সাড়া দিচ্ছে না। একটু পরে আবার চেষ্টা করো।");
   let edits: BlockEdit[];
   try {
     edits = editsAnswer.parse(JSON.parse(raw)).edits.map((edit) => ({ ...edit, html: edit.op === "delete" ? "" : sanitizeNoteHtml(edit.html) }));
   } catch {
-    throw new Error("AI-এর উত্তর বোঝা গেল না, আবার চেষ্টা করো।");
+    throw userError("AI-এর উত্তর বোঝা গেল না, আবার চেষ্টা করো।");
   }
-  if (!edits.length) throw new Error("AI কোনো পরিবর্তন দরকার মনে করেনি — নির্দেশটা আরেকটু স্পষ্ট করে লেখো।");
+  if (!edits.length) throw userError("AI কোনো পরিবর্তন দরকার মনে করেনি — নির্দেশটা আরেকটু স্পষ্ট করে লেখো।");
   return applyBlockEdits(blocks, edits);
 }
 

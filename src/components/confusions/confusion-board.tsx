@@ -24,6 +24,7 @@ import { SubjectTopicFilter, TopicSelect, useSubjectTopicFilter } from "@/compon
 import { topicPath, type TopicNode } from "@/lib/subject-filter";
 import { cn } from "@/lib/utils";
 import { createConfusion, deleteConfusion, setConfusionStatus, updateConfusion, type listConfusions } from "@/server/actions/confusions";
+import { errorMessage } from "@/lib/user-error";
 
 type Item = Awaited<ReturnType<typeof listConfusions>>[number];
 type Subject = { id: string; name: string };
@@ -46,7 +47,7 @@ function useDictation(insert: (target: string, said: string) => void) {
     context: () => (target.current?.includes("clarification") ? "How a teacher cleared up a student's doubt" : "A student's doubt about a topic, to ask in class"),
     onInterim: setHeard,
     onResult: (said) => { const at = target.current; end(); if (at) insert(at, said.trim()); },
-    onError: (error) => { end(); toast.error(error.message); },
+    onError: (error) => { end(); toast.error(errorMessage(error)); },
   });
   function dictate(next: string) {
     mic.stop();
@@ -93,7 +94,7 @@ function useImageText(purpose: "confusion" | "clarification", onText: (text: str
       onText(payload.text);
       toast.success("ছবি থেকে লেখা বসানো হলো — মিলিয়ে নাও");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "ছবিটা পড়া গেল না।");
+      toast.error(errorMessage(error, "ছবিটা পড়া গেল না।"));
     } finally {
       setReading(false);
     }
@@ -146,7 +147,7 @@ function ConfusionDialog({ item, mode, subjects, topics, onClose }: { item: Item
       onClose();
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "সেভ করা গেল না।");
+      toast.error(errorMessage(error, "সেভ করা গেল না।"));
     }
   });
 
@@ -190,7 +191,7 @@ function ConfusionCard({ item, place, onEdit, onClear, onDelete }: { item: Item;
   const router = useRouter();
   const [pending, start] = useTransition();
   const reopen = () => start(async () => {
-    try { await setConfusionStatus(item.id, "CONFUSION"); toast.success("আবার Confusion-এ নেওয়া হলো"); router.refresh(); } catch (error) { toast.error(error instanceof Error ? error.message : "Couldn't move it."); }
+    try { await setConfusionStatus(item.id, "CONFUSION"); toast.success("আবার Confusion-এ নেওয়া হলো"); router.refresh(); } catch (error) { toast.error(errorMessage(error, "Couldn't move it.")); }
   });
   const clear = item.status === "CLEAR";
 
@@ -252,7 +253,7 @@ export function ConfusionBoard({ items, subjects, topics = [] }: { items: Item[]
       if (active !== "CONFUSION") router.replace(`${pathname}?status=confusion`, { scroll: false });
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "সেভ করা গেল না।");
+      toast.error(errorMessage(error, "সেভ করা গেল না।"));
     }
   });
 
@@ -337,7 +338,7 @@ export function ConfusionBoard({ items, subjects, topics = [] }: { items: Item[]
           <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={() => {
             const target = deleting;
             setDeleting(null);
-            if (target) void deleteConfusion(target.id).then(() => { toast.success("মুছে ফেলা হলো"); router.refresh(); }).catch((error: Error) => toast.error(error.message));
+            if (target) void deleteConfusion(target.id).then(() => { toast.success("মুছে ফেলা হলো"); router.refresh(); }).catch((error: Error) => toast.error(errorMessage(error)));
           }}>মুছে ফেলো</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

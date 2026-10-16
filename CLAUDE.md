@@ -61,7 +61,10 @@ alone. Record decisions and their reasons; don't restate code.
 - **Server actions** in `src/server/actions/*.ts` (`"use server"`): `requireUser()` → parse input
   with **zod** → authorization (ownership via `findFirst({ where: { id, userId } })`, roles via
   `src/server/roles.ts`) → Prisma (a `$transaction` when several rows must change together) →
-  `revalidatePath`. Throw `Error` with a short Bangla message; the UI shows it in a toast.
+  `revalidatePath`. Throw `userError("…")` (`src/lib/user-error.ts`) with a short Bangla message and
+  show it with `errorMessage(error, fallback)` in the toast — **never `new Error` + `error.message`**:
+  production hides a thrown message (React #441); `userError` carries it in the error's `digest`,
+  which Next passes through. Zod errors whose first message is Bangla get the same digest.
 - **Route handlers** (`src/app/api/*`) for AI calls, streams, uploads and polling GETs. They call
   `requireUser()` too and return JSON `{ error }` with a status code on failure.
 - Shared server-only helpers in `src/server/*`; pure helpers usable on both sides in `src/lib/*`.
@@ -246,11 +249,9 @@ from a `"use server"` file**, or the browser could call them with someone else's
 
 ## Known issues and gotchas
 
-- **Thrown messages from server actions are hidden in production** (found 2026-10-16): the page
-  gets "Minified React error #441" instead of our Bangla text — only `next dev` shows it. Next's
-  docs: return expected errors as values. `addVideo` now returns `{ error }`; the other ~160
-  `throw new Error(…)` in `src/server/actions/*` still need the same change (with their callers).
-
+- **Thrown messages from server actions are hidden in production** (React #441; found and fixed
+  2026-10-16, checked in a production build): all server throws now use `userError`, all toasts
+  `errorMessage`. Anything else thrown shows only the fallback, so internal details never leak.
 - `AGENTS.md` is rewritten by `next dev`; keep the `@AGENTS.md` line at the top of this file.
 - The Prisma CLI prints an upgrade notice for v8; stay on 6.19 unless deliberately upgrading.
 - Vercel runs migrations but **not seeds**; a new database needs `pnpm db:seed-vocabulary` once.

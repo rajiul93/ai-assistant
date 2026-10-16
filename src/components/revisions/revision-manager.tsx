@@ -12,6 +12,7 @@ import type { TaskWithRelations } from "@/server/queries";
 import { useTimerStore } from "@/store/timer";
 import { useTimerStartStore } from "@/store/timer-start";
 import { MathText } from "@/components/math-text";
+import { errorMessage } from "@/lib/user-error";
 
 type RevisionFilter = "NEEDS" | "REVISED" | "ALL";
 
@@ -66,7 +67,7 @@ function RevisionCard({ task, todayMs, timerRunning, onStudy, onBack, onSaved }:
     } catch (error) {
       setCount(before.count);
       setLastRevisedAt(before.lastRevisedAt);
-      toast.error(error instanceof Error ? error.message : "সেভ করা গেল না");
+      toast.error(errorMessage(error, "সেভ করা গেল না"));
     }
   }
 
@@ -129,7 +130,7 @@ export function RevisionManager({ tasks, todayMs }: { tasks: TaskWithRelations[]
       toast.success(`“${task.title}” task-এর তালিকায় ফেরত গেল`);
       refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "সরানো গেল না");
+      toast.error(errorMessage(error, "সরানো গেল না"));
     }
   }
 

@@ -8,6 +8,7 @@ import { MathText } from "@/components/math-text";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { bankSetQuestionIds, createBankChapter, listBankSubjects, listChapterTargets, moveQuestionsToChapter } from "@/server/actions/question-bank-general";
+import { errorMessage } from "@/lib/user-error";
 
 export type MoveSource = { kind: "set"; setId: string; name: string } | { kind: "questions"; ids: string[] };
 
@@ -81,7 +82,7 @@ export function MoveToChapter({ source, onClose, onMoved }: { source: MoveSource
       }
       setChecked(results);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "মিলিয়ে দেখা গেল না।");
+      toast.error(errorMessage(error, "মিলিয়ে দেখা গেল না।"));
       setChapter(null);
     } finally {
       setProgress(null);
@@ -101,7 +102,7 @@ export function MoveToChapter({ source, onClose, onMoved }: { source: MoveSource
       onClose();
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "সরানো গেল না।");
+      toast.error(errorMessage(error, "সরানো গেল না।"));
     } finally {
       setMoving(false);
     }

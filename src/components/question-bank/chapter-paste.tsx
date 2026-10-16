@@ -10,6 +10,7 @@ import { BANK_IMPORT_BATCH, BANK_OPTION_LETTERS, chunkPastedText, type ChapterMc
 import { cn } from "@/lib/utils";
 import { importChapterRows } from "@/server/actions/question-bank-general";
 import { adminButton } from "./bank-admin";
+import { errorMessage } from "@/lib/user-error";
 
 type Mcq = Omit<ChapterMcqRow, "serial">;
 type Short = Omit<ChapterShortRow, "serial">;
@@ -57,7 +58,7 @@ export function ChapterPaste({ chapterId, kind }: { chapterId: string; kind: "mc
         setProgress({ label: "AI সাজাচ্ছে", done: index + 1, total: pieces.length });
       }
     } catch (error) {
-      toast.error(`${error instanceof Error ? error.message : "AI থেমে গেছে"}${items.length ? ` — যতটুকু হয়েছে (${items.length}টি) দেখাচ্ছি।` : ""}`);
+      toast.error(`${errorMessage(error, "AI থেমে গেছে")}${items.length ? ` — যতটুকু হয়েছে (${items.length}টি) দেখাচ্ছি।` : ""}`);
     } finally {
       setProgress(null);
     }
@@ -92,7 +93,7 @@ export function ChapterPaste({ chapterId, kind }: { chapterId: string; kind: "mc
       setOpen(false);
       reset();
     } catch (error) {
-      toast.error(`${error instanceof Error ? error.message : "সেভ থেমে গেছে"} — ${created}টি যোগ হয়েছে।`);
+      toast.error(`${errorMessage(error, "সেভ থেমে গেছে")} — ${created}টি যোগ হয়েছে।`);
     } finally {
       setProgress(null);
       router.refresh();
