@@ -37,7 +37,7 @@ export function ProfileForm({ initial }: { initial: Profile }) {
 
   const shownName = name.trim() || initial.email;
   return (
-    <div className="mx-auto max-w-xl space-y-4">
+    <div className="space-y-4">
       <h1 className="text-2xl font-semibold tracking-tight">প্রোফাইল</h1>
       <form onSubmit={save} className="space-y-5 rounded-2xl border border-zinc-200 bg-white p-5">
         <div className="flex items-center gap-4">

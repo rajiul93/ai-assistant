@@ -20,7 +20,7 @@ export default async function SubjectsPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className="space-y-4">
       {/* The home page's banner style: what this page is, and the numbers at a glance. */}
       <section className="relative overflow-hidden rounded-[28px] bg-linear-to-br from-[#3f6ef3] via-[#5a87f8] to-[#8fa6fb] p-5 text-white shadow-[0_18px_40px_-18px_rgba(37,99,235,0.6)] sm:p-7">
         <BookOpen aria-hidden className="pointer-events-none absolute -right-4 -top-4 size-32 rotate-12 text-white/10" />

@@ -273,7 +273,7 @@ export function ConfusionBoard({ items, subjects, topics = [] }: { items: Item[]
   // Only subjects that have something in this tab, so the filter stays short.
   const visible = inTab.filter((item) => filter.matches(item));
 
-  return <div className="mx-auto max-w-3xl space-y-4">
+  return <div className="space-y-4">
     <div>
       <h1 className="text-2xl font-semibold tracking-tight">Confusion</h1>
       <p className="mt-1 text-sm text-zinc-500">পড়তে গিয়ে যা বুঝলে না লিখে রাখো, ক্লাসে জিজ্ঞেস করে Clear করো।</p>

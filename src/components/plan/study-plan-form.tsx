@@ -117,7 +117,7 @@ export function StudyPlanForm({
   });
 
   return (
-    <div className="mx-auto max-w-5xl lg:grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-start lg:gap-6">
+    <div className="lg:grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-start lg:gap-6">
       {/* The result, live and compact: what the plan gives you, before you even save it. */}
       <section aria-label="এক নজরে" className="relative overflow-hidden rounded-3xl bg-linear-to-br from-[#3f6ef3] via-[#5a87f8] to-[#8fa6fb] px-4 py-3 text-white shadow-[0_14px_32px_-18px_rgba(37,99,235,0.6)] sm:px-5 sm:py-4 lg:sticky lg:top-10">
         <div aria-hidden className="pointer-events-none absolute -right-10 -top-14 size-36 rounded-full bg-white/10 blur-2xl" />

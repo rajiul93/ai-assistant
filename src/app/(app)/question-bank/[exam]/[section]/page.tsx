@@ -15,7 +15,7 @@ export default async function BankSectionPage(props: PageProps<"/question-bank/[
   const sets = (await listBankSets(exam.id)).filter((set) => set.section === section);
   if (!sets.length) notFound();
 
-  return <div className="mx-auto max-w-3xl space-y-4">
+  return <div className="space-y-4">
     <BankBreadcrumb trail={[{ label: "প্রশ্ন ব্যাংক", href: "/question-bank" }, { label: exam.label, href: `/question-bank/${exam.slug}` }, { label: section }]} />
     <h1 className="text-2xl font-semibold tracking-tight">{section}</h1>
     <BankSetGrid examSlug={exam.slug} sets={sets} locked={!(await canOpenExam(user, exam.id))} />

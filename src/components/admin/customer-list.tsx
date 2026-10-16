@@ -104,7 +104,7 @@ export function CustomerList({ tab, counts, rows, page, limit, total, query, now
     return `${pathname}?${params}`;
   };
 
-  return <div className="mx-auto max-w-3xl space-y-3">
+  return <div className="space-y-3">
     <div>
       <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Customers</h1>
       <p className="text-xs text-zinc-500 sm:text-sm">কে এখন plan-এ আছে, কার plan শেষ হয়ে গেছে, কে কখনো নেয়নি।</p>

@@ -157,7 +157,7 @@ export function BankUpload({ sets }: { sets: BankSetRow[] }) {
 
   const stat = (label: string, value: number, tone: string) => <div className={cn("rounded-xl px-3 py-2.5", tone)}><p className="text-xs">{label}</p><p className="text-xl font-semibold tabular-nums">{value}</p></div>;
 
-  return <div className="mx-auto max-w-3xl space-y-6">
+  return <div className="space-y-6">
     <div>
       <h1 className="text-2xl font-semibold tracking-tight">প্রশ্ন ব্যাংক — আপলোড</h1>
       <p className="mt-1 text-sm text-zinc-500">Sheet-এর প্রতিটা সেশন একটা set হয়। আগে থেকে থাকা প্রশ্ন আর কখনো দুবার ওঠে না — শুধু নতুন আর বদলানো প্রশ্ন আপলোড হয়।</p>

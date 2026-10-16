@@ -53,7 +53,7 @@ export function ShortStudyView({ set }: { set: SetView }) {
   const [hidden, setHidden] = useState(false);
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
 
-  return <div className="mx-auto max-w-3xl space-y-4">
+  return <div className="space-y-4">
     <Header set={set}>
       <div className="flex flex-wrap gap-2">
         {set.status === "TODO" ? <button type="button" disabled={pending} onClick={() => void move("DOING", "Doing-এ নেওয়া হলো")} className="h-10 rounded-xl bg-zinc-950 px-3.5 text-sm font-semibold text-white disabled:opacity-50">পড়া শুরু করো</button> : null}
@@ -166,7 +166,7 @@ export function ShortExamView({ set }: { set: SetView }) {
   const low = leftMs <= 60_000;
 
   if (!clock.started) {
-    return <div className="mx-auto max-w-3xl space-y-4">
+    return <div className="space-y-4">
       <Header set={set}>
         <button type="button" disabled={pending} onClick={() => void move("DOING", "Doing-এ ফেরানো হলো — উত্তর আবার দেখা যাবে")} className="flex h-10 items-center gap-1.5 rounded-xl px-3 text-sm font-medium text-zinc-700 ring-1 ring-zinc-200 hover:bg-zinc-50 disabled:opacity-50"><RotateCcw className="size-4" /> আবার পড়ো</button>
       </Header>
@@ -180,7 +180,7 @@ export function ShortExamView({ set }: { set: SetView }) {
     </div>;
   }
 
-  return <div className="mx-auto max-w-3xl space-y-4 pb-24">
+  return <div className="space-y-4 pb-24">
     <Header set={set} />
     <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">Exam mode: উত্তর লুকানো। প্রতিটা প্রশ্নের উত্তর লেখো, সব শেষে Submit করো। না পারলে ফাঁকা রাখো।</p>
 
@@ -202,7 +202,7 @@ export function ShortExamView({ set }: { set: SetView }) {
     </div>
 
     <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 border-t border-zinc-200 bg-white/90 px-4 py-3 backdrop-blur-xl lg:bottom-0 lg:pl-64">
-      <div className="mx-auto flex max-w-3xl items-center gap-3">
+      <div className="container mx-auto flex items-center gap-3">
         <div className={cn("flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-1.5", low ? "bg-red-50 text-red-700" : "bg-zinc-100 text-zinc-900")} aria-live="off">
           <Timer className={cn("size-4", low && running && "animate-pulse")} />
           <span className="font-mono text-lg font-semibold tabular-nums">{clockText(leftMs)}</span>
@@ -254,7 +254,7 @@ export function ShortResultView({ attempt, setId, status, topicName, subjectName
     try { await markShortAnswer(attempt.id, index, right); router.refresh(); } catch (error) { setDetails(before); toast.error(error instanceof Error ? error.message : "Couldn't save the mark."); }
   }
 
-  return <div className="mx-auto max-w-3xl space-y-4">
+  return <div className="space-y-4">
     <Link href={`/short-questions?status=${status.toLowerCase()}`} className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900"><ArrowLeft className="size-4" /> Short Question</Link>
     <section className="overflow-hidden rounded-3xl bg-zinc-950 p-6 text-white">
       <p className="text-xs font-medium text-zinc-400">{subjectName ?? "Subject নেই"} · <MathText text={topicName} /> · {formatDate(attempt.submittedAt)}</p>

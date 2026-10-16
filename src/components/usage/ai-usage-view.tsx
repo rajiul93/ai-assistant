@@ -264,7 +264,7 @@ function TodayUsageCard({ today }: { today: TodayShare }) {
 
 /** A customer's usage page: today's use and the total spent, both as progress bars; no history, no token counts. */
 export function CustomerUsageView({ quota, requests, failed, today }: { quota: AiQuota; requests: number; failed: number; today: TodayShare | null }) {
-  return <div className="mx-auto max-w-xl space-y-4">
+  return <div className="space-y-4">
     <div>
       <h1 className="text-[28px] font-bold tracking-tight text-slate-900">AI ব্যবহার</h1>
       <p className="mt-1 text-sm text-slate-500">আজ কতটা AI ব্যবহার হলো, আর তোমার plan-এর মোট কতটা খরচ হয়েছে।</p>

@@ -15,7 +15,7 @@ export default async function BankExamPage(props: PageProps<"/question-bank/[exa
     return { section, sets: inside.length, questions: inside.reduce((sum, set) => sum + set.questionCount, 0) };
   });
 
-  return <div className="mx-auto max-w-3xl space-y-4">
+  return <div className="space-y-4">
     <BankBreadcrumb trail={[{ label: "প্রশ্ন ব্যাংক", href: "/question-bank" }, { label: exam.label }]} />
     <h1 className="text-2xl font-semibold tracking-tight">{exam.label}</h1>
     {sections.length ? <div className={tileGrid}>

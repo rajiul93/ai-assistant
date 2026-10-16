@@ -91,7 +91,7 @@ export function MessagesView({ me }: { me: string }) {
   });
   const loading = conversations.isLoading || groups.isLoading;
 
-  return <div className="mx-auto max-w-5xl space-y-3">
+  return <div className="space-y-3">
     {/* One slim header in the home page's blue: title, the two "add" actions, and search. */}
     <section className={cn("rounded-3xl bg-linear-to-br from-[#3f6ef3] via-[#5a87f8] to-[#8fa6fb] p-3 text-white shadow-[0_14px_32px_-18px_rgba(37,99,235,0.6)]", open && "hidden lg:block")}>
       <div className="flex items-center gap-2 pl-1">
