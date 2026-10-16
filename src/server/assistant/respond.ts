@@ -20,7 +20,7 @@ type StudyContext = {
 };
 
 type Lang = "bn" | "en" | undefined;
-const actions = ["navigate", "create_task", "complete_task", "start_timer", "revise_task", "add_application", "create_note", "answer", "clarify", "ignore", "read_note", "my_data", "create_image"] as const;
+const actions = ["navigate", "create_task", "complete_task", "start_timer", "revise_task", "add_application", "create_note", "answer", "lookup", "clarify", "ignore", "read_note", "my_data", "create_image"] as const;
 const applicationStatuses = ["WISHLIST", "APPLIED", "EXAM", "INTERVIEW", "OFFER", "REJECTED", "WITHDRAWN"] as const;
 
 const pageKeys = Object.keys(assistantPages) as [AssistantPage, ...AssistantPage[]];
@@ -227,7 +227,8 @@ action বেছে নাও:
 - my_data: ব্যবহারকারী নিজের সেভ করা তথ্য জানতে চায় — যে চাকরিতে apply করেছে ("বাংলাদেশ ব্যাংকের job-টা সম্পর্কে বলো", "BRAC-এর পরীক্ষা কবে", "কোন কোন job-এর deadline সামনে", "আমার roll/user ID কত"), note-এ লেখা তথ্য, task, subject/topic, পড়ার সময়, study plan/লক্ষ্য/বয়সসীমা। dataLookup.kinds = কোন ধরনের তথ্য (jobs, notes, tasks, subjects, study; নিশ্চিত না হলে একাধিক); dataLookup.search = খোঁজার নাম/শব্দ, বাংলা আর ইংরেজি দুই বানানেই (যেমন ["বাংলাদেশ ব্যাংক", "Bangladesh Bank"]), পুরো তালিকা চাইলে খালি। reply খালি রাখো — উত্তর সেভ করা তথ্য থেকে server দেবে। note পুরোটা পড়ে শোনাতে চাইলে read_note।
 - create_image: ব্যবহারকারী ছবি/image/picture/illustration/logo/diagram আঁকতে বা বানাতে চায় ("একটা বিড়ালের ছবি বানাও", "draw a logo for my app")। imagePrompt = যা আঁকতে হবে তার বিস্তারিত ইংরেজি বর্ণনা (বিষয়, style, রং, পটভূমি; ছবিতে লেখা থাকলে সেই লেখা হুবহু)। reply-তে এক লাইনে বলো কী আঁকছ।
 - navigate: শুধু কোনো পাতা খুলতে/দেখতে চাইলে। page: dashboard, tasks, new_task (নতুন task-এর ফাঁকা form), subjects, revisions, progress, timer, plan (study plan), jobs (job application-এর তালিকা), notes (Notes পাতা), preliminary (Preliminary/MCQ set-এর তালিকা), new_preliminary (নতুন Preliminary set-এর form), short_questions (Short Question set-এর তালিকা), new_short_question (নতুন Short Question set-এর form), confusions (Confusion-এর তালিকা), vocabulary (verb, singular/plural, prefix/suffix), typing (Typing Lab), messages (বন্ধু, friend request আর chat), notifications, usage (AI usage/token), billing (AI-এর plan/package কেনার পাতা — study plan নয়), profile (নিজের নাম আর মোবাইল নম্বর), question_bank (প্রশ্ন ব্যাংক: বিগত সালের প্রশ্নের set)।
-- answer: প্রশ্ন, আলাপ, পরামর্শ, মন খারাপ, সাধারণ জ্ঞান — যা কোনো app action নয়। reply-তে সরাসরি পুরো উত্তরটা দাও। পড়াশোনা নিয়ে প্রশ্নে নিচের study data ব্যবহার করে ব্যক্তিগত পরামর্শ দাও।
+- lookup: তথ্যের প্রশ্ন — সাধারণ জ্ঞান, ইতিহাস, সাহিত্য, ব্যাকরণ, বিজ্ঞান, গণিত, ভূগোল, সংবিধান, ব্যক্তি, বই, সাল, সংখ্যা, সংজ্ঞা, সাম্প্রতিক ঘটনা — যেকোনো fact যা ভুল হলে ক্ষতি। reply ফাঁকা রাখো (""); উত্তরটা আলাদাভাবে যাচাই করে দেওয়া হবে।
+- answer: আলাপ, পরামর্শ, মন খারাপ, পড়ার পরিকল্পনা — যেখানে নির্দিষ্ট তথ্য (নাম, সাল, সংখ্যা) লাগে না, আর যা কোনো app action নয়। reply-তে সরাসরি পুরো উত্তরটা দাও। পড়াশোনা নিয়ে প্রশ্নে নিচের study data ব্যবহার করে ব্যক্তিগত পরামর্শ দাও।
 - clarify: উদ্দেশ্য অস্পষ্ট, বা এমন কিছু চাইছে যা app-এ নেই (উপরের page তালিকার বাইরের কোনো পাতা)। reply-তে বিনয়ের সঙ্গে জানাও কী করা যায় এবং প্রশ্ন করো।
 ${request.voice ? `- heard: ব্যবহারকারীর সর্বশেষ কথাটা (mic থেকে লেখা) সঠিক করে লেখো — প্রসঙ্গ দেখে প্রমিত বাংলা বানান, ভাঙা/ভুল যুক্তবর্ণ ঠিক ("বিঞ্জান"→"বিজ্ঞান", "পরিক্ষা"→"পরীক্ষা"), আর মুখে বলা গণিত LaTeX-এ $…$ ("এক বাই দুই"→$\\frac{1}{2}$, "x স্কয়ার"→$x^{2}$)। অর্থ, শব্দ, ভাষা বদলাবে না; ইংরেজি শব্দ ইংরেজিতেই। ঠিক করার কিছু না থাকলে হুবহু।\n` : ""}${request.voice ? "- ignore: mic সবসময় খোলা থাকে, তাই আশেপাশের আওয়াজও আসে। কথাটা স্পষ্টতই সহকারীকে বলা না হলে — TV/ভিডিও/গানের সংলাপ, অন্য কারো সঙ্গে কথা, অর্থহীন টুকরো শব্দ — ignore দাও, reply খালি। সামান্য সন্দেহ থাকলেও ignore নয়; তখন answer বা clarify।\n" : ""}অনুমান করে ভুল কাজ করবে না। ${languageRule(request.lang)} ${styleRule(request.voice)}
 
@@ -521,11 +522,24 @@ ${privacyRule}`;
     : { type: "clarify", reply: lang === "en" ? "I couldn't look that up right now. Please try again in a moment." : "এই মুহূর্তে তোমার সেভ করা তথ্য দেখতে পারলাম না। একটু পরে আবার চেষ্টা করো।" };
 }
 
-async function answer(userId: string, message: string, history: ChatMessage[], context: StudyContext, voice?: boolean, lang?: "bn" | "en", attachments?: AssistantRequest["attachments"]) {
+/** Rules for answers that state facts (the "lookup" path). */
+const accuracyRule = `তথ্যের নির্ভুলতাই সবচেয়ে জরুরি — দ্রুত উত্তরের চেয়ে সঠিক উত্তর বেশি দরকার:
+- উত্তর দেওয়ার আগে নাম, সাল, সংখ্যা, বইয়ের নাম, কে-কী-কবে মিলিয়ে নাও; web search থাকলে নির্ভরযোগ্য উৎসে (বাংলাপিডিয়া, সরকারি সাইট, স্বীকৃত বই) যাচাই করো।
+- বাংলাদেশের চাকরির পরীক্ষায় (BCS ইত্যাদি) যে উত্তরটা প্রচলিত/গ্রহণযোগ্য সেটা দাও; ভিন্ন মত থাকলে সেটাও এক লাইনে বলো।
+- নিশ্চিত না হলে বানাবে না — স্পষ্ট বলবে "এ বিষয়ে আমি নিশ্চিত নই", যতটুকু নিশ্চিত ততটুকু বলবে।
+- শেষে ছোট করে এক লাইনে উৎস বলো (যেমন "উৎস: বাংলাপিডিয়া")।`;
+
+async function answer(userId: string, message: string, history: ChatMessage[], context: StudyContext, voice?: boolean, lang?: "bn" | "en", attachments?: AssistantRequest["attachments"], careful?: { careful: true; onDelta?: (piece: string) => void; signal?: AbortSignal }) {
   const files = attachments?.length ? attachments.map((file) => ({ mimeType: file.mimeType, data: file.data, name: file.name })) : undefined;
   const basePrompt = `তুমি একজন স্বাভাবিক, বুদ্ধিমান বাংলা সহকারী। এটি একটি open-book conversation: ব্যবহারকারী পড়াশোনা ছাড়াও যেকোনো সাধারণ বা random প্রশ্ন করতে পারে। সাধারণ জ্ঞান, সাম্প্রতিক তথ্য, খবর, ব্যক্তি, জায়গা, প্রযুক্তি বা অন্য কোনো তথ্যের জন্য প্রয়োজন হলে তথ্য যাচাই করে উত্তর দাও। তুমি নিশ্চিত না হলে স্পষ্টভাবে বলবে, বানিয়ে বলবে না। ব্যবহারকারী বাংলায়, Banglish বা ইংরেজিতে লিখলেও সহজ স্বাভাবিক বাংলায় উত্তর দেবে; technical term দরকার হলে সহজ ব্যাখ্যা দেবে। কথার tone প্রসঙ্গ অনুযায়ী স্বাভাবিক, সহানুভূতিশীল, serious বা হালকা মজার হবে। আগের কথার ধারাবাহিকতা রাখবে।
 
 আগের কথোপকথন:\n${formatHistory(history)}\n\nব্যবহারকারীর বর্তমান প্রশ্ন:\n${message}\n\nঅ্যাপের ব্যক্তিগত study data (শুধু app-related প্রশ্নে ব্যবহার করবে):\n${JSON.stringify(studyData(context))}\n\n${persona}\n${languageRule(lang)} ${styleRule(voice)}\n\n${privacyRule}`;
+  if (careful) {
+    // Think first and check with web search; if search is down, think first without it (streamed).
+    const prompt = `${basePrompt}\n\n${accuracyRule}`;
+    return await callAI(`${prompt}\n\nWeb search ব্যবহার করে তথ্য যাচাই করো।`, { search: true, files, userId, feature: "answer_search", reasoning: "medium", timeoutMs: 75_000, signal: careful.signal })
+      ?? await callAI(`${prompt}\n\nWeb search এখন নেই — নিজের জ্ঞান থেকে, ভালো করে ভেবে উত্তর দাও।`, { files, userId, feature: "answer", reasoning: "medium", timeoutMs: 60_000, onDelta: careful.onDelta, signal: careful.signal });
+  }
   return await callAI(`${basePrompt}\n\nপ্রয়োজন হলে web search ব্যবহার করে current তথ্য যাচাই করো।`, { search: true, files, userId, feature: "answer_search" })
     ?? await callAI(`${basePrompt}\n\nWeb search এই মুহূর্তে unavailable হতে পারে। তোমার সাধারণ জ্ঞান ব্যবহার করে উত্তর দাও, তবে current তথ্য নিশ্চিত না হলে সেটা স্পষ্ট করে বলো।`, { files, userId, feature: "answer" });
 }
@@ -698,7 +712,14 @@ async function decide(userId: string, request: AssistantRequest, hooks: RespondH
   if (intent.action === "clarify") {
     return { type: "clarify", reply: intent.reply || (request.lang === "en" ? "I didn't quite get that — could you say it another way?" : "কথাটা পুরোপুরি বুঝিনি। একটু অন্যভাবে বলবে?") };
   }
-  // Normally the intent call already contains the answer; only ask again (with web search) if it came back empty.
+  // Facts are answered by a separate, careful call (the model thinks first and checks with web
+  // search) — the quick intent call got too many facts wrong (owner, 2026-10-16).
+  if (intent.action === "lookup") {
+    const careful = await answer(userId, request.message, history, context, request.voice, request.lang, request.attachments, { careful: true, onDelta: hooks.onReplyDelta, signal: hooks.signal });
+    if (hooks.signal?.aborted) return { type: "ignore", reply: "" };
+    return careful ? { type: "answer", reply: careful } : fallbackReply(request.message, context, request.lang);
+  }
+  // Chat and advice: the intent call already contains the answer; ask again only if it came back empty.
   if (intent.reply.trim()) return { type: "answer", reply: intent.reply.trim() };
   const reply = await answer(userId, request.message, history, context, request.voice, request.lang, request.attachments);
   return reply ? { type: "answer", reply } : fallbackReply(request.message, context, request.lang);

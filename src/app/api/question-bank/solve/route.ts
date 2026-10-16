@@ -69,7 +69,7 @@ export async function POST(request: Request) {
   if (!wanted.length) return Response.json({ results: [], skipped: 0, originals: [] });
 
   const input = wanted.map(({ id, text, options, correctIndex, set }) => ({ id, subject: set.section, question: text, options, correctOption: correctIndex + 1 }));
-  const raw = await callAI(PROMPT + JSON.stringify(input), { responseSchema, userId: user.id, feature: "bank_solve", timeoutMs: 55_000 });
+  const raw = await callAI(PROMPT + JSON.stringify(input), { responseSchema, userId: user.id, feature: "bank_solve", timeoutMs: 55_000, reasoning: "low" });
   if (!raw) return Response.json({ error: "AI এই মুহূর্তে উত্তর দিতে পারল না। একটু পরে আবার চেষ্টা করো।" }, { status: 502 });
 
   let written: z.infer<typeof writtenSchema>["questions"];

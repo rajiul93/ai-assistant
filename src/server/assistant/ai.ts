@@ -30,6 +30,11 @@ type CallOptions = {
   signal?: AbortSignal;
   /** Give up sooner than the usual budget (a quick clean-up that mustn't hold the user up). */
   timeoutMs?: number;
+  /**
+   * Let the model think before answering, for answers that must be right (facts, solutions,
+   * explanations) — slower but far fewer wrong facts. Default: the fastest setting.
+   */
+  reasoning?: "low" | "medium" | "high";
 };
 type Usage = { input: number; output: number; total: number };
 type Attempt = { status: number | null; text: string | null; usage?: Usage };
@@ -92,13 +97,17 @@ type OpenAIPayload = {
 };
 
 /**
- * The assistant needs quick replies, not deep reasoning. GPT-6 models accept "none"; GPT-5 models
- * go no lower than "minimal", and their web search needs at least "low".
+ * Most calls need quick replies, not deep reasoning. GPT-6 models accept "none"; GPT-5 models go
+ * no lower than "minimal", and their web search needs at least "low". A caller that needs the
+ * answer right (`reasoning`) gets that effort instead (owner, 2026-10-16: wrong facts are worse than
+ * a slower answer).
  */
-function reasoningEffort(model: string, search: boolean) {
+function reasoningEffort(model: string, search: boolean, wanted?: CallOptions["reasoning"]) {
+  const fast = model.startsWith("gpt-6") || model.startsWith("gpt-5");
+  if (!fast) return null;
+  if (wanted) return wanted;
   if (model.startsWith("gpt-6")) return "none";
-  if (model.startsWith("gpt-5")) return search ? "low" : "minimal";
-  return null;
+  return search ? "low" : "minimal";
 }
 
 /** The attempt's timeout, plus the caller's abort (an interrupted reply) when there is one. */
@@ -120,7 +129,7 @@ async function chatCompletion(model: string, apiKey: string, prompt: string, opt
       model,
       messages: [{ role: "user", content: fileParts.length ? [...fileParts, { type: "text", text: prompt }] : prompt }],
       ...(stream ? { stream: true, stream_options: { include_usage: true } } : {}),
-      ...(reasoningEffort(model, false) ? { reasoning_effort: reasoningEffort(model, false) } : {}),
+      ...(reasoningEffort(model, false, options.reasoning) ? { reasoning_effort: reasoningEffort(model, false, options.reasoning) } : {}),
       ...(options.responseSchema
         ? { response_format: { type: "json_schema", json_schema: { name: "assistant_reply", strict: false, schema: toJsonSchema(options.responseSchema) } } }
         : {}),
@@ -188,7 +197,7 @@ async function webSearchResponse(model: string, apiKey: string, prompt: string, 
       model,
       input: [{ role: "user", content: [...fileParts, { type: "input_text", text: prompt }] }],
       tools: [{ type: "web_search" }],
-      ...(reasoningEffort(model, true) ? { reasoning: { effort: reasoningEffort(model, true) } } : {}),
+      ...(reasoningEffort(model, true, options.reasoning) ? { reasoning: { effort: reasoningEffort(model, true, options.reasoning) } } : {}),
     }),
     signal: withTimeout(options.signal, timeoutMs),
   });
