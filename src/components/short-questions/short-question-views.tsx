@@ -19,6 +19,7 @@ import { formatDate } from "@/lib/dayjs";
 import { statusInfo } from "@/lib/preliminary";
 import type { ShortAttemptDetail } from "@/lib/short-questions";
 import { cn } from "@/lib/utils";
+import { startSetStudy } from "@/store/timer-start";
 import { markShortAnswer, setShortQuestionSetStatus, submitShortTest, type getShortQuestionSet } from "@/server/actions/short-questions";
 
 type SetView = NonNullable<Awaited<ReturnType<typeof getShortQuestionSet>>>;
@@ -56,7 +57,7 @@ export function ShortStudyView({ set }: { set: SetView }) {
   return <div className="space-y-4">
     <Header set={set}>
       <div className="flex flex-wrap gap-2">
-        {set.status === "TODO" ? <button type="button" disabled={pending} onClick={() => void move("DOING", "Doing-এ নেওয়া হলো")} className="h-10 rounded-xl bg-zinc-950 px-3.5 text-sm font-semibold text-white disabled:opacity-50">পড়া শুরু করো</button> : null}
+        {set.status === "TODO" ? <button type="button" disabled={pending} onClick={() => { startSetStudy(set); void move("DOING", "Doing-এ নেওয়া হলো"); }} className="h-10 rounded-xl bg-zinc-950 px-3.5 text-sm font-semibold text-white disabled:opacity-50">পড়া শুরু করো</button> : null}
         {set.status === "DOING" ? <button type="button" disabled={pending} onClick={() => void move("TESTING", "Testing-এ নেওয়া হলো — উত্তর এখন লুকানো")} className="flex h-10 items-center gap-1.5 rounded-xl bg-zinc-950 px-3.5 text-sm font-semibold text-white disabled:opacity-50"><ClipboardCheck className="size-4" /> পড়া শেষ — Test-এ নাও</button> : null}
         <button type="button" onClick={() => { setHidden((value) => !value); setRevealed(new Set()); }} className="h-10 rounded-xl px-3 text-sm font-medium text-zinc-700 ring-1 ring-zinc-200 hover:bg-zinc-50">{hidden ? "উত্তর দেখাও" : "উত্তর লুকাও"}</button>
       </div>
@@ -168,7 +169,7 @@ export function ShortExamView({ set }: { set: SetView }) {
   if (!clock.started) {
     return <div className="space-y-4">
       <Header set={set}>
-        <button type="button" disabled={pending} onClick={() => void move("DOING", "Doing-এ ফেরানো হলো — উত্তর আবার দেখা যাবে")} className="flex h-10 items-center gap-1.5 rounded-xl px-3 text-sm font-medium text-zinc-700 ring-1 ring-zinc-200 hover:bg-zinc-50 disabled:opacity-50"><RotateCcw className="size-4" /> আবার পড়ো</button>
+        <button type="button" disabled={pending} onClick={() => { startSetStudy(set); void move("DOING", "Doing-এ ফেরানো হলো — উত্তর আবার দেখা যাবে"); }} className="flex h-10 items-center gap-1.5 rounded-xl px-3 text-sm font-medium text-zinc-700 ring-1 ring-zinc-200 hover:bg-zinc-50 disabled:opacity-50"><RotateCcw className="size-4" /> আবার পড়ো</button>
       </Header>
       <section className="rounded-3xl border border-zinc-200 bg-white p-6 text-center sm:p-10">
         <Timer className="mx-auto size-10 text-amber-500" />
