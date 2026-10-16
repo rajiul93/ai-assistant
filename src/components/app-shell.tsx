@@ -30,6 +30,8 @@ import { SideNav } from "@/components/side-nav";
 const tabHrefs = ["/dashboard", "/tasks", "/notes", "/jobs"];
 const tabs = tabHrefs.map((href) => links.find((link) => link.href === href)!);
 const baseMoreLinks = links.filter((link) => !tabHrefs.includes(link.href));
+/** Pages that use the wider container on desktop (owner, 2026-10-16). */
+const FULL_WIDTH = ["/notes"];
 
 /** "Prep" with its cap, as on the home page design. */
 function Logo() {
@@ -131,7 +133,9 @@ export function AppShell({
         {/* Desktop only; phones have the chip in the top bar. */}
         <div className="hidden lg:block"><SessionBar /></div>
         {/* Bottom padding leaves room for the tab bar and a running session bar. */}
-        <main className="mx-auto w-full max-w-6xl px-4 pt-2 sm:pt-4 pb-[calc(11rem+env(safe-area-inset-bottom))] lg:px-8 lg:py-10 lg:pb-28">
+        {/* Pages to read and write in (Notes) use Tailwind's container — as wide as the screen's breakpoint
+            allows (up to 1536px), centred; the rest stay at max-w-6xl. */}
+        <main className={cn("mx-auto w-full px-4 pt-2 sm:pt-4 pb-[calc(11rem+env(safe-area-inset-bottom))] lg:px-8 lg:py-10 lg:pb-28", FULL_WIDTH.some((href) => isActive(href)) ? "container" : "max-w-6xl")}>
           {children}
         </main>
 

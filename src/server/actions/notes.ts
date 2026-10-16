@@ -147,27 +147,36 @@ export async function createTaskFromNote(noteId: string) {
  * AI writing inside the note editor: returns sanitized HTML to insert at the cursor.
  * `lang` follows the assistant's language setting.
  */
-export async function generateNoteContent(input: { instruction: string; title: string; currentText: string; lang?: "bn" | "en" }) {
+/**
+ * Writes the note with AI. It gets the whole note as it is now and returns the whole note with the
+ * instruction applied ("improve", "add examples", "make a table"…) — not a piece to append, which
+ * used to leave two copies of everything. The page shows the result with an undo.
+ */
+export async function generateNoteContent(input: { instruction: string; title: string; currentHtml: string; lang?: "bn" | "en" }) {
   const user = await requireUser();
   const data = z.object({
     instruction: z.string().trim().min(1).max(2000),
     title: z.string().max(200),
-    currentText: z.string().max(20_000),
+    currentHtml: z.string().max(120_000),
     lang: z.enum(["bn", "en"]).optional(),
   }).parse(input);
+  const current = sanitizeNoteHtml(data.currentHtml);
+  const empty = !htmlToPlainText(current).trim();
   const prompt = `তুমি একজন যত্নশীল শিক্ষক, ব্যবহারকারীর study note লিখতে সাহায্য করছো।
 ${noteWritingRules}
 ভাষা: ${data.lang === "en" ? "English" : "সহজ বাংলা (প্রয়োজনে technical শব্দ ইংরেজিতে)"}।
 Note-এর title: ${data.title || "(নেই)"}
-Note-এ এখন যা আছে (নতুন লেখা এর সাথে মিলিয়ে লিখবে, পুনরাবৃত্তি করবে না):
-${data.currentText.slice(0, 6000) || "(ফাঁকা)"}
+${empty ? "Note এখন ফাঁকা — নির্দেশ মতো নতুন করে লেখো।" : `Note-এ এখন যা আছে (HTML):
+${current.slice(0, 40_000)}
+
+নির্দেশটা এই note-এর ওপর প্রয়োগ করে **পুরো note-টা আবার দাও** — উন্নত/বদলানো অংশসহ, বাকি অংশ যেমন আছে তেমন রেখে। কোনো অংশ দুবার লিখবে না, পুরোনো লেখার পরে নতুন কপি জুড়বে না। নির্দেশে কিছু যোগ করতে বললে ঠিক জায়গায় বসাবে; বাদ দিতে বললে বাদ দেবে। গণিতের formula আর টেবিল আগের মতোই রাখবে।`}
 
 ব্যবহারকারীর নির্দেশ: ${data.instruction}
 
-শুধু note-এ বসানোর HTML দাও, আর কিছু না।`;
+শুধু পুরো note-এর HTML দাও, আর কিছু না।`;
   const { blocked } = await checkAi(user, "suggestion");
   if (blocked) throw new Error(aiBlockedMessage(blocked, data.lang === "en" ? "en" : "bn"));
-  const raw = await callAI(prompt, { userId: user.id, feature: "note_writer" });
+  const raw = await callAI(prompt, { userId: user.id, feature: "note_writer", timeoutMs: 55_000 });
   if (!raw) throw new Error(data.lang === "en" ? "The AI isn't responding right now. Please try again in a moment." : "AI এখন সাড়া দিচ্ছে না। একটু পরে আবার চেষ্টা করো।");
   const html = sanitizeNoteHtml(raw.replace(/^```(?:html)?\s*|\s*```$/g, ""));
   // If the model ignored the HTML rule and sent plain text, wrap its paragraphs.

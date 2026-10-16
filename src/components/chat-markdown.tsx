@@ -33,7 +33,7 @@ function CodeBlock({ language, children }: { language: string; children: ReactNo
         {copied ? <Check className="size-3" /> : <Copy className="size-3" />}{copied ? "Copied" : "Copy"}
       </button>
     </div>
-    <pre className="overflow-x-auto p-3 text-[12.5px] leading-relaxed"><code className="hljs bg-transparent! p-0!">{children}</code></pre>
+    <pre className="overflow-x-auto p-3 text-[0.85em] leading-relaxed"><code className="hljs bg-transparent! p-0!">{children}</code></pre>
   </div>;
 }
 
@@ -46,8 +46,8 @@ const components: Components = {
     if (block) return <CodeBlock language={language ?? ""}>{children}</CodeBlock>;
     return <code className="rounded-md bg-zinc-200/70 px-1 py-0.5 font-mono text-[0.85em] text-zinc-900">{children}</code>;
   },
-  h1: ({ children }) => <h3 className="mt-3 mb-1.5 text-base font-semibold first:mt-0">{children}</h3>,
-  h2: ({ children }) => <h3 className="mt-3 mb-1.5 text-[15px] font-semibold first:mt-0">{children}</h3>,
+  h1: ({ children }) => <h3 className="mt-3 mb-1.5 text-[1.15em] font-semibold first:mt-0">{children}</h3>,
+  h2: ({ children }) => <h3 className="mt-3 mb-1.5 text-[1.08em] font-semibold first:mt-0">{children}</h3>,
   h3: ({ children }) => <h4 className="mt-2.5 mb-1 font-semibold first:mt-0">{children}</h4>,
   p: ({ children }) => <p className="my-1.5 first:mt-0 last:mb-0">{children}</p>,
   ul: ({ children }) => <ul className="my-1.5 list-disc space-y-1 pl-5">{children}</ul>,
@@ -56,7 +56,7 @@ const components: Components = {
   blockquote: ({ children }) => <blockquote className="my-2 border-l-2 border-zinc-300 pl-3 text-zinc-600">{children}</blockquote>,
   a: ({ href, children }) => <a href={href} target="_blank" rel="noreferrer" className="font-medium text-indigo-600 underline underline-offset-2">{children}</a>,
   hr: () => <hr className="my-3 border-zinc-200" />,
-  table: ({ children }) => <div className="my-2 overflow-x-auto rounded-lg border border-zinc-200"><table className="w-full text-left text-[13px]">{children}</table></div>,
+  table: ({ children }) => <div className="my-2 overflow-x-auto rounded-lg border border-zinc-200"><table className="w-full text-left text-[0.9em]">{children}</table></div>,
   th: ({ children }) => <th className="border-b border-zinc-200 bg-zinc-50 px-2.5 py-1.5 font-semibold">{children}</th>,
   td: ({ children }) => <td className="border-b border-zinc-100 px-2.5 py-1.5 align-top">{children}</td>,
 };

@@ -15,19 +15,33 @@ export type QuillHandle = {
    */
   insertText: (text: string, onNewLine?: boolean) => void;
   getText: () => string;
+  /** The editor's HTML as it is now. */
+  getHtml: () => string;
+  /** Replaces the whole note (an AI rewrite, or undoing one) — saved like typing. */
+  setHtml: (html: string) => void;
 };
 
 // Text formatting only — "image" and "video" are deliberately absent, so they can't be inserted.
 // "formula" is math written in LaTeX and drawn like a book (a stacked ½, a raised x²); see lib/math.
-const formats = ["header", "bold", "italic", "underline", "strike", "list", "indent", "blockquote", "code-block", "code", "link", "formula"];
+// Tables (Quill 2's table module; the first row reads as the heading row) are for comparisons.
+const formats = ["header", "bold", "italic", "underline", "strike", "list", "indent", "blockquote", "code-block", "code", "link", "formula", "table", "table-row", "table-body", "table-container"];
 // H2/H3 are buttons rather than a dropdown so the toolbar can scroll sideways on phones.
 const toolbar = [
   [{ header: 2 }, { header: 3 }],
   ["bold", "italic", "underline", "strike"],
   [{ list: "ordered" }, { list: "bullet" }],
   ["blockquote", "code-block", "link", "formula"],
+  ["table"],
   ["clean"],
 ];
+
+// The toolbar's table icon, in the snow theme's stroke style. Only "insert" (owner, 2026-10-16):
+// separate row/column/delete buttons were more confusing than useful.
+const svg = (body: string) => `<svg viewBox="0 0 18 18"><g class="ql-stroke" fill="none" stroke-width="1.4" stroke-linecap="round">${body}</g></svg>`;
+const tableIcons: Record<string, string> = {
+  table: svg('<rect x="2.5" y="3" width="13" height="12" rx="1.5"/><line x1="2.5" y1="7" x2="15.5" y2="7"/><line x1="2.5" y1="11" x2="15.5" y2="11"/><line x1="7" y1="3" x2="7" y2="15"/><line x1="11.5" y1="3" x2="11.5" y2="15"/>'),
+};
+const tableTitles: Record<string, string> = { table: "টেবিল বসাও (৩×৩)" };
 
 /**
  * Quill 2 rich-text editor (react-quill doesn't support React 19, so Quill is mounted directly).
@@ -73,6 +87,14 @@ export function QuillEditor({ initialHtml, placeholder, onChange, handleRef }: {
       if (range) quill.setSelection(at, 0, "silent");
     },
     getText: () => quillRef.current?.getText() ?? "",
+    getHtml: () => quillRef.current?.root.innerHTML ?? "",
+    setHtml: (html) => {
+      const quill = quillRef.current;
+      if (!quill) return;
+      quill.setContents(quill.clipboard.convert({ html }), "user");
+      quill.setSelection(0, 0, "silent");
+      quill.root.scrollTop = 0;
+    },
   }), []);
 
   useEffect(() => {
@@ -87,17 +109,26 @@ export function QuillEditor({ initialHtml, placeholder, onChange, handleRef }: {
     void import("quill").then(({ default: QuillClass }) => {
       if (cancelled) return;
       const Delta = QuillClass.import("delta") as typeof import("quill").Delta;
+      const icons = QuillClass.import("ui/icons") as Record<string, string>;
+      Object.assign(icons, tableIcons);
+      type TableModule = { insertTable: (rows: number, columns: number) => void };
+      const table = () => quill.getModule("table") as TableModule;
       const quill = new QuillClass(container, {
         theme: "snow",
         placeholder,
         formats,
         modules: {
-          toolbar,
+          table: true,
+          toolbar: {
+            container: toolbar,
+            handlers: { table: () => table().insertTable(3, 3) },
+          },
           // Dropped or pasted image files are ignored instead of embedded.
           uploader: { handler: () => {} },
           clipboard: { matchers: [["IMG", () => new Delta()]] },
         },
       });
+      for (const [name, title] of Object.entries(tableTitles)) host.querySelector(`.ql-${name}`)?.setAttribute("title", title);
       // The formula box shows the math as it will look while its LaTeX is typed.
       const tooltip = (quill.theme as unknown as { tooltip: { root: HTMLElement; textbox: HTMLInputElement | null } }).tooltip;
       if (tooltip.textbox) {

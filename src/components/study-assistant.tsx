@@ -1,7 +1,8 @@
 "use client";
 
 import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowUp, Check, CircleCheck, Download, FileText, Lock, Maximize2, Mic, Minimize2, NotebookPen, Paperclip, RefreshCcw, Sparkles, Square, Volume2, X } from "lucide-react";
+import { toast } from "sonner";
+import { ArrowUp, Check, CircleCheck, Copy, Download, FileText, Lock, Maximize2, Mic, Minimize2, NotebookPen, Paperclip, RefreshCcw, Sparkles, Square, Volume2, X } from "lucide-react";
 import { MathText } from "@/components/math-text";
 import { ChatPurchase } from "@/components/billing/chat-purchase";
 import { ImageViewer } from "@/components/image-viewer";
@@ -122,6 +123,26 @@ const languages: Array<{ value: AssistantLang; label: string; name: string }> = 
   { value: "en", label: "EN", name: "English" },
 ];
 
+/** Markdown marks off, so a pasted reply reads as plain text (math stays as $…$). */
+const plainReply = (text: string) => text.replace(/\*\*(.+?)\*\*/g, "$1").replace(/(^|\s)\*(\S.*?\S|\S)\*/g, "$1$2").replace(/^#{1,6}\s+/gm, "").replace(/^[ \t]*[-*][ \t]+/gm, "• ").trim();
+
+/** "কপি" under an AI reply; shows a tick for a moment once copied. */
+function CopyReply({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(plainReply(text));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      toast.error("কপি করা গেল না");
+    }
+  }
+  return <button type="button" onClick={() => void copy()} aria-label="উত্তরটা কপি করো" className={cn("flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition", copied ? "text-emerald-600" : "text-zinc-500 hover:bg-white hover:text-zinc-900")}>
+    {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />} {copied ? "কপি হয়েছে" : "কপি"}
+  </button>;
+}
+
 export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
   const { entries, busy, open, setOpen, t, send, confirmAction, cancelAction } = useAssistant();
   const [question, setQuestion] = useState("");
@@ -141,6 +162,8 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
   const [reading, setReading] = useState(false);
   // Wider panel for reading code (desktop/tablet; phones already use the full width).
   const [wide, setWide] = useState(false);
+  // Bigger letters on computers, bigger still when the panel is enlarged.
+  const messageText = wide ? "text-[16px] sm:text-[19px]" : "text-[16px] sm:text-[17px]";
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const voicePlaying = useSyncExternalStore(subscribeVoicePlaying, isVoicePlaying, () => false);
@@ -254,8 +277,9 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
       onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false); }}
       onDrop={(event) => { event.preventDefault(); setDragging(false); void addFiles(event.dataTransfer.files); }}
       className={cn(
-        "assistant-panel-in fixed inset-x-0 bottom-0 z-50 flex max-h-[88dvh] flex-col overflow-hidden rounded-t-3xl border border-zinc-200/80 bg-white/95 shadow-[0_24px_80px_-20px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:inset-x-auto sm:bottom-36 sm:right-4 sm:max-h-[min(40rem,calc(100dvh-12rem))] sm:w-100 sm:rounded-3xl lg:bottom-24 lg:right-6",
-        wide && "sm:max-h-[calc(100dvh-10rem)] sm:w-[min(48rem,calc(100vw-2rem))] lg:max-h-[calc(100dvh-8rem)]",
+        "assistant-panel-in fixed inset-x-0 bottom-0 z-50 flex max-h-[88dvh] flex-col overflow-hidden rounded-t-3xl border border-zinc-200/80 bg-white/95 shadow-[0_24px_80px_-20px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-[width,height,max-height,bottom] duration-300 ease-out sm:inset-x-auto sm:bottom-36 sm:right-4 sm:max-h-[min(40rem,calc(100dvh-12rem))] sm:w-[27rem] sm:rounded-3xl lg:bottom-24 lg:right-6",
+        // Larger: at least two thirds of the screen wide and nearly its full height (owner, 2026-10-16).
+        wide && "sm:bottom-6 sm:h-[calc(100dvh-3rem)] sm:max-h-[calc(100dvh-3rem)] sm:w-[min(max(66.67vw,48rem),calc(100vw-2rem))] lg:bottom-6",
       )}>
       <header className="flex items-center gap-3 border-b border-zinc-100 px-4 py-3.5">
         <span className="relative flex size-9 shrink-0 items-center justify-center">
@@ -263,7 +287,7 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
           <span className="relative flex size-9 items-center justify-center rounded-full bg-linear-to-br from-zinc-900 to-zinc-600 text-white shadow-inner"><Sparkles className="size-4" /></span>
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-zinc-950">{t.panelTitle}</p>
+          <p className={cn("font-semibold text-zinc-950", wide ? "text-base" : "text-sm")}>{t.panelTitle}</p>
           <p className="text-xs text-zinc-500">{busy ? t.thinkingBubble : t.panelSubtitle}</p>
         </div>
         <div role="radiogroup" aria-label="Language" className="flex shrink-0 rounded-full bg-zinc-100 p-0.5">
@@ -281,20 +305,21 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
         <button type="button" onClick={close} aria-label="Close" className="flex size-10 items-center justify-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 sm:size-8"><X className="size-4" /></button>
       </header>
 
-      <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4" aria-live="polite">
+      {/* Larger: the messages sit in a centred column of comfortable line length. */}
+      <div ref={listRef} className={cn("min-h-0 flex-1 space-y-3.5 overflow-y-auto px-4 py-4", wide && "sm:px-[max(1.25rem,calc((100%-52rem)/2))] sm:py-6")} aria-live="polite">
         {aiLock ? <PlanLockCard lock={aiLock} t={t} /> : null}
         {entries.length === 0 ? <div className="rounded-2xl bg-zinc-50 p-4 text-sm leading-relaxed text-zinc-600">{t.emptyHint}</div> : null}
         {entries.map((entry) => entry.role === "user"
           ? <div key={entry.id} className="assistant-in ml-10 flex flex-col items-end">
             {entry.viaVoice ? <p className="mb-1 flex items-center gap-1 text-[11px] font-medium text-zinc-400"><Mic className="size-3" /> {t.youSaid}</p> : null}
             {entry.attachmentName ? <p className="mb-1 flex max-w-full items-center gap-1 truncate text-[11px] font-medium text-zinc-400"><Paperclip className="size-3 shrink-0" /> {entry.attachmentName}</p> : null}
-            <p className="rounded-2xl rounded-br-md bg-zinc-950 px-3.5 py-2 text-sm leading-relaxed text-white"><MathText text={entry.text} /></p>
+            <p className={cn("rounded-2xl rounded-br-md bg-linear-to-br from-[#3f6ef3] to-[#5a87f8] px-3.5 py-2 leading-relaxed text-white shadow-[0_6px_16px_-10px_rgba(37,99,235,0.8)]", messageText)}><MathText text={entry.text} /></p>
           </div>
           : entry.purchase
           ? <div key={entry.id} className="assistant-in min-w-0 rounded-2xl border border-zinc-200 bg-white p-3"><ChatPurchase /></div>
           : <div key={entry.id} className="assistant-in mr-2 min-w-0">
             {entry.source ? <p className={cn("mb-1 text-[11px] font-medium", entry.source === "ai" ? "text-indigo-500" : "text-amber-600")}>{entry.source === "ai" ? `✦ ${t.sourceAi}` : t.sourceFallback}</p> : null}
-            <div className="min-w-0 rounded-2xl rounded-bl-md bg-zinc-100/80 px-3.5 py-2 text-sm leading-relaxed text-zinc-900">
+            <div className={cn("min-w-0 rounded-2xl rounded-bl-md bg-slate-50 px-4 py-2.5 leading-relaxed text-zinc-900 ring-1 ring-slate-200/70", messageText)}>
               <Suspense fallback={<p className="whitespace-pre-wrap">{entry.text}</p>}><ChatMarkdown text={entry.text} /></Suspense>
               {entry.image ? <figure className="mt-2">
                 {/* eslint-disable-next-line @next/next/no-img-element -- a generated data URL, not an optimizable asset */}
@@ -303,7 +328,10 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
               </figure> : null}
               {entry.streaming ? <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse rounded-sm bg-zinc-400 align-middle" aria-hidden /> : null}
               {entry.interrupted ? <p className="mt-1 flex items-center gap-1 text-[11px] font-medium text-zinc-400"><Square className="size-2.5 fill-current" /> {t.interruptedLabel}</p> : null}
-              {entry.action || entry.streaming || !voiceAllowed ? null : <button type="button" onClick={() => speak(entry.text)} className="mt-1 -ml-1 flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-medium text-zinc-500 transition hover:bg-white hover:text-zinc-900"><Volume2 className="size-3" /> {t.listenAgain}</button>}
+              {entry.action || entry.streaming ? null : <div className="mt-1.5 -ml-1 flex items-center gap-0.5">
+                <CopyReply text={entry.text} />
+                {voiceAllowed ? <button type="button" onClick={() => speak(entry.text)} className="flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium text-zinc-500 transition hover:bg-white hover:text-zinc-900"><Volume2 className="size-3.5" /> {t.listenAgain}</button> : null}
+              </div>}
             </div>
             {entry.action ? <ActionCard action={entry.action} state={entry.draftState} t={t} onConfirm={() => void confirmAction()} onCancel={() => cancelAction()} /> : null}
           </div>)}
@@ -344,7 +372,7 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
           {/* At least three lines tall; grows with the text (where the browser supports it), then scrolls. */}
           <textarea
             rows={3}
-            className="max-h-48 min-h-[4.75rem] flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2 text-sm leading-5 outline-none field-sizing-content placeholder:text-zinc-400"
+            className={cn("max-h-48 min-h-[4.75rem] flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2 leading-6 outline-none field-sizing-content placeholder:text-zinc-400", messageText)}
             value={question}
             placeholder={voice.listening ? t.placeholderListening : attachment ? t.placeholderWithFile : t.placeholder}
             onChange={(event) => { typedBefore.current = null; setBox(event.target.value); }}
