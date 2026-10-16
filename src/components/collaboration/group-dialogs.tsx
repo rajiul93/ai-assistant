@@ -12,6 +12,7 @@ import { GROUP_MAX, GROUP_MIN, GROUP_NAME_MAX } from "@/lib/collaboration";
 import { cn } from "@/lib/utils";
 import { listFriendsOverview } from "@/server/actions/friends";
 import { addGroupMembers, createGroup, groupDetails, leaveGroup, removeGroupMember, renameGroup } from "@/server/actions/groups";
+import { errorMessage } from "@/lib/user-error";
 
 const refreshKeys = ["groups", "group", "live", "notifications"];
 
@@ -64,7 +65,7 @@ export function CreateGroupDialog({ open, onOpenChange, onCreated }: { open: boo
       onOpenChange(false);
       onCreated(id);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "গ্রুপ বানানো গেল না।");
+      toast.error(errorMessage(error, "গ্রুপ বানানো গেল না।"));
     } finally {
       setBusy(false);
     }
@@ -107,7 +108,7 @@ export function GroupInfoDialog({ groupId, open, onOpenChange, onLeft }: { group
       setMode("view"); reset();
       return true;
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "করা গেল না।");
+      toast.error(errorMessage(error, "করা গেল না।"));
       return false;
     } finally {
       setBusy(false);

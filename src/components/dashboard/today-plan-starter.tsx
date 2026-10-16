@@ -10,6 +10,7 @@ import { useLiveTimerSeconds, useTimerHydrated } from "@/lib/use-timer";
 import { startTodayPlan } from "@/server/actions/plan";
 import { useTimerStore } from "@/store/timer";
 import { useTimerStartStore } from "@/store/timer-start";
+import { errorMessage } from "@/lib/user-error";
 
 export type FirstTask = { title: string; subjectId: string; topicId: string; subjectName: string } | null;
 
@@ -33,7 +34,7 @@ export function useStartPlan(firstTask: FirstTask) {
       toast.success("আজকের প্ল্যান শুরু হলো — শুভকামনা!");
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "আজকের প্ল্যান শুরু করা গেল না।");
+      toast.error(errorMessage(error, "আজকের প্ল্যান শুরু করা গেল না।"));
     } finally {
       setStarting(false);
     }

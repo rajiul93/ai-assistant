@@ -11,6 +11,7 @@ import { quote, type PricingCatalog } from "@/lib/pricing";
 import { BANK_EXAMS } from "@/lib/question-bank";
 import { cn } from "@/lib/utils";
 import { deleteDuration, deleteTrack, saveDuration, saveSettings, saveTier, saveTrack } from "@/server/actions/pricing";
+import { errorMessage } from "@/lib/user-error";
 
 export type PricingAdmin = { settings: PricingSettings | null; tiers: AiTier[]; tracks: ExamTrack[]; durations: PlanDuration[] };
 
@@ -23,7 +24,7 @@ function useSave() {
   const router = useRouter();
   const [pending, start] = useTransition();
   const run = (action: () => Promise<unknown>, success: string, after?: () => void) => start(async () => {
-    try { await action(); toast.success(success); after?.(); router.refresh(); } catch (error) { toast.error(error instanceof Error ? error.message : "সেভ করা গেল না।"); }
+    try { await action(); toast.success(success); after?.(); router.refresh(); } catch (error) { toast.error(errorMessage(error, "সেভ করা গেল না।")); }
   });
   return { pending, run };
 }

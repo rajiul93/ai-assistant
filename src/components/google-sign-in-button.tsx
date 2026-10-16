@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { getFirebaseAuth, isFirebaseClientConfigured } from "@/lib/firebase/client";
+import { errorMessage } from "@/lib/user-error";
 
 type Device = { id: string; label: string; lastSeenAt: string };
 
@@ -90,7 +91,7 @@ export function GoogleSignInButton() {
       router.refresh();
     } catch (error) {
       busy.current = false;
-      toast.error(error instanceof Error ? error.message : "Sign-in failed.");
+      toast.error(errorMessage(error, "Sign-in failed."));
     } finally {
       setLoading(false);
     }
@@ -106,7 +107,7 @@ export function GoogleSignInButton() {
       router.refresh();
     } catch (error) {
       if (error instanceof DeviceLimitError) setLimit({ user: limit.user, devices: error.devices });
-      else toast.error(error instanceof Error ? error.message : "করা গেল না");
+      else toast.error(errorMessage(error, "করা গেল না"));
     } finally {
       setRemoving(null);
     }

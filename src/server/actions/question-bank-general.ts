@@ -12,6 +12,7 @@ import { assertCanTakeFromBank } from "@/server/bank-access";
 import { placeFor } from "@/server/collaboration/share-copy";
 import { gateNotes, hasPremium } from "@/server/premium";
 import { can } from "@/server/roles";
+import { userError } from "@/lib/user-error";
 
 /**
  * The General half of the Question Bank (docs/question-bank-v2-plan.md): subject → chapter →
@@ -29,7 +30,7 @@ const SET_MAX = 300;
 
 async function requireBankEditor() {
   const me = await requireUser();
-  if (!(await can(me, "question_bank"))) throw new Error("এটা করতে প্রশ্ন ব্যাংক permission লাগবে।");
+  if (!(await can(me, "question_bank"))) throw userError("এটা করতে প্রশ্ন ব্যাংক permission লাগবে।");
   return me;
 }
 
@@ -117,14 +118,14 @@ export async function sendChapterToPreliminary(chapterId: string) {
     where: { id: idSchema.parse(chapterId) },
     select: { name: true, subject: { select: { name: true } }, questions: { orderBy: [{ serial: "asc" }, { id: "asc" }], select: { text: true, options: true, correctIndex: true, solution: true, explanation: true, free: true } } },
   });
-  if (!chapter) throw new Error("Chapter পাওয়া যায়নি।");
-  if (!chapter.questions.length) throw new Error("এই chapter-এ কোনো MCQ নেই।");
+  if (!chapter) throw userError("Chapter পাওয়া যায়নি।");
+  if (!chapter.questions.length) throw userError("এই chapter-এ কোনো MCQ নেই।");
   // A plan, and fewer than two sets from the bank still short of 60%.
   await assertCanTakeFromBank(me, "mcq");
   const premium = await hasPremium(me);
   const questions = chapter.questions.filter((question) => premium || question.free);
-  if (!questions.length) throw new Error(chapter.questions.length ? "এই chapter-এর MCQ পেতে একটা চালু plan লাগবে।" : "এই chapter-এ কোনো MCQ নেই।");
-  if (questions.length > SET_MAX) throw new Error(`একটা Preliminary set-এ সর্বোচ্চ ${SET_MAX}টি প্রশ্ন রাখা যায় — এখানে ${questions.length}টি।`);
+  if (!questions.length) throw userError(chapter.questions.length ? "এই chapter-এর MCQ পেতে একটা চালু plan লাগবে।" : "এই chapter-এ কোনো MCQ নেই।");
+  if (questions.length > SET_MAX) throw userError(`একটা Preliminary set-এ সর্বোচ্চ ${SET_MAX}টি প্রশ্ন রাখা যায় — এখানে ${questions.length}টি।`);
   const copy = await prisma.$transaction(async (tx) => {
     const { subjectId, topicId } = await placeFor(tx, me.id, chapter.subject.name, chapter.name);
     return tx.questionSet.create({
@@ -147,13 +148,13 @@ export async function sendChapterToShortQuestions(chapterId: string) {
     where: { id: idSchema.parse(chapterId) },
     select: { name: true, subject: { select: { name: true } }, shortQuestions: { orderBy: [{ serial: "asc" }, { id: "asc" }], select: { question: true, answer: true, free: true } } },
   });
-  if (!chapter) throw new Error("Chapter পাওয়া যায়নি।");
-  if (!chapter.shortQuestions.length) throw new Error("এই chapter-এ কোনো Short Question নেই।");
+  if (!chapter) throw userError("Chapter পাওয়া যায়নি।");
+  if (!chapter.shortQuestions.length) throw userError("এই chapter-এ কোনো Short Question নেই।");
   await assertCanTakeFromBank(me, "short");
   const premium = await hasPremium(me);
   const shorts = chapter.shortQuestions.filter((short) => premium || short.free);
-  if (!shorts.length) throw new Error(chapter.shortQuestions.length ? "এই chapter-এর Short Question পেতে একটা চালু plan লাগবে।" : "এই chapter-এ কোনো Short Question নেই।");
-  if (shorts.length > SET_MAX) throw new Error(`একটা set-এ সর্বোচ্চ ${SET_MAX}টি প্রশ্ন রাখা যায় — এখানে ${shorts.length}টি।`);
+  if (!shorts.length) throw userError(chapter.shortQuestions.length ? "এই chapter-এর Short Question পেতে একটা চালু plan লাগবে।" : "এই chapter-এ কোনো Short Question নেই।");
+  if (shorts.length > SET_MAX) throw userError(`একটা set-এ সর্বোচ্চ ${SET_MAX}টি প্রশ্ন রাখা যায় — এখানে ${shorts.length}টি।`);
   const copy = await prisma.$transaction(async (tx) => {
     const { subjectId, topicId } = await placeFor(tx, me.id, chapter.subject.name, chapter.name);
     return tx.shortQuestionSet.create({
@@ -178,7 +179,7 @@ export async function createBankSubject(name: string) {
     revalidateBank();
     return subject;
   } catch (error) {
-    if (duplicate(error)) throw new Error("এই নামে subject আগেই আছে।");
+    if (duplicate(error)) throw userError("এই নামে subject আগেই আছে।");
     throw error;
   }
 }
@@ -188,7 +189,7 @@ export async function renameBankSubject(id: string, name: string) {
   try {
     await prisma.bankSubject.update({ where: { id: idSchema.parse(id) }, data: { name: nameSchema.parse(name) } });
   } catch (error) {
-    if (duplicate(error)) throw new Error("এই নামে subject আগেই আছে।");
+    if (duplicate(error)) throw userError("এই নামে subject আগেই আছে।");
     throw error;
   }
   revalidateBank();
@@ -197,7 +198,7 @@ export async function renameBankSubject(id: string, name: string) {
 /** Deletes the subject with every chapter and item in it (the page asks first, showing the counts). */
 export async function deleteBankSubject(id: string) {
   await requireBankEditor();
-  await prisma.bankSubject.delete({ where: { id: idSchema.parse(id) } }).catch(() => { throw new Error("Subject পাওয়া যায়নি।"); });
+  await prisma.bankSubject.delete({ where: { id: idSchema.parse(id) } }).catch(() => { throw userError("Subject পাওয়া যায়নি।"); });
   revalidateBank();
 }
 
@@ -210,7 +211,7 @@ export async function createBankChapter(subjectId: string, name: string) {
     revalidateBank();
     return chapter;
   } catch (error) {
-    if (duplicate(error)) throw new Error("এই subject-এ এই নামে chapter আগেই আছে।");
+    if (duplicate(error)) throw userError("এই subject-এ এই নামে chapter আগেই আছে।");
     throw error;
   }
 }
@@ -220,7 +221,7 @@ export async function renameBankChapter(id: string, name: string) {
   try {
     await prisma.bankChapter.update({ where: { id: idSchema.parse(id) }, data: { name: nameSchema.parse(name) } });
   } catch (error) {
-    if (duplicate(error)) throw new Error("এই subject-এ এই নামে chapter আগেই আছে।");
+    if (duplicate(error)) throw userError("এই subject-এ এই নামে chapter আগেই আছে।");
     throw error;
   }
   revalidateBank();
@@ -232,7 +233,7 @@ export async function moveBankChapter(id: string, subjectId: string) {
   try {
     await prisma.bankChapter.update({ where: { id: idSchema.parse(id) }, data: { subjectId: idSchema.parse(subjectId) } });
   } catch (error) {
-    if (duplicate(error)) throw new Error("ওই subject-এ এই নামে chapter আগেই আছে — আগে নাম বদলাও।");
+    if (duplicate(error)) throw userError("ওই subject-এ এই নামে chapter আগেই আছে — আগে নাম বদলাও।");
     throw error;
   }
   revalidateBank();
@@ -240,7 +241,7 @@ export async function moveBankChapter(id: string, subjectId: string) {
 
 export async function deleteBankChapter(id: string) {
   await requireBankEditor();
-  await prisma.bankChapter.delete({ where: { id: idSchema.parse(id) } }).catch(() => { throw new Error("Chapter পাওয়া যায়নি।"); });
+  await prisma.bankChapter.delete({ where: { id: idSchema.parse(id) } }).catch(() => { throw userError("Chapter পাওয়া যায়নি।"); });
   revalidateBank();
 }
 
@@ -260,7 +261,7 @@ export async function saveBankArticle(input: unknown) {
   const { id, chapterId, title, free, content } = articleSchema.parse(input);
   const html = sanitizeNoteHtml(content);
   if (id) {
-    await prisma.bankArticle.update({ where: { id }, data: { title, content: html, free } }).catch(() => { throw new Error("Article পাওয়া যায়নি।"); });
+    await prisma.bankArticle.update({ where: { id }, data: { title, content: html, free } }).catch(() => { throw userError("Article পাওয়া যায়নি।"); });
   } else {
     const last = await prisma.bankArticle.aggregate({ where: { chapterId }, _max: { sortOrder: true } });
     await prisma.bankArticle.create({ data: { chapterId, title, content: html, free, sortOrder: (last._max.sortOrder ?? 0) + 1 } });
@@ -291,7 +292,7 @@ export async function saveChapterQuestion(input: unknown) {
       await prisma.bankQuestion.create({ data: { ...data, chapterId, serial: (last._max.serial ?? 0) + 1, fingerprint: questionFingerprint(data.text, data.options), editedAt: new Date() } });
     }
   } catch (error) {
-    if (duplicate(error)) throw new Error("এই প্রশ্নটা এই chapter-এ আগেই আছে।");
+    if (duplicate(error)) throw userError("এই প্রশ্নটা এই chapter-এ আগেই আছে।");
     throw error;
   }
   revalidateBank();
@@ -317,7 +318,7 @@ export async function saveBankShortQuestion(input: unknown) {
       await prisma.bankShortQuestion.create({ data: { chapterId, question, answer, free, fingerprint, serial: (last._max.serial ?? 0) + 1 } });
     }
   } catch (error) {
-    if (duplicate(error)) throw new Error("এই প্রশ্নটা এই chapter-এ আগেই আছে।");
+    if (duplicate(error)) throw userError("এই প্রশ্নটা এই chapter-এ আগেই আছে।");
     throw error;
   }
   revalidateBank();
@@ -356,7 +357,7 @@ export async function moveBankItems(input: unknown) {
   await requireBankEditor();
   const { kind, ids, chapterId } = itemsSchema.extend({ chapterId: idSchema }).parse(input);
   const target = await prisma.bankChapter.findUnique({ where: { id: chapterId }, select: { id: true } });
-  if (!target) throw new Error("Chapter পাওয়া যায়নি।");
+  if (!target) throw userError("Chapter পাওয়া যায়নি।");
   if (kind === "article") {
     const { count } = await prisma.bankArticle.updateMany({ where: { id: { in: ids } }, data: { chapterId } });
     revalidateBank();
@@ -404,7 +405,7 @@ export async function moveQuestionsToChapter(input: unknown) {
   await requireBankEditor();
   const { ids, chapterId, removeSetId } = moveToChapterSchema.parse(input);
   const chapter = await prisma.bankChapter.findUnique({ where: { id: chapterId }, select: { id: true, subjectId: true } });
-  if (!chapter) throw new Error("Chapter পাওয়া যায়নি।");
+  if (!chapter) throw userError("Chapter পাওয়া যায়নি।");
   let moved = 0, skipped = 0;
   for (const id of ids) {
     try {
@@ -445,7 +446,7 @@ export async function importChapterRows(input: unknown) {
     z.object({ kind: z.literal("short"), chapterId: idSchema, free: z.boolean().default(false), rows: z.array(shortRowSchema).min(1).max(BANK_IMPORT_BATCH) }),
   ]).parse(input);
   const chapter = await prisma.bankChapter.findUnique({ where: { id: data.chapterId }, select: { id: true } });
-  if (!chapter) throw new Error("Chapter পাওয়া যায়নি।");
+  if (!chapter) throw userError("Chapter পাওয়া যায়নি।");
   const result = data.kind === "mcq"
     ? await prisma.bankQuestion.createMany({ data: data.rows.map((row) => ({ ...row, free: data.free, chapterId: chapter.id, fingerprint: questionFingerprint(row.text, row.options) })), skipDuplicates: true })
     : await prisma.bankShortQuestion.createMany({ data: data.rows.map((row) => ({ ...row, free: data.free, chapterId: chapter.id, fingerprint: questionFingerprint(row.question, []) })), skipDuplicates: true });

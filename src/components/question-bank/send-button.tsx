@@ -7,6 +7,7 @@ import { Check, Loader2, Lock, Send } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { sendBankSetToPreliminary } from "@/server/actions/question-bank";
+import { errorMessage } from "@/lib/user-error";
 
 /**
  * "Preliminary-তে পাঠাও", or a link to the copy once it's there (one copy per set). Sending is a
@@ -39,7 +40,7 @@ export function SendToPreliminary({ setId, copyId, locked = false, className }: 
       });
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "পাঠানো গেল না।");
+      toast.error(errorMessage(error, "পাঠানো গেল না।"));
     } finally {
       setBusy(false);
     }

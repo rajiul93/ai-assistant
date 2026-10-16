@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { loginCookieOptions, REFRESH_COOKIE, SESSION_COOKIE } from "@/lib/session";
 import { isFirebaseClientConfigured } from "@/lib/firebase/config";
 import { DEVICE_COOKIE, deviceCookieOptions, MAX_DEVICES, registerDevice } from "@/server/devices";
+import { errorMessage } from "@/lib/user-error";
 
 /**
  * Sign in: the ID token becomes the session; the refresh token keeps it alive (see src/proxy.ts).
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
     cookieStore.set(DEVICE_COOKIE, device.id, deviceCookieOptions());
     return NextResponse.json({ ok: true });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Authentication failed.";
+    const message = errorMessage(error, "Authentication failed.");
     return NextResponse.json({ error: message }, { status: 401 });
   }
 }

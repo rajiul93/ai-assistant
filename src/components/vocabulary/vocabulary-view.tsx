@@ -11,6 +11,7 @@ import { bareAffix } from "@/lib/vocabulary/affixes";
 import { banglaVerbForms } from "@/lib/vocabulary/bangla-verb";
 import { banglaPlural, nounKey, pluralRule } from "@/lib/vocabulary/nouns";
 import { createAffix, createNoun, createVerb, deleteAffix, deleteNoun, deleteVerb, setLearned, updateAffix, updateNoun, updateVerb, type listAffixes, type listNouns, type listVerbs } from "@/server/actions/vocabulary";
+import { errorMessage } from "@/lib/user-error";
 
 type Verb = Awaited<ReturnType<typeof listVerbs>>[number];
 type Affix = Awaited<ReturnType<typeof listAffixes>>[number];
@@ -235,15 +236,15 @@ function VerbTable({ verbs, canEdit, learned }: { verbs: Verb[]; canEdit: boolea
   }
   const add = () => start(async () => {
     if (taken(draft.present)) { toast.error(`“${draft.present.trim()}” আগেই table-এ আছে।`); return; }
-    try { await createVerb(draft); setDraft(emptyVerb); toast.success(`“${draft.present}” যোগ হলো`); router.refresh(); } catch (error) { toast.error(error instanceof Error ? error.message : "যোগ করা গেল না।"); }
+    try { await createVerb(draft); setDraft(emptyVerb); toast.success(`“${draft.present}” যোগ হলো`); router.refresh(); } catch (error) { toast.error(errorMessage(error, "যোগ করা গেল না।")); }
   });
   const save = () => editing && start(async () => {
     if (taken(editing.values.present, editing.id)) { toast.error(`“${editing.values.present.trim()}” আগেই table-এ আছে।`); return; }
-    try { await updateVerb(editing.id, editing.values); setEditing(null); toast.success("সেভ হলো"); router.refresh(); } catch (error) { toast.error(error instanceof Error ? error.message : "সেভ করা গেল না।"); }
+    try { await updateVerb(editing.id, editing.values); setEditing(null); toast.success("সেভ হলো"); router.refresh(); } catch (error) { toast.error(errorMessage(error, "সেভ করা গেল না।")); }
   });
   const remove = (verb: Verb) => start(async () => {
     if (!window.confirm(`“${verb.present}” মুছে ফেলবে? সবার table থেকে মুছে যাবে।`)) return;
-    try { await deleteVerb(verb.id); toast.success("মুছে ফেলা হলো"); router.refresh(); } catch (error) { toast.error(error instanceof Error ? error.message : "মোছা গেল না।"); }
+    try { await deleteVerb(verb.id); toast.success("মুছে ফেলা হলো"); router.refresh(); } catch (error) { toast.error(errorMessage(error, "মোছা গেল না।")); }
   });
 
   const columns = [
@@ -463,15 +464,15 @@ function NounTable({ nouns, canEdit, learned }: { nouns: Noun[]; canEdit: boolea
   }
   const add = () => start(async () => {
     if (taken(draft)) { toast.error(`“${nounKey(draft)}” আগেই table-এ আছে।`); return; }
-    try { await createNoun(draft); setDraft(emptyNoun); toast.success(`“${nounKey(draft)}” যোগ হলো`); router.refresh(); } catch (error) { toast.error(error instanceof Error ? error.message : "যোগ করা গেল না।"); }
+    try { await createNoun(draft); setDraft(emptyNoun); toast.success(`“${nounKey(draft)}” যোগ হলো`); router.refresh(); } catch (error) { toast.error(errorMessage(error, "যোগ করা গেল না।")); }
   });
   const save = () => editing && start(async () => {
     if (taken(editing.values, editing.id)) { toast.error(`“${nounKey(editing.values)}” আগেই table-এ আছে।`); return; }
-    try { await updateNoun(editing.id, editing.values); setEditing(null); toast.success("সেভ হলো"); router.refresh(); } catch (error) { toast.error(error instanceof Error ? error.message : "সেভ করা গেল না।"); }
+    try { await updateNoun(editing.id, editing.values); setEditing(null); toast.success("সেভ হলো"); router.refresh(); } catch (error) { toast.error(errorMessage(error, "সেভ করা গেল না।")); }
   });
   const remove = (noun: Noun) => start(async () => {
     if (!window.confirm(`“${nounKey(noun)}” মুছে ফেলবে? সবার table থেকে মুছে যাবে।`)) return;
-    try { await deleteNoun(noun.id); toast.success("মুছে ফেলা হলো"); router.refresh(); } catch (error) { toast.error(error instanceof Error ? error.message : "মোছা গেল না।"); }
+    try { await deleteNoun(noun.id); toast.success("মুছে ফেলা হলো"); router.refresh(); } catch (error) { toast.error(errorMessage(error, "মোছা গেল না।")); }
   });
 
   const fields = [
@@ -599,15 +600,15 @@ function AffixTable({ affixes, canEdit, learned }: { affixes: Affix[]; canEdit: 
   }
   const add = () => start(async () => {
     if (taken(draft)) { toast.error(`“${draft.affix.trim()}” আগেই table-এ আছে।`); return; }
-    try { await createAffix(draft); setDraft({ ...draft, affix: "", meaning: "", example: "" }); toast.success(`“${draft.affix}” যোগ হলো`); router.refresh(); } catch (error) { toast.error(error instanceof Error ? error.message : "যোগ করা গেল না।"); }
+    try { await createAffix(draft); setDraft({ ...draft, affix: "", meaning: "", example: "" }); toast.success(`“${draft.affix}” যোগ হলো`); router.refresh(); } catch (error) { toast.error(errorMessage(error, "যোগ করা গেল না।")); }
   });
   const save = () => editing && start(async () => {
     if (taken(editing.values, editing.id)) { toast.error(`“${editing.values.affix.trim()}” আগেই table-এ আছে।`); return; }
-    try { await updateAffix(editing.id, editing.values); setEditing(null); toast.success("সেভ হলো"); router.refresh(); } catch (error) { toast.error(error instanceof Error ? error.message : "সেভ করা গেল না।"); }
+    try { await updateAffix(editing.id, editing.values); setEditing(null); toast.success("সেভ হলো"); router.refresh(); } catch (error) { toast.error(errorMessage(error, "সেভ করা গেল না।")); }
   });
   const remove = (entry: Affix) => start(async () => {
     if (!window.confirm(`“${entry.affix}” মুছে ফেলবে? সবার table থেকে মুছে যাবে।`)) return;
-    try { await deleteAffix(entry.id); toast.success("মুছে ফেলা হলো"); router.refresh(); } catch (error) { toast.error(error instanceof Error ? error.message : "মোছা গেল না।"); }
+    try { await deleteAffix(entry.id); toast.success("মুছে ফেলা হলো"); router.refresh(); } catch (error) { toast.error(errorMessage(error, "মোছা গেল না।")); }
   });
 
   return <section className="space-y-3">

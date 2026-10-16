@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, CheckCircle2, ClipboardCheck, Lock, Pause, Play, RotateCcw, Timer, X, XCircle } from "lucide-react";
 import { toast } from "sonner";
+import { errorMessage } from "@/lib/user-error";
 // Solutions are shown in the read-only Quill view (BookText).
 import "quill/dist/quill.snow.css";
 import { BookText, MathText } from "@/components/math-text";
@@ -44,7 +45,7 @@ function useMove(setId: string) {
   const [pending, setPending] = useState(false);
   const move = async (status: SetView["status"], done: string, to?: string) => {
     setPending(true);
-    try { await setQuestionSetStatus(setId, status); toast.success(done); if (to) router.push(to); router.refresh(); } catch (error) { toast.error(error instanceof Error ? error.message : "Couldn't move it."); } finally { setPending(false); }
+    try { await setQuestionSetStatus(setId, status); toast.success(done); if (to) router.push(to); router.refresh(); } catch (error) { toast.error(errorMessage(error, "Couldn't move it.")); } finally { setPending(false); }
   };
   return { pending, move };
 }
@@ -199,7 +200,7 @@ export function ExamView({ set }: { set: SetView }) {
       router.refresh();
     } catch (error) {
       submitted.current = false;
-      toast.error(error instanceof Error ? error.message : "Couldn't submit the test.");
+      toast.error(errorMessage(error, "Couldn't submit the test."));
       setSubmitting(false);
     }
   }

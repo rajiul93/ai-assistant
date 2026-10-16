@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { normalizeBdPhone } from "@/lib/phone";
 import { prisma } from "@/lib/prisma";
+import { userError } from "@/lib/user-error";
 
 /**
  * The user's own profile: name and phone (docs/profile-and-group-chat-plan.md §1). The phone is
@@ -24,7 +25,7 @@ const profileSchema = z.object({
 export async function updateProfile(input: unknown) {
   const me = await requireUser();
   const parsed = profileSchema.safeParse(input);
-  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "তথ্য ঠিক নেই।");
+  if (!parsed.success) throw userError(parsed.error.issues[0]?.message ?? "তথ্য ঠিক নেই।");
   const { name, phone } = parsed.data;
   // profileUpdatedAt tells sign-in to keep this name instead of the Google one.
   await prisma.user.update({ where: { id: me.id }, data: { name, phone, profileUpdatedAt: new Date() } });

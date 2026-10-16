@@ -15,6 +15,7 @@ import { useAssistantStore } from "@/store/assistant";
 import { useTimerStore } from "@/store/timer";
 import { useTimerStartStore, type TimerStartRequest } from "@/store/timer-start";
 import { MathText } from "@/components/math-text";
+import { errorMessage } from "@/lib/user-error";
 
 /** The home page's pastel tones, one per subject in turn. */
 const tones = ["bg-blue-50 text-blue-600", "bg-rose-50 text-rose-500", "bg-emerald-50 text-emerald-600", "bg-orange-50 text-orange-500", "bg-violet-50 text-violet-600", "bg-sky-50 text-sky-600", "bg-pink-50 text-pink-500", "bg-teal-50 text-teal-600", "bg-amber-50 text-amber-600", "bg-indigo-50 text-indigo-600"];
@@ -62,7 +63,7 @@ function PickerBody({ request, onDone }: { request: TimerStartRequest; onDone: (
       setNewName("");
       setAddOpen(false);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't add the subject");
+      toast.error(errorMessage(error, "Couldn't add the subject"));
     } finally {
       setAdding(false);
     }

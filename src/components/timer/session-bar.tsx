@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { saveStudySession } from "@/server/actions/sessions";
 import { updateTaskStatus } from "@/server/actions/tasks";
 import { useTimerStore } from "@/store/timer";
+import { errorMessage } from "@/lib/user-error";
 
 /**
  * The running study session, pinned above the tab bar on every page (like a music mini-player):
@@ -60,11 +61,11 @@ export function SessionBar({ variant = "bar" }: { variant?: "bar" | "chip" }) {
           label: "Mark task done",
           onClick: () => void updateTaskStatus(taskId, "FINISHED")
             .then(async () => { toast.success("Task marked done"); await queryClient.invalidateQueries({ queryKey: ["tasks"] }); router.refresh(); })
-            .catch((error: Error) => toast.error(error.message)),
+            .catch((error: Error) => toast.error(errorMessage(error))),
         },
       } : undefined);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't save the session");
+      toast.error(errorMessage(error, "Couldn't save the session"));
     } finally {
       setSaving(false);
     }

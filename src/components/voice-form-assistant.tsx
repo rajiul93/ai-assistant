@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useBestMic } from "@/lib/use-best-mic";
 import { speak, stopSpeaking } from "@/lib/voice";
 import { useVoiceAllowed } from "@/lib/voice-access";
+import { errorMessage } from "@/lib/user-error";
 
 export type VoiceStep = { key: string; question: string; label: string };
 
@@ -21,7 +22,7 @@ export function VoiceFormAssistant({ title = "Voice form", steps, onComplete, co
     context: () => steps[stepIndex]?.question ?? "",
     onInterim: (value) => { if (value !== "…") setTranscript(value); },
     onResult: (value) => setTranscript(value),
-    onError: (error) => setVoiceError(error.message),
+    onError: (error) => setVoiceError(errorMessage(error)),
   });
   const current = steps[stepIndex];
   function startListening() { setVoiceError(""); voice.start(); }

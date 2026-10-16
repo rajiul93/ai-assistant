@@ -25,6 +25,7 @@ import { TopicSelect } from "@/components/subject-topic-filter";
 import type { TopicNode } from "@/lib/subject-filter";
 import { cn } from "@/lib/utils";
 import { createQuestionSet, updateQuestionSet } from "@/server/actions/preliminary";
+import { errorMessage } from "@/lib/user-error";
 
 const emptyQuestion = (): ReviewedQuestion => ({ text: "", options: ["", "", "", ""], correctIndex: -1 });
 
@@ -132,7 +133,7 @@ export function QuestionSetForm({ subjects, topics = [], initial }: {
     },
     onInterim: setHeard,
     onResult: (said) => { const target = dictatingRef.current; endDictation(); if (target) insertSpoken(target, said); },
-    onError: (error) => { endDictation(); toast.error(error.message); },
+    onError: (error) => { endDictation(); toast.error(errorMessage(error)); },
   });
   function dictate(target: DictationTarget) {
     mic.stop();
@@ -206,7 +207,7 @@ export function QuestionSetForm({ subjects, topics = [], initial }: {
         if (file.type.startsWith("image/")) setPages((value) => [...value, { src: URL.createObjectURL(file), name: file.name }]);
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "পাতাটা পড়া গেল না।");
+      toast.error(errorMessage(error, "পাতাটা পড়া গেল না।"));
     } finally {
       setReading(null);
     }
@@ -232,7 +233,7 @@ export function QuestionSetForm({ subjects, topics = [], initial }: {
       else { await createQuestionSet(payload); toast.success("Set বানানো হলো — Todo-তে আছে"); router.push("/preliminary?status=todo"); }
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't save the set.");
+      toast.error(errorMessage(error, "Couldn't save the set."));
     } finally {
       setSaving(false);
     }

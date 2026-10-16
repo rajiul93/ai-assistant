@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { initialOf } from "@/lib/collaboration";
 import { formatBdPhone, normalizeBdPhone } from "@/lib/phone";
 import { updateProfile } from "@/server/actions/profile";
+import { errorMessage } from "@/lib/user-error";
 
 type Profile = { name: string | null; phone: string | null; email: string; image: string | null };
 
@@ -30,7 +31,7 @@ export function ProfileForm({ initial }: { initial: Profile }) {
         toast.success("প্রোফাইল সেভ হলো");
         router.refresh();
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "সেভ করা গেল না।");
+        toast.error(errorMessage(error, "সেভ করা গেল না।"));
       }
     });
   }

@@ -20,6 +20,7 @@ import {
 } from "@/lib/question-bank";
 import { cn } from "@/lib/utils";
 import { checkBankRows, deleteBankSets, importBankRows, type listAllBankSets } from "@/server/actions/question-bank";
+import { errorMessage } from "@/lib/user-error";
 
 type BankSetRow = Awaited<ReturnType<typeof listAllBankSets>>[number];
 /** What uploading a row would do: add it, update it, nothing (already there), or nothing because an admin edited it in the app. */
@@ -122,7 +123,7 @@ export function BankUpload({ sets }: { sets: BankSetRow[] }) {
         setProgress(state);
       } catch (error) {
         // Uploading is idempotent: running it again picks up where it stopped without duplicates.
-        setProgress({ ...state, failed: error instanceof Error ? error.message : "আপলোড থেমে গেছে" });
+        setProgress({ ...state, failed: errorMessage(error, "আপলোড থেমে গেছে") });
         toast.error("আপলোড মাঝপথে থেমেছে — আবার চাপলে বাকিটা যাবে, কিছু দুবার হবে না।");
         return;
       }
@@ -147,7 +148,7 @@ export function BankUpload({ sets }: { sets: BankSetRow[] }) {
       setPicked(new Set());
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "মোছা গেল না।");
+      toast.error(errorMessage(error, "মোছা গেল না।"));
     } finally {
       setDeleting(false);
       setConfirmDelete(null);

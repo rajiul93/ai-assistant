@@ -17,6 +17,7 @@ import { adminButton, ConfirmDelete, FreePill, iconButton, MoveDialog, useBankRu
 import { BankQuestionList, QuestionEditor } from "./bank-question-list";
 import { ChapterPaste } from "./chapter-paste";
 import { ChapterUpload } from "./chapter-upload";
+import { errorMessage } from "@/lib/user-error";
 
 type Chapter = NonNullable<Awaited<ReturnType<typeof getBankChapter>>>;
 type Tab = "article" | "mcq" | "short";
@@ -60,7 +61,7 @@ function SendChapter({ chapterId, kind, count, planned }: { chapterId: string; k
       setSent(href);
       toast.success(`${result.count}টি প্রশ্ন ${target}-এর Todo-তে গেল${result.partial ? " (Paid-গুলো বাদে)" : ""}`, { action: { label: "দেখো", onClick: () => router.push(href) } });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "পাঠানো গেল না।");
+      toast.error(errorMessage(error, "পাঠানো গেল না।"));
     } finally {
       setBusy(false);
     }
@@ -148,7 +149,7 @@ function McqDialog({ chapterId, open, onClose }: { chapterId: string; open: bool
             onClose();
             router.refresh();
           } catch (error) {
-            toast.error(error instanceof Error ? error.message : "সেভ করা গেল না।");
+            toast.error(errorMessage(error, "সেভ করা গেল না।"));
           }
         }} />
     </DialogContent>

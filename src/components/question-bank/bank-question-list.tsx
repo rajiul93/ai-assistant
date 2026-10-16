@@ -12,6 +12,7 @@ import { updateBankQuestion } from "@/server/actions/question-bank";
 import { deleteBankItems, setBankItemsFree } from "@/server/actions/question-bank-general";
 import { ConfirmDelete, FreePill } from "./bank-admin";
 import { MoveToChapter } from "./move-to-chapter";
+import { errorMessage } from "@/lib/user-error";
 
 type BankQuestion = { id: string; text: string; options: string[]; correctIndex: number; solution: string | null; explanation: string | null; hasSolution?: boolean; hasExplanation?: boolean; editedAt?: Date | string | null; free?: boolean };
 export type Draft = Omit<BankQuestion, "editedAt" | "hasSolution" | "hasExplanation" | "free">;
@@ -119,7 +120,7 @@ export function BankQuestionList({ questions: initial, canEdit, chapterItems = f
       toast.success(done);
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "করা গেল না।");
+      toast.error(errorMessage(error, "করা গেল না।"));
     } finally {
       setItemBusy(false);
     }
@@ -145,7 +146,7 @@ export function BankQuestionList({ questions: initial, canEdit, chapterItems = f
       toast.success("সেভ হলো");
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "সেভ করা গেল না।");
+      toast.error(errorMessage(error, "সেভ করা গেল না।"));
     }
   }
 
@@ -156,7 +157,7 @@ export function BankQuestionList({ questions: initial, canEdit, chapterItems = f
       if (!results[0]) { toast.error("AI এই প্রশ্নটা গুছাতে পারেনি — হাতে ঠিক করুন।"); return; }
       setEditing({ id: question.id, draft: results[0], aiFilled: true });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "AI দিয়ে করা গেল না।");
+      toast.error(errorMessage(error, "AI দিয়ে করা গেল না।"));
     } finally {
       setThinking(null);
     }
@@ -177,7 +178,7 @@ export function BankQuestionList({ questions: initial, canEdit, chapterItems = f
         before.push(...result.originals);
         skipped += result.skipped;
       } catch (error) {
-        toast.error(`${error instanceof Error ? error.message : "AI থেমে গেছে"} — যতটুকু হয়েছে, সেভ আছে।`);
+        toast.error(`${errorMessage(error, "AI থেমে গেছে")} — যতটুকু হয়েছে, সেভ আছে।`);
         break;
       } finally {
         setRun({ done: Math.min(start + batch.length, ids.length), total: ids.length });

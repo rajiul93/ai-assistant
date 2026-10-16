@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { memberConversation } from "@/server/collaboration/conversations";
 import { areFriends, friendIdsOf, personSelect, publicPerson } from "@/server/collaboration/people";
 import { emitTo } from "@/server/collaboration/realtime";
+import { userError } from "@/lib/user-error";
 
 /**
  * One-to-one chat between friends. Postgres keeps every message; socket.io only delivers them at
@@ -23,7 +24,7 @@ export async function openConversation(friendId: string) {
   const [userAId, userBId] = orderPair(me.id, otherId);
   const existing = await prisma.conversation.findUnique({ where: { userAId_userBId: { userAId, userBId } }, select: { id: true } });
   if (existing) return existing.id;
-  if (!(await areFriends(me.id, otherId))) throw new Error("শুধু friend-দের সাথে chat করা যায়।");
+  if (!(await areFriends(me.id, otherId))) throw userError("শুধু friend-দের সাথে chat করা যায়।");
   const created = await prisma.conversation.upsert({ where: { userAId_userBId: { userAId, userBId } }, create: { userAId, userBId }, update: {}, select: { id: true } });
   return created.id;
 }
@@ -33,8 +34,8 @@ export async function sendMessage(input: unknown) {
   const me = await requireUser();
   const { conversationId, body } = z.object({ conversationId: idSchema, body: z.string().trim().min(1, "কিছু লেখো").max(MESSAGE_MAX, `সর্বোচ্চ ${MESSAGE_MAX} অক্ষর`) }).parse(input);
   const member = await memberConversation(me.id, conversationId);
-  if (!member) throw new Error("Chat পাওয়া যায়নি।");
-  if (!(await areFriends(me.id, member.otherId))) throw new Error("আপনারা আর friend নন — নতুন message পাঠানো যাবে না।");
+  if (!member) throw userError("Chat পাওয়া যায়নি।");
+  if (!(await areFriends(me.id, member.otherId))) throw userError("আপনারা আর friend নন — নতুন message পাঠানো যাবে না।");
 
   const now = new Date();
   const message = await prisma.$transaction(async (tx) => {
@@ -52,7 +53,7 @@ export async function sendMessage(input: unknown) {
 export async function markConversationRead(conversationId: string) {
   const me = await requireUser();
   const member = await memberConversation(me.id, idSchema.parse(conversationId));
-  if (!member) throw new Error("Chat পাওয়া যায়নি।");
+  if (!member) throw userError("Chat পাওয়া যায়নি।");
   await prisma.conversation.update({ where: { id: member.conversation.id }, data: { [member.mine]: new Date() } });
   void emitTo([me.id, member.otherId], { type: "read", conversationId: member.conversation.id });
 }

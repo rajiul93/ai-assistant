@@ -10,6 +10,7 @@ import { shareTypeLabel, type ShareType } from "@/lib/collaboration";
 import { cn } from "@/lib/utils";
 import { shareItem, shareTargets } from "@/server/actions/shares";
 import { useLive } from "./live-provider";
+import { errorMessage } from "@/lib/user-error";
 
 /**
  * "Share" for a note, task, Preliminary set or Short Question set: pick friends, send. Each friend
@@ -41,7 +42,7 @@ export function ShareDialog({ type, itemId, title, onClose }: { type: ShareType;
       refresh();
       onClose();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Share করা গেল না।");
+      toast.error(errorMessage(error, "Share করা গেল না।"));
     } finally {
       setSending(false);
     }

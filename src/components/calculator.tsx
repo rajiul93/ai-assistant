@@ -6,6 +6,7 @@ import { evaluate, formatResult, toFraction, toLatex, type AngleMode } from "@/l
 import { renderLatex } from "@/lib/math";
 import { onOpenTool } from "@/components/tool-dock";
 import { cn } from "@/lib/utils";
+import { errorMessage } from "@/lib/user-error";
 
 type Key = { label: string; insert?: string; bracket?: Opener; action?: "clear" | "back" | "equals" | "second" | "ans"; tone?: "fn" | "op" | "eq" | "danger" };
 
@@ -101,7 +102,7 @@ export function Calculator() {
       setExpression(result.text);
       setError(null);
     } catch (problem) {
-      setError(problem instanceof Error ? problem.message : "হিসাব হলো না");
+      setError(errorMessage(problem, "হিসাব হলো না"));
     }
   };
 

@@ -18,6 +18,7 @@ import { dayjs } from "@/lib/dayjs";
 import { cn } from "@/lib/utils";
 import { jobApplicationSchema, type JobApplicationInput } from "@/lib/validations";
 import { createApplication, updateApplication } from "@/server/actions/applications";
+import { errorMessage } from "@/lib/user-error";
 
 const toDay = (date: Date | null | undefined) => (date ? dayjs(date).format("YYYY-MM-DD") : "");
 
@@ -125,7 +126,7 @@ export function ApplicationForm({ application, onSuccess }: { application?: JobA
       setEditorKey((key) => key + 1);
       toast.success("File থেকে পূরণ হয়েছে — একবার দেখে নিয়ে সেভ করুন।");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't read that file.");
+      toast.error(errorMessage(error, "Couldn't read that file."));
     } finally {
       setReading(false);
     }
@@ -143,7 +144,7 @@ export function ApplicationForm({ application, onSuccess }: { application?: JobA
       await queryClient.invalidateQueries({ queryKey: ["applications"] });
       onSuccess?.();
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.error(errorMessage(error)),
   });
 
   const sector = useWatch({ control: form.control, name: "sector" });

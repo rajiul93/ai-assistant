@@ -3,6 +3,7 @@ import type { BankExam, PlanType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { quote, type PlanChoice, type PricingCatalog, type Quote } from "@/lib/pricing";
 import { isAdminUser } from "@/server/roles";
+import { userError } from "@/lib/user-error";
 
 /*
  * Server-only pricing and access helpers (docs/subscription-plan.md). Not a "use server" file: these
@@ -50,7 +51,7 @@ export function allQuotes(catalog: PricingCatalog) {
 export async function priceChoice(choice: PlanChoice) {
   const catalog = await loadCatalog();
   const result = quote(catalog, choice);
-  if (!result) throw new Error("এই plan এখন বিক্রি হচ্ছে না। পাতাটা আবার খুলে বেছে নিন।");
+  if (!result) throw userError("এই plan এখন বিক্রি হচ্ছে না। পাতাটা আবার খুলে বেছে নিন।");
   const tier = await prisma.aiTier.findUniqueOrThrow({ where: { planType: result.planType } });
   return { quote: result, tier, catalog };
 }

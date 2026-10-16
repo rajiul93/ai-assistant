@@ -9,6 +9,7 @@ import { PickDialog } from "@/components/pick-dialog";
 import { cn } from "@/lib/utils";
 import { attachNoteToTask, createTaskFromNote, detachNoteFromTask, listTaskChoices, setNoteSubject } from "@/server/actions/notes";
 import { MathText } from "@/components/math-text";
+import { errorMessage } from "@/lib/user-error";
 
 export type SubjectOption = { id: string; name: string };
 export type TopicOption = { id: string; name: string; subjectId: string; parentName?: string | null };
@@ -58,7 +59,7 @@ export function NoteLinks({ noteId, subjectId, topicId, tasks, subjects, topics 
     } catch (error) {
       setSubject(before.subject);
       setTopic(before.topic);
-      toast.error(error instanceof Error ? error.message : "Couldn't save the subject.");
+      toast.error(errorMessage(error, "Couldn't save the subject."));
     } finally {
       setSavingSubject(false);
     }
@@ -71,7 +72,7 @@ export function NoteLinks({ noteId, subjectId, topicId, tasks, subjects, topics 
       else await detachNoteFromTask(noteId, taskId);
       await refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't update the task.");
+      toast.error(errorMessage(error, "Couldn't update the task."));
     } finally {
       setBusyId(null);
     }
@@ -85,7 +86,7 @@ export function NoteLinks({ noteId, subjectId, topicId, tasks, subjects, topics 
       toast.success("এই note দিয়ে নতুন task বানানো হলো");
       setPickerOpen(false);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Couldn't create the task.");
+      toast.error(errorMessage(error, "Couldn't create the task."));
     } finally {
       setCreating(false);
     }

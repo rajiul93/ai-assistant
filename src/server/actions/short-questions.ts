@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { APP_TIMEZONE, dayjs } from "@/lib/dayjs";
 import { prisma } from "@/lib/prisma";
 import { answersMatch, withoutDuplicateShorts, type ShortAttemptDetail } from "@/lib/short-questions";
+import { userError } from "@/lib/user-error";
 
 /**
  * Short Question: question–answer sets, moved Todo → Doing (study, answers shown) → Testing (exam,
@@ -31,13 +32,13 @@ const statuses = ["TODO", "DOING", "TESTING", "DONE"] as const;
 
 async function ownedSet(userId: string, id: string) {
   const set = await prisma.shortQuestionSet.findFirst({ where: { id, userId } });
-  if (!set) throw new Error("Question set not found.");
+  if (!set) throw userError("Question set not found.");
   return set;
 }
 
 async function ownedSubject(userId: string, subjectId: string) {
   const subject = await prisma.subject.findFirst({ where: { id: subjectId, userId }, select: { id: true } });
-  if (!subject) throw new Error("Subject not found.");
+  if (!subject) throw userError("Subject not found.");
   return subject.id;
 }
 
@@ -45,7 +46,7 @@ async function ownedSubject(userId: string, subjectId: string) {
 async function ownedTopic(userId: string, topicId: string | null | undefined, subjectId: string | null) {
   if (!topicId) return null;
   const topic = await prisma.topic.findFirst({ where: { id: topicId, userId }, select: { id: true, subjectId: true } });
-  if (!topic || topic.subjectId !== subjectId) throw new Error("Topic-টা এই subject-এর না।");
+  if (!topic || topic.subjectId !== subjectId) throw userError("Topic-টা এই subject-এর না।");
   return topic.id;
 }
 
@@ -95,7 +96,7 @@ export async function createShortQuestionSet(input: unknown) {
 export async function updateShortQuestionSet(id: string, input: unknown) {
   const user = await requireUser();
   const set = await ownedSet(user.id, id);
-  if (set.status === "TESTING") throw new Error("Test চলার সময় প্রশ্ন বদলানো যাবে না। আগে Doing-এ ফেরাও।");
+  if (set.status === "TESTING") throw userError("Test চলার সময় প্রশ্ন বদলানো যাবে না। আগে Doing-এ ফেরাও।");
   const data = setSchema.parse(input);
   const subjectId = await ownedSubject(user.id, data.subjectId);
   const topicId = await ownedTopic(user.id, data.topicId, subjectId);
@@ -136,11 +137,11 @@ export async function mergeShortQuestionSets(input: unknown) {
     where: { id: { in: ids }, userId: user.id },
     select: { id: true, questions: { orderBy: { position: "asc" }, select: { text: true, answer: true } } },
   });
-  if (sets.length !== ids.length) throw new Error("Question set not found.");
+  if (sets.length !== ids.length) throw userError("Question set not found.");
   const all = ids.flatMap((id) => sets.find((set) => set.id === id)!.questions);
   const questions = withoutDuplicateShorts(all);
-  if (!questions.length) throw new Error("বেছে নেওয়া set-গুলোতে কোনো প্রশ্ন নেই।");
-  if (questions.length > 300) throw new Error(`একটা set-এ সর্বোচ্চ ৩০০ প্রশ্ন রাখা যায় — এখানে ${questions.length}টি।`);
+  if (!questions.length) throw userError("বেছে নেওয়া set-গুলোতে কোনো প্রশ্ন নেই।");
+  if (questions.length > 300) throw userError(`একটা set-এ সর্বোচ্চ ৩০০ প্রশ্ন রাখা যায় — এখানে ${questions.length}টি।`);
   const [created] = await prisma.$transaction([
     prisma.shortQuestionSet.create({
       data: {
@@ -168,8 +169,8 @@ export async function setShortQuestionSetStatus(id: string, status: QuestionSetS
   const user = await requireUser();
   const next = z.enum(statuses).parse(status);
   const set = await ownedSet(user.id, id);
-  if (next === "TESTING" && !(await prisma.shortQuestion.count({ where: { setId: set.id } }))) throw new Error("প্রশ্ন ছাড়া test হয় না।");
-  if (next === "DONE" && !(await prisma.shortTestAttempt.count({ where: { setId: set.id } }))) throw new Error("আগে একবার test দাও, তারপর Done।");
+  if (next === "TESTING" && !(await prisma.shortQuestion.count({ where: { setId: set.id } }))) throw userError("প্রশ্ন ছাড়া test হয় না।");
+  if (next === "DONE" && !(await prisma.shortTestAttempt.count({ where: { setId: set.id } }))) throw userError("আগে একবার test দাও, তারপর Done।");
   await prisma.shortQuestionSet.update({ where: { id: set.id }, data: { status: next } });
   revalidate(set.id);
 }
@@ -195,10 +196,10 @@ export async function getShortQuestionSet(id: string) {
 export async function submitShortTest(id: string, answers: Record<string, string>) {
   const user = await requireUser();
   const set = await ownedSet(user.id, id);
-  if (set.status !== "TESTING") throw new Error("এই set এখন Testing-এ নেই।");
+  if (set.status !== "TESTING") throw userError("এই set এখন Testing-এ নেই।");
   const given = z.record(z.string(), z.string().max(4000)).parse(answers);
   const questions = await prisma.shortQuestion.findMany({ where: { setId: set.id }, orderBy: { position: "asc" } });
-  if (!questions.length) throw new Error("প্রশ্ন নেই।");
+  if (!questions.length) throw userError("প্রশ্ন নেই।");
   const details: ShortAttemptDetail[] = questions.map((question) => {
     const written = (given[question.id] ?? "").trim();
     // Blank is wrong; an exact answer is right; anything else is for the user to judge.
@@ -215,7 +216,7 @@ export async function submitShortTest(id: string, answers: Record<string, string
 export async function markShortAnswer(attemptId: string, index: number, right: boolean) {
   const user = await requireUser();
   const attempt = await prisma.shortTestAttempt.findFirst({ where: { id: attemptId, userId: user.id } });
-  if (!attempt) throw new Error("Result not found.");
+  if (!attempt) throw userError("Result not found.");
   const details = attempt.details as ShortAttemptDetail[];
   const position = z.number().int().min(0).max(details.length - 1).parse(index);
   const next = details.map((detail, at) => (at === position ? { ...detail, right: z.boolean().parse(right) } : detail));

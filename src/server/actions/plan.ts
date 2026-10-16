@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+// Loaded for its effect: a failed schema.parse keeps its Bangla message on the live site.
+import "@/lib/user-error";
 import { studyPlanSchema } from "@/lib/validations";
 import { startOfDay } from "@/lib/dayjs";
 

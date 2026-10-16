@@ -12,6 +12,7 @@ import { studyPlanSchema, type StudyPlanInput } from "@/lib/validations";
 import { APP_TIMEZONE, birthdayAtAge, dayjs, diffParts, formatDate } from "@/lib/dayjs";
 import { cn } from "@/lib/utils";
 import { VoiceFormAssistant } from "@/components/voice-form-assistant";
+import { errorMessage } from "@/lib/user-error";
 
 const HOUR_PRESETS = [2, 3, 4, 6];
 const card = "rounded-3xl bg-white p-3.5 shadow-[0_6px_24px_-12px_rgba(15,23,42,0.15)] sm:p-5";
@@ -113,7 +114,7 @@ export function StudyPlanForm({
       setSavedNow(true);
       toast.success("প্ল্যান সেভ হয়েছে — Dashboard এখন এখান থেকে গুনবে।");
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => toast.error(errorMessage(error)),
   });
 
   return (

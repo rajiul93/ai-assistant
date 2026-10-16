@@ -19,6 +19,7 @@ import { isVoicePlaying, speak, subscribeVoicePlaying } from "@/lib/voice";
 import { useVoiceAllowed } from "@/lib/voice-access";
 import type { AiLock } from "@/lib/ai-limits";
 import { useAssistantStore, type AssistantEntry } from "@/store/assistant";
+import { errorMessage } from "@/lib/user-error";
 
 // The markdown renderer (react-markdown, highlight.js, KaTeX) is ~600KB and this panel sits in every
 // page's shell, so it loads only once the assistant is opened; until then a reply shows as plain text.
@@ -188,7 +189,7 @@ export function StudyAssistant({ aiLock }: { aiLock: AiLock }) {
       setBox("");
       void send(message, { voice: true, alternatives });
     },
-    onError: (error) => setVoiceError(error.message),
+    onError: (error) => setVoiceError(errorMessage(error)),
     onStopped: () => setLive({ stage: "result", tone: "ok", text: t.voiceStoppedStatus }),
   });
 

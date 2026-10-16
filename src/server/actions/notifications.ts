@@ -4,6 +4,8 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { sharePreview, type ShareType } from "@/lib/collaboration";
 import { prisma } from "@/lib/prisma";
+// Loaded for its effect: a failed schema.parse keeps its Bangla message on the live site.
+import "@/lib/user-error";
 import { personSelect, publicPerson } from "@/server/collaboration/people";
 
 /**

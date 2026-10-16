@@ -10,6 +10,7 @@ import { cancelFriendRequest, listFriendsOverview, respondFriendRequest } from "
 import { listIncomingShares, respondShare } from "@/server/actions/shares";
 import { useLive } from "./live-provider";
 import { SharePreviewDialog } from "./share-preview-dialog";
+import { errorMessage } from "@/lib/user-error";
 
 const answerButton = "flex h-9 items-center gap-1 rounded-lg px-3 text-sm font-medium disabled:opacity-50";
 
@@ -31,7 +32,7 @@ export function RequestsPanel({ compact = false }: { compact?: boolean }) {
   };
   async function run(id: string, work: () => Promise<void>) {
     setBusy(id);
-    try { await work(); reload(); } catch (error) { toast.error(error instanceof Error ? error.message : "করা গেল না।"); } finally { setBusy(null); }
+    try { await work(); reload(); } catch (error) { toast.error(errorMessage(error, "করা গেল না।")); } finally { setBusy(null); }
   }
 
   if (friends.isLoading || shares.isLoading) return compact ? null : <div className="space-y-2">{[0, 1].map((index) => <div key={index} className="h-16 animate-pulse rounded-2xl bg-zinc-100" />)}</div>;

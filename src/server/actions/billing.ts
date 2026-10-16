@@ -13,6 +13,7 @@ import { aiToday } from "@/server/ai-access";
 import { approvePayment, getPlanStatus, listPaymentAccounts, rejectPayment } from "@/server/billing";
 import { allQuotes, loadCatalog, loadSettings, priceChoice, runningSubscriptions } from "@/server/pricing";
 import { createSession, gatewayConfigured, newTransactionId } from "@/server/sslcommerz";
+import { userError } from "@/lib/user-error";
 
 function revalidateBilling() {
   revalidatePath("/", "layout");
@@ -21,7 +22,7 @@ function revalidateBilling() {
 /** Payment review: staff with the Billing permission (and the super admin). */
 async function requireAdmin() {
   const user = await requireUser();
-  if (!(await can(user, "billing"))) throw new Error("এটা করতে Billing permission লাগবে।");
+  if (!(await can(user, "billing"))) throw userError("এটা করতে Billing permission লাগবে।");
   return user;
 }
 
@@ -94,10 +95,10 @@ async function paymentData(choice: z.infer<typeof choiceSchema>) {
 export async function submitPayment(input: unknown) {
   const user = await requireUser();
   const parsed = paymentSchema.safeParse(input);
-  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Payment-এর তথ্য দেখে আবার দিন।");
+  if (!parsed.success) throw userError(parsed.error.issues[0]?.message ?? "Payment-এর তথ্য দেখে আবার দিন।");
   const data = parsed.data;
   const account = await prisma.paymentAccount.findFirst({ where: { method: data.method, enabled: true } });
-  if (!account) throw new Error("এই payment পদ্ধতি এখন বন্ধ আছে।");
+  if (!account) throw userError("এই payment পদ্ধতি এখন বন্ধ আছে।");
   try {
     const payment = await prisma.payment.create({
       data: { userId: user.id, ...(await paymentData(data)), method: data.method, senderNumber: data.senderNumber, transactionId: data.transactionId },
@@ -106,7 +107,7 @@ export async function submitPayment(input: unknown) {
     return { id: payment.id, amountBdt: payment.amountBdt, label: payment.packageName };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      throw new Error("এই Transaction ID আগেই জমা দেওয়া হয়েছে।");
+      throw userError("এই Transaction ID আগেই জমা দেওয়া হয়েছে।");
     }
     throw error;
   }
@@ -123,9 +124,9 @@ const onlineSchema = choiceSchema.extend({
 export async function startOnlinePayment(input: unknown) {
   const user = await requireUser();
   const parsed = onlineSchema.safeParse(input);
-  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "তথ্য দেখে আবার দিন।");
+  if (!parsed.success) throw userError(parsed.error.issues[0]?.message ?? "তথ্য দেখে আবার দিন।");
   const settings = await loadSettings();
-  if (!settings.gatewayEnabled || !gatewayConfigured()) throw new Error("Online payment এখন বন্ধ আছে। bKash বা Nagad দিয়ে দিন।");
+  if (!settings.gatewayEnabled || !gatewayConfigured()) throw userError("Online payment এখন বন্ধ আছে। bKash বা Nagad দিয়ে দিন।");
   const data = await paymentData(parsed.data);
   const tranId = newTransactionId();
   const payment = await prisma.payment.create({ data: { userId: user.id, ...data, method: "SSLCOMMERZ", senderNumber: parsed.data.phone, transactionId: tranId } });

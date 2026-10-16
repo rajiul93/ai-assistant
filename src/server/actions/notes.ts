@@ -12,6 +12,7 @@ import { callAI } from "@/server/assistant/ai";
 import { createTask } from "@/server/actions/tasks";
 import { writeNoteWithAi } from "@/server/note-writer";
 import { noteSummarySelect } from "@/server/queries";
+import { userError } from "@/lib/user-error";
 
 const noteSchema = z.object({
   title: z.string().trim().max(200),
@@ -33,7 +34,7 @@ const noteInclude = {
 
 async function ownedNote(userId: string, noteId: string) {
   const note = await prisma.note.findFirst({ where: { id: noteId, userId }, include: noteInclude });
-  if (!note) throw new Error("Note not found.");
+  if (!note) throw userError("Note not found.");
   return note;
 }
 
@@ -88,12 +89,12 @@ export async function setNoteSubject(noteId: string, input: { subjectId?: string
   if (data.topicId) {
     // A topic decides its subject, so the two can never disagree.
     const topic = await prisma.topic.findFirst({ where: { id: data.topicId, userId: user.id }, select: { id: true, subjectId: true } });
-    if (!topic) throw new Error("Topic not found.");
+    if (!topic) throw userError("Topic not found.");
     topicId = topic.id;
     subjectId = topic.subjectId;
   } else if (data.subjectId) {
     const subject = await prisma.subject.findFirst({ where: { id: data.subjectId, userId: user.id }, select: { id: true } });
-    if (!subject) throw new Error("Subject not found.");
+    if (!subject) throw userError("Subject not found.");
     subjectId = subject.id;
   }
   await prisma.note.update({ where: { id: note.id }, data: { subjectId, topicId } });
@@ -116,7 +117,7 @@ export async function attachNoteToTask(noteId: string, taskId: string) {
   const user = await requireUser();
   const note = await ownedNote(user.id, noteId);
   const task = await prisma.task.findFirst({ where: { id: taskId, userId: user.id }, select: { id: true } });
-  if (!task) throw new Error("Task not found.");
+  if (!task) throw userError("Task not found.");
   await prisma.taskNote.upsert({ where: { taskId_noteId: { taskId: task.id, noteId: note.id } }, create: { taskId: task.id, noteId: note.id }, update: {} });
   revalidateNoteLinks();
 }
@@ -200,12 +201,12 @@ export async function generateQuizFromNote(input: { noteId: string; count: numbe
   const user = await requireUser();
   const data = z.object({ noteId: z.string().min(1).max(64), count: z.number().int().min(3).max(50), lang: z.enum(["bn", "en"]).optional() }).parse(input);
   // A paid feature (owner, 2026-10-16): a running plan, or staff.
-  if (!(await hasPremium(user))) throw new Error("Note থেকে Preliminary বানানো paid feature — একটা plan নিলে পাবে।");
+  if (!(await hasPremium(user))) throw userError("Note থেকে Preliminary বানানো paid feature — একটা plan নিলে পাবে।");
   const note = await ownedNote(user.id, data.noteId);
   const text = htmlToPlainText(note.content).slice(0, 24_000);
-  if (text.length < 40) throw new Error("Note-এ প্রশ্ন বানানোর মতো যথেষ্ট লেখা নেই।");
+  if (text.length < 40) throw userError("Note-এ প্রশ্ন বানানোর মতো যথেষ্ট লেখা নেই।");
   const { blocked } = await checkAi(user, "suggestion");
-  if (blocked) throw new Error(aiBlockedMessage(blocked, data.lang === "en" ? "en" : "bn"));
+  if (blocked) throw userError(aiBlockedMessage(blocked, data.lang === "en" ? "en" : "bn"));
 
   // One call writes up to 20 questions in time. More (up to 50) are split over parts of the note
   // asked in parallel — each part its share — so they also cover the whole note without repeats.
@@ -220,7 +221,7 @@ export async function generateQuizFromNote(input: { noteId: string; count: numbe
     seen.add(key);
     return true;
   });
-  if (!questions.length) throw new Error("AI কোনো ঠিকঠাক প্রশ্ন বানাতে পারেনি, আবার চেষ্টা করো।");
+  if (!questions.length) throw userError("AI কোনো ঠিকঠাক প্রশ্ন বানাতে পারেনি, আবার চেষ্টা করো।");
   return { questions, topicName: note.title || "Note থেকে প্রশ্ন", subjectId: note.subjectId, topicId: note.topicId };
 }
 

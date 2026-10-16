@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { approvePayment } from "@/server/billing";
+import { userError } from "@/lib/user-error";
 
 /*
  * SSLCommerz online payments (docs/subscription-plan.md). Server-only: the store password never
@@ -47,7 +48,7 @@ export async function createSession(input: { tranId: string; amount: number; pro
   });
   const response = await fetch(`${baseUrl()}/gwprocess/v4/api.php`, { method: "POST", body: form, signal: AbortSignal.timeout(15_000), cache: "no-store" });
   const data = (await response.json().catch(() => null)) as { status?: string; GatewayPageURL?: string; failedreason?: string } | null;
-  if (!response.ok || data?.status !== "SUCCESS" || !data.GatewayPageURL) throw new Error(`Online payment খোলা গেল না${data?.failedreason ? ` (${data.failedreason})` : ""}। bKash/Nagad দিয়ে চেষ্টা করুন।`);
+  if (!response.ok || data?.status !== "SUCCESS" || !data.GatewayPageURL) throw userError(`Online payment খোলা গেল না${data?.failedreason ? ` (${data.failedreason})` : ""}। bKash/Nagad দিয়ে চেষ্টা করুন।`);
   return data.GatewayPageURL;
 }
 

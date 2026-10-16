@@ -11,6 +11,7 @@ import { APP_TIMEZONE, dayjs } from "@/lib/dayjs";
 import { cn } from "@/lib/utils";
 import { generateQuizFromNote, type DraftQuestion } from "@/server/actions/notes";
 import { createQuestionSet } from "@/server/actions/preliminary";
+import { errorMessage } from "@/lib/user-error";
 
 const COUNTS = [5, 10, 15, 20, 50];
 const LETTERS = ["ক", "খ", "গ", "ঘ"];
@@ -40,7 +41,7 @@ export function NoteQuizDialog({ noteId, subjects, premium, open, onOpenChange }
       setTopicName(result.topicName);
       setSubjectId(result.subjectId && subjects.some((subject) => subject.id === result.subjectId) ? result.subjectId : "");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "AI প্রশ্ন বানাতে পারল না");
+      toast.error(errorMessage(error, "AI প্রশ্ন বানাতে পারল না"));
     } finally {
       setBusy(false);
     }
@@ -62,7 +63,7 @@ export function NoteQuizDialog({ noteId, subjects, premium, open, onOpenChange }
       toast.success(`${bn(draft.questions.length)}টা প্রশ্ন Preliminary-তে সেভ হলো`, { action: { label: "খুলে দেখো", onClick: () => router.push(`/preliminary/${id}`) } });
       close();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "সেভ করা গেল না");
+      toast.error(errorMessage(error, "সেভ করা গেল না"));
     } finally {
       setSaving(false);
     }

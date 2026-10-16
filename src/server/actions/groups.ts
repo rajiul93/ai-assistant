@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { groupMember, groupMemberIds, groupUnreadCounts, lockGroup } from "@/server/collaboration/groups";
 import { friendIdsOf, personSelect, publicPerson } from "@/server/collaboration/people";
 import { emitTo, type GroupMessageEvent } from "@/server/collaboration/realtime";
+import { userError } from "@/lib/user-error";
 
 /**
  * Group chat among friends (docs/profile-and-group-chat-plan.md §2). Only the group admin renames,
@@ -27,9 +28,9 @@ const nameFor = (user: { name: string | null; email: string }) => displayName(us
 /** Everyone being added must be my friend right now and an active account. */
 async function assertAddable(tx: Tx, me: string, ids: string[]) {
   const friends = new Set(await friendIdsOf(me, tx));
-  if (ids.some((id) => !friends.has(id))) throw new Error("শুধু নিজের friend-দের গ্রুপে যোগ করা যায়।");
+  if (ids.some((id) => !friends.has(id))) throw userError("শুধু নিজের friend-দের গ্রুপে যোগ করা যায়।");
   const users = await tx.user.findMany({ where: { id: { in: ids }, status: "ACTIVE" }, select: { id: true, name: true, email: true } });
-  if (users.length !== ids.length) throw new Error("কয়েকজনকে যোগ করা যাচ্ছে না।");
+  if (users.length !== ids.length) throw userError("কয়েকজনকে যোগ করা যাচ্ছে না।");
   return users;
 }
 
@@ -45,8 +46,8 @@ const asEvent = (message: { id: string; senderId: string | null; kind: "TEXT" | 
 /** Inside a transaction that has locked the group: my membership, or an error. */
 async function requireMember(tx: Tx, groupId: string, userId: string, admin = false) {
   const member = await tx.chatGroupMember.findUnique({ where: { groupId_userId: { groupId, userId } }, select: { role: true } });
-  if (!member) throw new Error("গ্রুপ পাওয়া যায়নি।");
-  if (admin && member.role !== "ADMIN") throw new Error("শুধু গ্রুপ admin এটা করতে পারেন।");
+  if (!member) throw userError("গ্রুপ পাওয়া যায়নি।");
+  if (admin && member.role !== "ADMIN") throw userError("শুধু গ্রুপ admin এটা করতে পারেন।");
   return member;
 }
 
@@ -54,8 +55,8 @@ export async function createGroup(input: unknown) {
   const me = await requireUser();
   const { name, memberIds } = z.object({ name: nameSchema, memberIds: idsSchema }).parse(input);
   const adding = membersToAdd(memberIds, me.id, [me.id]);
-  if (!adding) throw new Error(`একটা গ্রুপে সর্বোচ্চ ${GROUP_MAX} জন।`);
-  if (adding.length + 1 < GROUP_MIN) throw new Error(`অন্তত ${GROUP_MIN - 1} জন friend বেছে নিন।`);
+  if (!adding) throw userError(`একটা গ্রুপে সর্বোচ্চ ${GROUP_MAX} জন।`);
+  if (adding.length + 1 < GROUP_MIN) throw userError(`অন্তত ${GROUP_MIN - 1} জন friend বেছে নিন।`);
 
   const now = new Date();
   const group = await prisma.$transaction(async (tx) => {
@@ -81,7 +82,7 @@ export async function renameGroup(input: unknown) {
   const me = await requireUser();
   const { groupId, name } = z.object({ groupId: idSchema, name: nameSchema }).parse(input);
   const { line, members } = await prisma.$transaction(async (tx) => {
-    if (!(await lockGroup(tx, groupId))) throw new Error("গ্রুপ পাওয়া যায়নি।");
+    if (!(await lockGroup(tx, groupId))) throw userError("গ্রুপ পাওয়া যায়নি।");
     await requireMember(tx, groupId, me.id, true);
     await tx.chatGroup.update({ where: { id: groupId }, data: { name } });
     return { line: await systemLine(tx, groupId, `${nameFor(me)} গ্রুপের নাম বদলে “${name}” রেখেছেন`), members: await groupMemberIds(groupId, tx) };
@@ -94,11 +95,11 @@ export async function addGroupMembers(input: unknown) {
   const me = await requireUser();
   const { groupId, memberIds } = z.object({ groupId: idSchema, memberIds: idsSchema.min(1, "কাউকে বেছে নিন") }).parse(input);
   const { line, members, added } = await prisma.$transaction(async (tx) => {
-    if (!(await lockGroup(tx, groupId))) throw new Error("গ্রুপ পাওয়া যায়নি।");
+    if (!(await lockGroup(tx, groupId))) throw userError("গ্রুপ পাওয়া যায়নি।");
     await requireMember(tx, groupId, me.id, true);
     const adding = membersToAdd(memberIds, me.id, await groupMemberIds(groupId, tx));
-    if (!adding) throw new Error(`একটা গ্রুপে সর্বোচ্চ ${GROUP_MAX} জন।`);
-    if (!adding.length) throw new Error("যাদের বেছেছেন তারা আগে থেকেই গ্রুপে আছেন।");
+    if (!adding) throw userError(`একটা গ্রুপে সর্বোচ্চ ${GROUP_MAX} জন।`);
+    if (!adding.length) throw userError("যাদের বেছেছেন তারা আগে থেকেই গ্রুপে আছেন।");
     const users = await assertAddable(tx, me.id, adding);
     await tx.chatGroupMember.createMany({ data: adding.map((userId) => ({ groupId, userId })) });
     await tx.notification.createMany({ data: adding.map((userId) => ({ userId, type: "GROUP_ADDED" as const, actorId: me.id, groupId })) });
@@ -113,12 +114,12 @@ export async function addGroupMembers(input: unknown) {
 export async function removeGroupMember(input: unknown) {
   const me = await requireUser();
   const { groupId, userId } = z.object({ groupId: idSchema, userId: idSchema }).parse(input);
-  if (userId === me.id) throw new Error("নিজেকে বাদ দিতে “গ্রুপ ছেড়ে দিন” চাপুন।");
+  if (userId === me.id) throw userError("নিজেকে বাদ দিতে “গ্রুপ ছেড়ে দিন” চাপুন।");
   const { line, members } = await prisma.$transaction(async (tx) => {
-    if (!(await lockGroup(tx, groupId))) throw new Error("গ্রুপ পাওয়া যায়নি।");
+    if (!(await lockGroup(tx, groupId))) throw userError("গ্রুপ পাওয়া যায়নি।");
     await requireMember(tx, groupId, me.id, true);
     const removed = await tx.chatGroupMember.findUnique({ where: { groupId_userId: { groupId, userId } }, select: { user: { select: { name: true, email: true } } } });
-    if (!removed) throw new Error("তিনি আর এই গ্রুপে নেই।");
+    if (!removed) throw userError("তিনি আর এই গ্রুপে নেই।");
     await tx.chatGroupMember.delete({ where: { groupId_userId: { groupId, userId } } });
     return { line: await systemLine(tx, groupId, `${nameFor(me)} বাদ দিয়েছেন: ${nameFor(removed.user)}`), members: await groupMemberIds(groupId, tx) };
   });
@@ -132,7 +133,7 @@ export async function leaveGroup(groupId: string) {
   const me = await requireUser();
   const id = idSchema.parse(groupId);
   const result = await prisma.$transaction(async (tx) => {
-    if (!(await lockGroup(tx, id))) throw new Error("গ্রুপ পাওয়া যায়নি।");
+    if (!(await lockGroup(tx, id))) throw userError("গ্রুপ পাওয়া যায়নি।");
     const mine = await requireMember(tx, id, me.id);
     await tx.chatGroupMember.delete({ where: { groupId_userId: { groupId: id, userId: me.id } } });
     const rest = await tx.chatGroupMember.findMany({ where: { groupId: id }, select: { userId: true, role: true, joinedAt: true, user: { select: { name: true, email: true } } } });
@@ -160,7 +161,7 @@ export async function leaveGroup(groupId: string) {
 export async function sendGroupMessage(input: unknown) {
   const me = await requireUser();
   const { groupId, body } = z.object({ groupId: idSchema, body: z.string().trim().min(1, "কিছু লেখো").max(MESSAGE_MAX, `সর্বোচ্চ ${MESSAGE_MAX} অক্ষর`) }).parse(input);
-  if (!(await groupMember(me.id, groupId))) throw new Error("আপনি আর এই গ্রুপে নেই।");
+  if (!(await groupMember(me.id, groupId))) throw userError("আপনি আর এই গ্রুপে নেই।");
   const message = await prisma.$transaction(async (tx) => {
     const created = await tx.groupMessage.create({ data: { groupId, senderId: me.id, body }, select: { id: true, senderId: true, kind: true, body: true, createdAt: true } });
     await tx.chatGroup.update({ where: { id: groupId }, data: { lastMessageAt: created.createdAt } });

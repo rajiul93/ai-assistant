@@ -21,6 +21,7 @@ import type { ShortAttemptDetail } from "@/lib/short-questions";
 import { cn } from "@/lib/utils";
 import { startSetStudy } from "@/store/timer-start";
 import { markShortAnswer, setShortQuestionSetStatus, submitShortTest, type getShortQuestionSet } from "@/server/actions/short-questions";
+import { errorMessage } from "@/lib/user-error";
 
 type SetView = NonNullable<Awaited<ReturnType<typeof getShortQuestionSet>>>;
 
@@ -43,7 +44,7 @@ function useMove(setId: string) {
   const [pending, setPending] = useState(false);
   const move = async (status: SetView["status"], done: string, to?: string) => {
     setPending(true);
-    try { await setShortQuestionSetStatus(setId, status); toast.success(done); if (to) router.push(to); router.refresh(); } catch (error) { toast.error(error instanceof Error ? error.message : "Couldn't move it."); } finally { setPending(false); }
+    try { await setShortQuestionSetStatus(setId, status); toast.success(done); if (to) router.push(to); router.refresh(); } catch (error) { toast.error(errorMessage(error, "Couldn't move it.")); } finally { setPending(false); }
   };
   return { pending, move };
 }
@@ -152,7 +153,7 @@ export function ShortExamView({ set }: { set: SetView }) {
       router.refresh();
     } catch (error) {
       submitted.current = false;
-      toast.error(error instanceof Error ? error.message : "Couldn't submit the test.");
+      toast.error(errorMessage(error, "Couldn't submit the test."));
       setSubmitting(false);
     }
   }
@@ -252,7 +253,7 @@ export function ShortResultView({ attempt, setId, status, topicName, subjectName
   async function mark(index: number, right: boolean) {
     const before = details;
     setDetails((list) => list.map((detail, at) => (at === index ? { ...detail, right } : detail)));
-    try { await markShortAnswer(attempt.id, index, right); router.refresh(); } catch (error) { setDetails(before); toast.error(error instanceof Error ? error.message : "Couldn't save the mark."); }
+    try { await markShortAnswer(attempt.id, index, right); router.refresh(); } catch (error) { setDetails(before); toast.error(errorMessage(error, "Couldn't save the mark.")); }
   }
 
   return <div className="space-y-4">

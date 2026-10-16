@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 import { areFriends, friendIdsOf, personSelect, publicPerson } from "@/server/collaboration/people";
 import { emitTo } from "@/server/collaboration/realtime";
 import { createFromPayload, snapshotForShare } from "@/server/collaboration/share-copy";
+import { userError } from "@/lib/user-error";
 
 /**
  * Sharing a note, task, Preliminary set or Short Question set with a friend: a frozen copy is
@@ -26,14 +27,14 @@ export async function shareItem(input: unknown) {
   const me = await requireUser();
   const { type, itemId, friendIds } = z.object({ type: typeSchema, itemId: idSchema, friendIds: z.array(idSchema).min(1).max(50) }).parse(input);
   const snapshot = await snapshotForShare(me.id, type, itemId);
-  if (!snapshot) throw new Error("জিনিসটা পাওয়া যায়নি (বা এতে কোনো প্রশ্ন নেই)।");
+  if (!snapshot) throw userError("জিনিসটা পাওয়া যায়নি (বা এতে কোনো প্রশ্ন নেই)।");
 
   const recipients = [...new Set(friendIds)].filter((id) => id !== me.id);
   const sent: string[] = [];
   const already: string[] = [];
   for (const recipientId of recipients) {
     // Only friends, checked here on the server.
-    if (!(await areFriends(me.id, recipientId))) throw new Error("শুধু friend-দের সাথে share করা যায়।");
+    if (!(await areFriends(me.id, recipientId))) throw userError("শুধু friend-দের সাথে share করা যায়।");
     try {
       await prisma.$transaction(async (tx) => {
         const share = await tx.shareRequest.create({
@@ -62,13 +63,13 @@ export async function respondShare(shareId: string, accept: boolean) {
   const me = await requireUser();
   const id = idSchema.parse(shareId);
   const share = await prisma.shareRequest.findFirst({ where: { id, recipientId: me.id }, select: { senderId: true, itemType: true, payload: true, status: true, createdItemId: true } });
-  if (!share) throw new Error("Share পাওয়া যায়নি।");
+  if (!share) throw userError("Share পাওয়া যায়নি।");
   const type = share.itemType as ShareType;
   if (share.status !== "PENDING") {
     if (share.status === "ACCEPTED" && share.createdItemId) return { status: "accepted" as const, path: sharedItemPath(type, share.createdItemId) };
-    throw new Error(share.status === "CANCELLED" ? "পাঠানো মানুষটি share বাতিল করেছে।" : "এটার উত্তর আগেই দেওয়া হয়েছে।");
+    throw userError(share.status === "CANCELLED" ? "পাঠানো মানুষটি share বাতিল করেছে।" : "এটার উত্তর আগেই দেওয়া হয়েছে।");
   }
-  if (accept && !(await areFriends(me.id, share.senderId))) throw new Error("আপনারা আর friend নন, তাই নেওয়া যাবে না।");
+  if (accept && !(await areFriends(me.id, share.senderId))) throw userError("আপনারা আর friend নন, তাই নেওয়া যাবে না।");
 
   const createdItemId = await prisma.$transaction(async (tx) => {
     const moved = await tx.shareRequest.updateMany({ where: { id, status: "PENDING" }, data: { status: accept ? "ACCEPTED" : "REJECTED", respondedAt: new Date() } });
@@ -107,10 +108,10 @@ export async function getSharePreview(shareId: string) {
     where: { id, recipientId: me.id },
     select: { id: true, itemType: true, title: true, payload: true, status: true, createdAt: true, sender: { select: personSelect } },
   });
-  if (!share) throw new Error("Share পাওয়া যায়নি।");
+  if (!share) throw userError("Share পাওয়া যায়নি।");
   const type = share.itemType as ShareType;
   const parsed = payloadSchemas[type].safeParse(share.payload);
-  if (!parsed.success) throw new Error("এই share-এর ভেতরের জিনিস পড়া গেল না।");
+  if (!parsed.success) throw userError("এই share-এর ভেতরের জিনিস পড়া গেল না।");
   const data = type === "NOTE" ? { ...(parsed.data as SharePayload["NOTE"]), content: sanitizeNoteHtml((parsed.data as SharePayload["NOTE"]).content) } : parsed.data;
   return {
     id: share.id, title: share.title, status: share.status, createdAt: share.createdAt,
@@ -124,7 +125,7 @@ export async function cancelShare(shareId: string) {
   const me = await requireUser();
   const id = idSchema.parse(shareId);
   const share = await prisma.shareRequest.findFirst({ where: { id, senderId: me.id }, select: { recipientId: true } });
-  if (!share) throw new Error("Share পাওয়া যায়নি।");
+  if (!share) throw userError("Share পাওয়া যায়নি।");
   await prisma.$transaction([
     prisma.shareRequest.updateMany({ where: { id, status: "PENDING" }, data: { status: "CANCELLED", respondedAt: new Date() } }),
     prisma.notification.deleteMany({ where: { shareRequestId: id, userId: share.recipientId, type: "SHARE_REQUEST" } }),

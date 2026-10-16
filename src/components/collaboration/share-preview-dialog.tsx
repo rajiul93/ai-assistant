@@ -13,6 +13,7 @@ import { OPTION_LETTERS } from "@/lib/preliminary";
 import { cn } from "@/lib/utils";
 import { getSharePreview, respondShare, type ShareContent } from "@/server/actions/shares";
 import { useLive } from "./live-provider";
+import { errorMessage } from "@/lib/user-error";
 
 const priorityLabel = { LOW: "কম", MEDIUM: "মাঝারি", HIGH: "বেশি" } as const;
 
@@ -94,7 +95,7 @@ export function SharePreviewDialog({ shareId, onClose }: { shareId: string; onCl
       refresh();
       onClose();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "করা গেল না।");
+      toast.error(errorMessage(error, "করা গেল না।"));
     } finally {
       setBusy(false);
     }
@@ -109,7 +110,7 @@ export function SharePreviewDialog({ shareId, onClose }: { shareId: string; onCl
 
       <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">
         {preview.isLoading ? <div className="flex justify-center py-12 text-zinc-400"><Loader2 className="size-6 animate-spin" /></div> : null}
-        {preview.isError ? <p className="py-8 text-center text-sm text-red-600">{preview.error instanceof Error ? preview.error.message : "দেখানো গেল না।"} <button type="button" onClick={() => void preview.refetch()} className="underline">আবার চেষ্টা করো</button></p> : null}
+        {preview.isError ? <p className="py-8 text-center text-sm text-red-600">{errorMessage(preview.error, "দেখানো গেল না।")} <button type="button" onClick={() => void preview.refetch()} className="underline">আবার চেষ্টা করো</button></p> : null}
         {data ? <ShareBody content={data.content} /> : null}
       </div>
 

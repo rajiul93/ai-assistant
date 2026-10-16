@@ -8,6 +8,7 @@ import { groupDetails, markGroupRead, sendGroupMessage } from "@/server/actions/
 import { Bubble, ChatAvatar, ChatFrame, ChatHeader, ChatTitle, Composer, ComposerNote, DayDivider, liveLabel, MessageScroller, ScrollerNotice, startsNewDay, SystemLine } from "./chat-ui";
 import { GroupInfoDialog } from "./group-dialogs";
 import { useLive, type LiveEvent } from "./live-provider";
+import { errorMessage } from "@/lib/user-error";
 
 type GroupMessage = { id: string; senderId: string | null; kind: "TEXT" | "SYSTEM"; body: string; createdAt: string; pending?: boolean; failed?: boolean };
 type Page = { messages: GroupMessage[]; hasOlder?: boolean; names: Record<string, string> };
@@ -136,7 +137,7 @@ export function GroupChatPanel({ me, groupId, initialName, onBack, onRead, onLef
       setMessages((current) => merge(current, page.messages));
       setHasOlder(Boolean(page.hasOlder));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "আগের message আনা গেল না।");
+      toast.error(errorMessage(error, "আগের message আনা গেল না।"));
     } finally {
       setLoadingOlder(false);
     }
@@ -149,7 +150,7 @@ export function GroupChatPanel({ me, groupId, initialName, onBack, onRead, onLef
       onRead();
     } catch (error) {
       setMessages((current) => current.map((message) => (message.id === tempId ? { ...message, pending: false, failed: true } : message)));
-      toast.error(error instanceof Error ? error.message : "Message পাঠানো গেল না।");
+      toast.error(errorMessage(error, "Message পাঠানো গেল না।"));
     }
   }
 

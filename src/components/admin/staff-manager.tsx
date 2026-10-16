@@ -16,6 +16,7 @@ import {
 import { STAFF_PERMISSIONS, type StaffPermission } from "@/lib/staff";
 import { cn } from "@/lib/utils";
 import { addStaff, removeStaff, setStaffPermissions } from "@/server/actions/staff";
+import { errorMessage } from "@/lib/user-error";
 
 type Row = { id: string; name: string | null; email: string; image: string | null; superAdmin: boolean; me: boolean; permissions: StaffPermission[] };
 
@@ -23,7 +24,7 @@ function useRun() {
   const router = useRouter();
   const [pending, start] = useTransition();
   const run = (action: () => Promise<unknown>, done: string, after?: () => void) => start(async () => {
-    try { await action(); toast.success(done); after?.(); router.refresh(); } catch (error) { toast.error(error instanceof Error ? error.message : "করা গেল না।"); }
+    try { await action(); toast.success(done); after?.(); router.refresh(); } catch (error) { toast.error(errorMessage(error, "করা গেল না।")); }
   });
   return { pending, run };
 }

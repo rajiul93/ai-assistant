@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { SharedTimer } from "@/lib/shared-timer";
 import { emitTo } from "@/server/collaboration/realtime";
+import { userError } from "@/lib/user-error";
 
 /**
  * The study timer shared by the user's devices (owner, 2026-10-15): one ActiveTimer row per user.
@@ -62,7 +63,7 @@ export async function claimSharedTimer(input: unknown): Promise<{ ok: true } | {
     // Two devices started at the same moment: the other one won.
     const winner = await prisma.activeTimer.findUnique({ where: { userId: user.id } });
     if (winner) return { ok: false, active: toShared(winner) };
-    throw new Error("টাইমার চালু করা গেল না।");
+    throw userError("টাইমার চালু করা গেল না।");
   }
 }
 
