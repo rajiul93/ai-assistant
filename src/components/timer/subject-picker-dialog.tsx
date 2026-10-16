@@ -29,6 +29,9 @@ export function SubjectPickerDialog() {
   </Dialog>;
 }
 
+/** "৫ মি.", "১ ঘণ্টা" for the short study goals; "25m" style for the usual ones. */
+const goalLabel = (minutes: number) => (minutes === 60 ? "১ ঘণ্টা" : minutes < 25 || minutes === 30 ? `${String(minutes).replace(/\d/g, (digit) => "০১২৩৪৫৬৭৮৯"[Number(digit)])} মি.` : `${minutes}m`);
+
 function PickerBody({ request, onDone }: { request: TimerStartRequest; onDone: () => void }) {
   const t = assistantStrings[useAssistantStore((state) => state.lang)];
   const queryClient = useQueryClient();
@@ -40,6 +43,7 @@ function PickerBody({ request, onDone }: { request: TimerStartRequest; onDone: (
   const [adding, setAdding] = useState(false);
   const [starting, setStarting] = useState(false);
   const [goal, setGoal] = useState<number | null>(request.minutes ?? null);
+  const goals = request.goals ?? [null, 25, 50, 90];
   const [addOpen, setAddOpen] = useState(false);
 
   const selected = subjects.find((subject) => subject.id === subjectId);
@@ -142,15 +146,15 @@ function PickerBody({ request, onDone }: { request: TimerStartRequest; onDone: (
       </NativeSelect> : null}
       <div>
         <p className="mb-1.5 flex items-center gap-1.5 text-[12px] font-semibold text-slate-500"><Target className="size-3.5" /> {t.pickerGoal}</p>
-        <div role="radiogroup" aria-label={t.pickerGoal} className="grid grid-cols-4 gap-1 rounded-2xl bg-slate-100 p-1">
-          {[null, 25, 50, 90].map((minutes) => <button
+        <div role="radiogroup" aria-label={t.pickerGoal} className={cn("grid gap-1 rounded-2xl bg-slate-100 p-1", goals.length === 5 ? "grid-cols-5" : "grid-cols-4")}>
+          {goals.map((minutes) => <button
             key={minutes ?? "open"}
             type="button"
             role="radio"
             aria-checked={goal === minutes}
             onClick={() => setGoal(minutes)}
             className={cn("h-10 rounded-xl text-sm font-semibold transition", goal === minutes ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-800")}
-          >{minutes ? `${minutes}m` : t.pickerNoGoal}</button>)}
+          >{minutes ? goalLabel(minutes) : t.pickerNoGoal}</button>)}
         </div>
       </div>
     </div>

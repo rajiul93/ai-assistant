@@ -23,6 +23,7 @@ import { ShareButton } from "@/components/collaboration/share-button";
 import { SubjectTopicFilter, useSubjectTopicFilter } from "@/components/subject-topic-filter";
 import { topicPath, type TopicNode } from "@/lib/subject-filter";
 import { cn } from "@/lib/utils";
+import { startSetStudy } from "@/store/timer-start";
 import { deleteQuestionSet, mergeQuestionSets, setQuestionSetStatus, type listQuestionSets } from "@/server/actions/preliminary";
 import { deleteShortQuestionSet, mergeShortQuestionSets, setShortQuestionSetStatus } from "@/server/actions/short-questions";
 
@@ -146,10 +147,10 @@ function SetCard({ kind, set, place, onDelete }: { kind: BoardKind; set: SetRow;
     </div>
 
     <div className="mt-3 flex flex-wrap gap-1.5">
-      {set.status === "TODO" ? <button type="button" disabled={pending} onClick={() => move("DOING", "Doing-এ নেওয়া হলো — এখন পড়ো")} className={primary}><BookOpenCheck className="size-4" /> পড়া শুরু করো</button> : null}
+      {set.status === "TODO" ? <button type="button" disabled={pending} onClick={() => { move("DOING", "Doing-এ নেওয়া হলো — এখন পড়ো"); startSetStudy(set); }} className={primary}><BookOpenCheck className="size-4" /> পড়া শুরু করো</button> : null}
 
       {set.status === "DOING" ? <>
-        <Link href={`${base}/${set.id}`} className={primary}><BookOpenCheck className="size-4" /> পড়ো</Link>
+        <Link href={`${base}/${set.id}`} onClick={() => startSetStudy(set)} className={primary}><BookOpenCheck className="size-4" /> পড়ো</Link>
         <button type="button" disabled={pending} onClick={() => move("TESTING", "Testing-এ নেওয়া হলো — উত্তর এখন লুকানো")} className={secondary}><ClipboardCheck className="size-4" /> Test-এ নাও</button>
       </> : null}
 
@@ -157,7 +158,7 @@ function SetCard({ kind, set, place, onDelete }: { kind: BoardKind; set: SetRow;
         <Link href={`${base}/${set.id}`} className={primary}><ClipboardCheck className="size-4" /> {set.attemptCount ? "আবার test দাও" : "Exam শুরু করো"}</Link>
         {last ? <Link href={`${base}/${set.id}/result/${last.id}`} className={secondary}>Result</Link> : null}
         {last ? <button type="button" disabled={pending} onClick={() => move("DONE", "Done!")} className={secondary}>Done-এ নাও</button> : null}
-        <button type="button" disabled={pending} onClick={() => move("DOING", "Doing-এ ফেরানো হলো")} className={secondary}><RotateCcw className="size-4" /> আবার পড়ো</button>
+        <button type="button" disabled={pending} onClick={() => { move("DOING", "Doing-এ ফেরানো হলো"); startSetStudy(set); }} className={secondary}><RotateCcw className="size-4" /> আবার পড়ো</button>
       </> : null}
 
       {set.status === "DONE" ? <>
