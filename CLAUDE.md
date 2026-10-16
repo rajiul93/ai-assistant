@@ -246,6 +246,11 @@ from a `"use server"` file**, or the browser could call them with someone else's
 
 ## Known issues and gotchas
 
+- **Thrown messages from server actions are hidden in production** (found 2026-10-16): the page
+  gets "Minified React error #441" instead of our Bangla text — only `next dev` shows it. Next's
+  docs: return expected errors as values. `addVideo` now returns `{ error }`; the other ~160
+  `throw new Error(…)` in `src/server/actions/*` still need the same change (with their callers).
+
 - `AGENTS.md` is rewritten by `next dev`; keep the `@AGENTS.md` line at the top of this file.
 - The Prisma CLI prints an upgrade notice for v8; stay on 6.19 unless deliberately upgrading.
 - Vercel runs migrations but **not seeds**; a new database needs `pnpm db:seed-vocabulary` once.

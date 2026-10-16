@@ -38,7 +38,12 @@ export function VideoLibrary({ videos, limit, subjects }: { videos: Video[]; lim
   };
 
   const add = useMutation({
-    mutationFn: () => addVideo({ url, subjectId: subjectId || null }),
+    mutationFn: async () => {
+      // The reason a video can't be added comes back as a value (a thrown message is hidden in production).
+      const result = await addVideo({ url, subjectId: subjectId || null });
+      if ("error" in result) throw new Error(result.error);
+      return result;
+    },
     onSuccess: ({ id }) => { toast.success("ভিডিও যোগ হলো"); setUrl(""); router.refresh(); open(id); },
     onError: (error: Error) => toast.error(error.message),
   });
