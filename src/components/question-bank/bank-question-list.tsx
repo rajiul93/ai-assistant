@@ -2,16 +2,19 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ListChecks, Loader2, Pencil, Plus, RotateCcw, Sparkles, WandSparkles, X } from "lucide-react";
+import { ArrowRightLeft, Check, ListChecks, Loader2, Pencil, Plus, RotateCcw, Sparkles, Trash2, WandSparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { BookText, MathText } from "@/components/math-text";
 import { SolutionNotes } from "@/components/preliminary/question-set-views";
 import { BANK_OPTION_LETTERS } from "@/lib/question-bank";
 import { cn } from "@/lib/utils";
 import { updateBankQuestion } from "@/server/actions/question-bank";
+import { deleteBankItems, setBankItemsFree } from "@/server/actions/question-bank-general";
+import { ConfirmDelete, FreePill } from "./bank-admin";
+import { MoveToChapter } from "./move-to-chapter";
 
-type BankQuestion = { id: string; text: string; options: string[]; correctIndex: number; solution: string | null; explanation: string | null; hasSolution?: boolean; hasExplanation?: boolean; editedAt?: Date | string | null };
-type Draft = Omit<BankQuestion, "editedAt" | "hasSolution" | "hasExplanation">;
+type BankQuestion = { id: string; text: string; options: string[]; correctIndex: number; solution: string | null; explanation: string | null; hasSolution?: boolean; hasExplanation?: boolean; editedAt?: Date | string | null; free?: boolean };
+export type Draft = Omit<BankQuestion, "editedAt" | "hasSolution" | "hasExplanation" | "free">;
 type BeautifyResponse = { results: Draft[]; skipped: number; originals: Draft[]; error?: string };
 
 const PER_CALL = 4;
@@ -36,7 +39,7 @@ type Task = { kind: "tidy" } | { kind: "solve"; fill: "missing" | "all" };
 const field = "w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm leading-relaxed outline-none focus:border-zinc-400";
 
 /** Typing a question, its options (4 or 5), the right answer, solution and explanation — with a book-style preview. */
-function QuestionEditor({ initial, aiFilled, onSave, onCancel }: { initial: Draft; aiFilled: boolean; onSave: (draft: Draft) => Promise<void>; onCancel: () => void }) {
+export function QuestionEditor({ initial, aiFilled, onSave, onCancel }: { initial: Draft; aiFilled: boolean; onSave: (draft: Draft) => Promise<void>; onCancel: () => void }) {
   const [draft, setDraft] = useState(initial);
   const [saving, setSaving] = useState(false);
   const set = (patch: Partial<Draft>) => setDraft((current) => ({ ...current, ...patch }));
@@ -95,10 +98,35 @@ function QuestionEditor({ initial, aiFilled, onSave, onCancel }: { initial: Draf
   </div>;
 }
 
-/** Read-only for everyone; admins also edit by hand or tidy one, some or all questions with AI. */
-export function BankQuestionList({ questions: initial, canEdit }: { questions: BankQuestion[]; canEdit: boolean }) {
+/**
+ * Read-only for everyone; admins also edit by hand or tidy one, some or all questions with AI.
+ * `chapterItems` (a General chapter's MCQs) adds Free/Paid and delete per question; `moveToChapter`
+ * moves a question to a chapter (from a set or another chapter).
+ */
+export function BankQuestionList({ questions: initial, canEdit, chapterItems = false, moveToChapter = false }: { questions: BankQuestion[]; canEdit: boolean; chapterItems?: boolean; moveToChapter?: boolean }) {
   const router = useRouter();
   const [questions, setQuestions] = useState(initial);
+  const [moving, setMoving] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [itemBusy, setItemBusy] = useState(false);
+
+  /** One staff change to a question; `drop` removes it from this list afterwards (moved or deleted). */
+  async function itemChange(action: () => Promise<unknown>, done: string, drop?: string) {
+    setItemBusy(true);
+    try {
+      await action();
+      if (drop) setQuestions((current) => current.filter((question) => question.id !== drop));
+      toast.success(done);
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "করা গেল না।");
+    } finally {
+      setItemBusy(false);
+    }
+  }
+
+  // Moving goes through MoveToChapter, which checks the target chapter for the same question first.
+  const openMove = (id: string) => setMoving(id);
   const [editing, setEditing] = useState<{ id: string; draft: Draft; aiFilled: boolean } | null>(null);
   const [thinking, setThinking] = useState<string | null>(null);
   const [selecting, setSelecting] = useState(false);
@@ -204,10 +232,17 @@ export function BankQuestionList({ questions: initial, canEdit }: { questions: B
       {questions.map((question, index) => {
         const isEditing = editing?.id === question.id;
         return <li key={question.id} className={cn("rounded-2xl border bg-white p-4", selecting && picked.has(question.id) ? "border-violet-400 ring-2 ring-violet-100" : "border-zinc-200")}>
-          <div className="flex items-start gap-2">
+          <div className={cn("flex items-start gap-2", canEdit && "flex-wrap sm:flex-nowrap")}>
             {selecting ? <input type="checkbox" checked={picked.has(question.id)} onChange={() => toggle(question.id)} aria-label={`প্রশ্ন ${index + 1} বাছো`} className="mt-1.5 size-4 shrink-0 accent-violet-700" /> : null}
-            <p className="min-w-0 flex-1 font-medium leading-relaxed"><span className="mr-1.5 text-zinc-400 tabular-nums">{index + 1}.</span>{isEditing ? <span className="text-sm text-violet-700">Edit হচ্ছে</span> : <MathText text={question.text} book />}</p>
-            {canEdit && !isEditing && !selecting ? <span className="flex shrink-0 gap-0.5">
+            {/* Staff tools take their own row on phones, so the question keeps the full width. */}
+            <p className={cn("min-w-0 flex-1 font-medium leading-relaxed", canEdit && !selecting && "basis-full sm:basis-0")}><span className="mr-1.5 text-zinc-400 tabular-nums">{index + 1}.</span>{isEditing ? <span className="text-sm text-violet-700">Edit হচ্ছে</span> : <MathText text={question.text} book />}</p>
+            {canEdit && !isEditing && !selecting ? <span className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-0.5">
+              {chapterItems ? <FreePill free={Boolean(question.free)} busy={itemBusy} onToggle={() => void itemChange(async () => {
+                await setBankItemsFree({ kind: "mcq", ids: [question.id], free: !question.free });
+                setQuestions((current) => current.map((item) => (item.id === question.id ? { ...item, free: !question.free } : item)));
+              }, question.free ? "Paid করা হলো" : "Free করা হলো")} /> : null}
+              {moveToChapter ? <button type="button" disabled={busy || itemBusy} onClick={() => openMove(question.id)} aria-label={`প্রশ্ন ${index + 1} অন্য chapter-এ সরাও`} title="Chapter-এ সরাও" className="flex size-8 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 disabled:opacity-40"><ArrowRightLeft className="size-4" /></button> : null}
+              {chapterItems ? <button type="button" disabled={busy || itemBusy} onClick={() => setDeleting(question.id)} aria-label={`প্রশ্ন ${index + 1} মুছো`} title="মুছো" className="flex size-8 items-center justify-center rounded-lg text-zinc-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-40"><Trash2 className="size-4" /></button> : null}
               <button type="button" disabled={busy} onClick={() => void aiOne(question)} aria-label={`প্রশ্ন ${index + 1} AI দিয়ে গোছাও`} title="AI দিয়ে গোছাও" className="flex size-8 items-center justify-center rounded-lg text-violet-600 hover:bg-violet-50 disabled:opacity-40">{thinking === question.id ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}</button>
               <button type="button" disabled={busy} onClick={() => setEditing({ id: question.id, draft: { id: question.id, text: question.text, options: question.options, correctIndex: question.correctIndex, solution: question.solution, explanation: question.explanation }, aiFilled: false })} aria-label={`প্রশ্ন ${index + 1} edit করো`} title="Edit" className="flex size-8 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 disabled:opacity-40"><Pencil className="size-4" /></button>
             </span> : null}
@@ -228,5 +263,10 @@ export function BankQuestionList({ questions: initial, canEdit }: { questions: B
         </li>;
       })}
     </ol>
+
+    {moveToChapter ? <MoveToChapter key={moving ?? "none"} source={moving ? { kind: "questions", ids: [moving] } : null} onClose={() => setMoving(null)}
+      onMoved={(ids) => setQuestions((current) => current.filter((question) => !ids.includes(question.id)))} /> : null}
+    {chapterItems ? <ConfirmDelete open={Boolean(deleting)} onOpenChange={(open) => !open && setDeleting(null)} busy={itemBusy} title="প্রশ্নটা মুছবে?" description="ব্যাংক থেকে মুছে যাবে; যারা আগে নিজের Preliminary-তে পাঠিয়েছে, তাদের কপি থাকবে।"
+      onConfirm={() => { const id = deleting; if (!id) return; void itemChange(() => deleteBankItems({ kind: "mcq", ids: [id] }), "মুছে ফেলা হলো", id).then(() => setDeleting(null)); }} /> : null}
   </div>;
 }

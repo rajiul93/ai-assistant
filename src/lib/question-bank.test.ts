@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkRow, cleanSolution, examFromText, letterIndex, mapColumns, placementForSet, questionFingerprint, repeatsInFile, rowContentHash, subjectFromSources, type BankRow } from "./question-bank";
+import { categorySlug, chunkPastedText, checkChapterMcqRow, checkChapterShortRow, checkRow, cleanSolution, examFromText, groupByYear, letterIndex, mapChapterColumns, mapColumns, placementForSet, questionFingerprint, repeatsInFile, rowContentHash, subjectFromSources, yearFromName, type BankRow } from "./question-bank";
 
 const headers = ["#", "পরীক্ষা (Exam)", "ধরন (Section)", "সেশন/বিষয় (Session/Subject)", "প্রশ্নের ধরন", "ক্রম (Serial)", "প্রশ্ন (Question)", "ক", "খ", "গ", "ঘ", "অতিরিক্ত অপশন", "সঠিক উত্তর (Letter)", "সঠিক উত্তর (Answer)", "সমাধান (Solution)", "ব্যাখ্যা (Explanation)", "সব উৎস (All sources)"];
 const sample = ["1", "Grade 11-20 Govt Jobs (General)", "বিগত সালের প্রশ্ন", "গণপূর্ত অধিদপ্তর (2025)", "বহুনির্বাচনি প্রশ্ন", "1", "Gulliver's travels _____ a famous book.", "is", "are", "has", "have", "", "ক", "is",
@@ -102,5 +102,56 @@ describe("uploading the same data twice", () => {
     expect(rowContentHash({ ...row })).toBe(rowContentHash(row));
     expect(rowContentHash({ ...row, solution: "নতুন সমাধান" })).not.toBe(rowContentHash(row));
     expect(rowContentHash({ ...row, correctIndex: 1 })).not.toBe(rowContentHash(row));
+  });
+});
+
+describe("question bank v2 helpers", () => {
+  it("reads the year from a set name", () => {
+    expect(yearFromName("গণপূর্ত অধিদপ্তর (2025)")).toBe(2025);
+    expect(yearFromName("৪৪তম বিসিএস (২০২৩)")).toBe(2023);
+    expect(yearFromName("Model test 12")).toBeNull();
+  });
+
+  it("groups sets by year, newest first and others last", () => {
+    const groups = groupByYear([{ year: 2020 }, { year: null }, { year: 2024 }, { year: 2020 }]);
+    expect(groups.map((group) => [group.year, group.sets.length])).toEqual([[2024, 1], [2020, 2], [null, 1]]);
+  });
+
+  it("maps and checks a chapter MCQ sheet", () => {
+    const { map, missing } = mapChapterColumns(["ক্রম", "প্রশ্ন", "ক", "খ", "গ", "ঘ", "সঠিক উত্তর", "সমাধান"], "mcq");
+    expect(missing).toEqual([]);
+    const checked = checkChapterMcqRow(["৩", "২+২=?", "3", "4", "5", "6", "খ", "সঠিক উত্তর: 4"], map, 2);
+    expect(checked.row).toMatchObject({ serial: 3, correctIndex: 1, options: ["3", "4", "5", "6"] });
+    expect(checkChapterMcqRow(["1", "", "a", "b", "c", "d", "z"], map, 3).errors.length).toBeGreaterThan(0);
+  });
+
+  it("maps and checks a short-question sheet", () => {
+    const { map, missing } = mapChapterColumns(["প্রশ্ন", "উত্তর"], "short");
+    expect(missing).toEqual([]);
+    expect(checkChapterShortRow(["রাজধানী?", "ঢাকা"], map, 2).row).toEqual({ serial: 2, question: "রাজধানী?", answer: "ঢাকা" });
+    expect(checkChapterShortRow(["রাজধানী?", ""], map, 3).row).toBeNull();
+  });
+
+  it("makes category slugs", () => {
+    expect(categorySlug("Bank Job", () => 0.5)).toMatch(/^bank-job-/);
+    expect(categorySlug("ব্যাংক", () => 0.5)).toMatch(/^exam-/);
+  });
+});
+
+describe("chunkPastedText", () => {
+  it("keeps questions whole and stays under the size", () => {
+    const question = (n: number) => `${n}. প্রশ্ন ${"ক".repeat(80)}\nক) ১\nখ) ২\nগ) ৩\nঘ) ৪\nউত্তর: ক`;
+    const text = Array.from({ length: 60 }, (_, index) => question(index + 1)).join("\n\n");
+    const chunks = chunkPastedText(text, 1000);
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every((chunk) => chunk.length <= 1000)).toBe(true);
+    expect(chunks.join("\n\n")).toBe(text);
+  });
+
+  it("splits one huge block at line ends", () => {
+    const text = Array.from({ length: 50 }, (_, index) => `লাইন ${index} ${"খ".repeat(50)}`).join("\n");
+    const chunks = chunkPastedText(text, 500);
+    expect(chunks.every((chunk) => chunk.length <= 500)).toBe(true);
+    expect(chunks.join("\n")).toBe(text);
   });
 });

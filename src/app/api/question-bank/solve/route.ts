@@ -63,12 +63,12 @@ export async function POST(request: Request) {
 
   const originals = await prisma.bankQuestion.findMany({
     where: { id: { in: questionIds } },
-    select: { id: true, text: true, options: true, correctIndex: true, solution: true, explanation: true, set: { select: { section: true } } },
+    select: { id: true, text: true, options: true, correctIndex: true, solution: true, explanation: true, set: { select: { section: true } }, chapter: { select: { name: true, subject: { select: { name: true } } } } },
   });
   const wanted = fill === "all" ? originals : originals.filter((question) => !question.solution?.trim() || !question.explanation?.trim());
   if (!wanted.length) return Response.json({ results: [], skipped: 0, originals: [] });
 
-  const input = wanted.map(({ id, text, options, correctIndex, set }) => ({ id, subject: set.section, question: text, options, correctOption: correctIndex + 1 }));
+  const input = wanted.map(({ id, text, options, correctIndex, set, chapter }) => ({ id, subject: set?.section ?? (chapter ? `${chapter.subject.name} › ${chapter.name}` : ""), question: text, options, correctOption: correctIndex + 1 }));
   const raw = await callAI(PROMPT + JSON.stringify(input), { responseSchema, userId: user.id, feature: "bank_solve", timeoutMs: 55_000, reasoning: "low" });
   if (!raw) return Response.json({ error: "AI এই মুহূর্তে উত্তর দিতে পারল না। একটু পরে আবার চেষ্টা করো।" }, { status: 502 });
 

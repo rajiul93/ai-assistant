@@ -14,7 +14,7 @@ const TOTAL_BUDGET_MS = 40_000;
 const PER_ATTEMPT_WITH_BACKUP_MS = 25_000;
 
 /** Who is using the AI and for what — every call is logged for the AI usage page. */
-export type AiFeature = "assistant" | "file_assistant" | "answer" | "answer_search" | "note_writer" | "speech" | "transcribe" | "voice_fix" | "image" | "bank_beautify" | "bank_solve" | "vocab_explain";
+export type AiFeature = "assistant" | "file_assistant" | "answer" | "answer_search" | "note_writer" | "speech" | "transcribe" | "voice_fix" | "image" | "bank_beautify" | "bank_solve" | "bank_paste" | "bank_dupes" | "vocab_explain";
 /** Images/PDFs sent alongside the prompt (base64). */
 type InlineFile = { mimeType: string; data: string; name?: string };
 /** `responseSchema` is written in an OpenAPI style (type: "OBJECT", nullable: true) and converted to JSON Schema. */
