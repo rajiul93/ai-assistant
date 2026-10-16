@@ -161,6 +161,8 @@ export async function generateNoteContent(input: { instruction: string; title: s
     currentHtml: z.string().max(120_000),
     lang: z.enum(["bn", "en"]).optional(),
   }).parse(input);
+  // A paid feature (owner, 2026-10-16): a running plan, or staff.
+  if (!(await hasPremium(user))) throw new Error("AI দিয়ে note লেখা paid feature — একটা plan নিলে পাবে।");
   const current = sanitizeNoteHtml(data.currentHtml);
   const empty = !htmlToPlainText(current).trim();
   const prompt = `তুমি একজন যত্নশীল শিক্ষক, ব্যবহারকারীর study note লিখতে সাহায্য করছো।

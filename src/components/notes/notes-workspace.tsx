@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronLeft, ClipboardCheck, FileText, Lock, Plus, Search, Sparkles, Trash2, Undo2 } from "lucide-react";
 import { toast } from "sonner";
@@ -112,7 +113,7 @@ function NoteEditor({ noteId, subjects, topics, premium, onSaved, onDeleted, onB
       <p className={cn("truncate text-xs", saveState === "error" ? "text-red-600" : "text-slate-400")} aria-live="polite">{saveLabel}</p>
       <div className="ml-auto flex shrink-0 items-center gap-0.5">
         <button type="button" onClick={() => setAiOpen(!aiOpen)} className={cn("flex h-9 items-center gap-1.5 rounded-full px-3 text-sm font-semibold transition lg:h-8", aiOpen ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-700 hover:bg-blue-100")}>
-          <Sparkles className="size-4" /> AI<span className="hidden lg:inline"> দিয়ে লিখুন</span>
+          {premium ? <Sparkles className="size-4" /> : <Lock className="size-4" />} AI<span className="hidden lg:inline"> দিয়ে লিখুন</span>
         </button>
         {/* Note → MCQ set: AI drafts, the dialog shows every answer, saved only on approve. */}
         <button type="button" onClick={() => setQuizOpen(true)} title="এই note থেকে AI দিয়ে Preliminary প্রশ্ন বানাও" className="flex h-9 items-center gap-1.5 rounded-full bg-emerald-50 px-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 lg:h-8">
@@ -123,7 +124,13 @@ function NoteEditor({ noteId, subjects, topics, premium, onSaved, onDeleted, onB
       </div>
     </div>
 
-    {aiOpen ? <form className="flex gap-2 border-b border-blue-100 bg-blue-50/60 px-3 py-2.5" onSubmit={(event) => { event.preventDefault(); void writeWithAi(); }}>
+    {/* Writing with AI is paid: without a plan the bar explains and points to Plans (the server refuses too). */}
+    {aiOpen && !premium ? <div className="flex flex-wrap items-center gap-2 border-b border-amber-100 bg-amber-50/80 px-3 py-2.5">
+      <Lock className="size-4 shrink-0 text-amber-600" />
+      <p className="min-w-0 flex-1 text-[13.5px] font-medium text-amber-900">AI দিয়ে note লেখা আর উন্নত করা paid feature — plan নিলে চালু হবে।</p>
+      <Link href="/billing" className="flex h-9 shrink-0 items-center rounded-full bg-linear-to-r from-amber-400 to-orange-500 px-4 text-[13px] font-bold text-white">Plan দেখো</Link>
+    </div> : null}
+    {aiOpen && premium ? <form className="flex gap-2 border-b border-blue-100 bg-blue-50/60 px-3 py-2.5" onSubmit={(event) => { event.preventDefault(); void writeWithAi(); }}>
       <input
         autoFocus
         value={instruction}
