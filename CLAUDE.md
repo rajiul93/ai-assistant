@@ -111,6 +111,12 @@ alone. Record decisions and their reasons; don't restate code.
 - AI access is gated by plans/entitlements (`src/server/ai-access.ts` `checkAi(user, kind, ref)`):
   pass the kind (`message` / `scan` / `suggestion`) for anything the user starts, so it counts toward
   the tier's per-day limit; automatic follow-ups (the spell check after a scan) pass none.
+- **Right over fast for facts** (owner, 2026-10-16: the AI gave many wrong facts). The quick intent
+  call marks fact questions `lookup` (empty reply); `answer(…, { careful })` then answers with
+  `reasoning: "medium"` + web search (75 s; without search, medium and streamed) and an accuracy rule
+  (check names/years/numbers, say when unsure, one-line source). Chat/advice stays on the fast path.
+  `callAI`'s `reasoning` option is also used by vocabulary explanations (medium), bank solutions and
+  note quizzes (low, batch jobs inside 60 s).
 - **No AI without a plan**: every OpenAI call goes through `checkAi` first (no plan, expired, out
   of tokens or paused → refused; admins always pass). Audited 2026-10-13: 14 entry points, all gated.
 - **Voice is admin-only** (mic, speech-to-text, read-aloud, voice chat, voice forms — including the

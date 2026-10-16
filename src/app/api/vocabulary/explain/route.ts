@@ -44,7 +44,7 @@ export async function POST(request: Request) {
   }
   if (!about) return Response.json({ error: "শব্দটা পাওয়া যায়নি।" }, { status: 404 });
 
-  const raw = await callAI(`তুমি বাংলাদেশের চাকরির পরীক্ষার English শিক্ষক। এই শব্দটা বুঝিয়ে দাও: ${about}\n\n${RULES}`, { userId: user.id, feature: "vocab_explain", timeoutMs: 45_000 });
+  const raw = await callAI(`তুমি বাংলাদেশের চাকরির পরীক্ষার English শিক্ষক। এই শব্দটা বুঝিয়ে দাও: ${about}\n\n${RULES}`, { userId: user.id, feature: "vocab_explain", timeoutMs: 50_000, reasoning: "medium" });
   const explanation = raw?.replace(/\*\*/g, "").replace(/^#+\s*/gm, "").trim().slice(0, 3000);
   if (!explanation) return Response.json({ error: "AI এই মুহূর্তে উত্তর দিতে পারল না। একটু পরে আবার চেষ্টা করো।" }, { status: 502 });
 

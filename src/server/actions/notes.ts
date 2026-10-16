@@ -247,7 +247,7 @@ export async function generateQuizFromNote(input: { noteId: string; count: numbe
 Note-এর শিরোনাম: ${note.title || "(নেই)"}
 Note:
 ${text.slice(0, 24_000)}`;
-  const raw = await callAI(prompt, { responseSchema: quizSchema, userId: user.id, feature: "note_writer", timeoutMs: 55_000 });
+  const raw = await callAI(prompt, { responseSchema: quizSchema, userId: user.id, feature: "note_writer", timeoutMs: 55_000, reasoning: "low" });
   if (!raw) throw new Error("AI এখন সাড়া দিচ্ছে না। একটু পরে আবার চেষ্টা করো।");
   let parsed: z.infer<typeof quizAnswer>;
   try { parsed = quizAnswer.parse(JSON.parse(raw)); } catch { throw new Error("AI-এর উত্তর বোঝা গেল না, আবার চেষ্টা করো।"); }
