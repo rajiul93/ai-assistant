@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { generateQuizFromNote, type DraftQuestion } from "@/server/actions/notes";
 import { createQuestionSet } from "@/server/actions/preliminary";
 
-const COUNTS = [5, 10, 15, 20];
+const COUNTS = [5, 10, 15, 20, 50];
 const LETTERS = ["ক", "খ", "গ", "ঘ"];
 const bn = (value: number) => String(value).replace(/\d/g, (digit) => "০১২৩৪৫৬৭৮৯"[Number(digit)]);
 
@@ -96,14 +96,14 @@ export function NoteQuizDialog({ noteId, subjects, premium, open, onOpenChange }
       </div> : !draft ? <div className="space-y-4 px-5 py-5">
         <div>
           <p className="mb-2 text-sm font-semibold text-slate-700">কয়টা প্রশ্ন?</p>
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-5 gap-2">
             {COUNTS.map((value) => <button key={value} type="button" onClick={() => setCount(value)} aria-pressed={count === value} className={cn("h-11 rounded-2xl text-[15px] font-bold transition active:scale-95", count === value ? "bg-blue-600 text-white shadow-[0_8px_16px_-10px_rgba(37,99,235,0.9)]" : "bg-slate-100 text-slate-600")}>{bn(value)}</button>)}
           </div>
         </div>
         <button type="button" onClick={() => void generate()} disabled={busy} className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-linear-to-r from-[#3f6ef3] to-[#8b5cf6] text-[15px] font-bold text-white shadow-[0_10px_20px_-12px_rgba(99,102,241,0.9)] disabled:opacity-60">
           {busy ? <><Loader2 className="size-5 animate-spin" /> প্রশ্ন বানানো হচ্ছে…</> : <><Sparkles className="size-5" /> AI দিয়ে প্রশ্ন বানাও</>}
         </button>
-        {busy ? <p className="text-center text-xs text-slate-500">বড় note হলে আধা মিনিটের মতো লাগতে পারে।</p> : null}
+        {busy ? <p className="text-center text-xs text-slate-500">{count > 20 ? "৫০টা প্রশ্ন — এক মিনিটের মতো লাগতে পারে।" : "বড় note হলে আধা মিনিটের মতো লাগতে পারে।"}</p> : null}
       </div> : <>
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
           <div className="grid gap-2 sm:grid-cols-2">

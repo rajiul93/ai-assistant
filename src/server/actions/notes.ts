@@ -3,13 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
-import { htmlToPlainText, noteWritingRules, sanitizeNoteHtml } from "@/lib/note-html";
+import { htmlToPlainText, sanitizeNoteHtml } from "@/lib/note-html";
 import { prisma } from "@/lib/prisma";
 import { aiBlockedMessage } from "@/lib/ai-limits";
 import { checkAi } from "@/server/ai-access";
 import { hasPremium } from "@/server/premium";
 import { callAI } from "@/server/assistant/ai";
 import { createTask } from "@/server/actions/tasks";
+import { writeNoteWithAi } from "@/server/note-writer";
 import { noteSummarySelect } from "@/server/queries";
 
 const noteSchema = z.object({
@@ -149,43 +150,12 @@ export async function createTaskFromNote(noteId: string) {
  * `lang` follows the assistant's language setting.
  */
 /**
- * Writes the note with AI. It gets the whole note as it is now and returns the whole note with the
- * instruction applied ("improve", "add examples", "make a table"…) — not a piece to append, which
- * used to leave two copies of everything. The page shows the result with an undo.
+ * Writes the note with AI; reference photos arrive as their text, read one by one beforehand
+ * through /api/notes/read-image. See writeNoteWithAi.
  */
-export async function generateNoteContent(input: { instruction: string; title: string; currentHtml: string; lang?: "bn" | "en" }) {
+export async function generateNoteContent(input: { instruction: string; title: string; currentHtml: string; lang?: "bn" | "en"; references?: string[] }) {
   const user = await requireUser();
-  const data = z.object({
-    instruction: z.string().trim().min(1).max(2000),
-    title: z.string().max(200),
-    currentHtml: z.string().max(120_000),
-    lang: z.enum(["bn", "en"]).optional(),
-  }).parse(input);
-  // A paid feature (owner, 2026-10-16): a running plan, or staff.
-  if (!(await hasPremium(user))) throw new Error("AI দিয়ে note লেখা paid feature — একটা plan নিলে পাবে।");
-  const current = sanitizeNoteHtml(data.currentHtml);
-  const empty = !htmlToPlainText(current).trim();
-  const prompt = `তুমি একজন যত্নশীল শিক্ষক, ব্যবহারকারীর study note লিখতে সাহায্য করছো।
-${noteWritingRules}
-ভাষা: ${data.lang === "en" ? "English" : "সহজ বাংলা (প্রয়োজনে technical শব্দ ইংরেজিতে)"}।
-Note-এর title: ${data.title || "(নেই)"}
-${empty ? "Note এখন ফাঁকা — নির্দেশ মতো নতুন করে লেখো।" : `Note-এ এখন যা আছে (HTML):
-${current.slice(0, 40_000)}
-
-নির্দেশটা এই note-এর ওপর প্রয়োগ করে **পুরো note-টা আবার দাও** — উন্নত/বদলানো অংশসহ, বাকি অংশ যেমন আছে তেমন রেখে। কোনো অংশ দুবার লিখবে না, পুরোনো লেখার পরে নতুন কপি জুড়বে না। নির্দেশে কিছু যোগ করতে বললে ঠিক জায়গায় বসাবে; বাদ দিতে বললে বাদ দেবে। গণিতের formula আর টেবিল আগের মতোই রাখবে।`}
-
-ব্যবহারকারীর নির্দেশ: ${data.instruction}
-
-শুধু পুরো note-এর HTML দাও, আর কিছু না।`;
-  const { blocked } = await checkAi(user, "suggestion");
-  if (blocked) throw new Error(aiBlockedMessage(blocked, data.lang === "en" ? "en" : "bn"));
-  const raw = await callAI(prompt, { userId: user.id, feature: "note_writer", timeoutMs: 55_000 });
-  if (!raw) throw new Error(data.lang === "en" ? "The AI isn't responding right now. Please try again in a moment." : "AI এখন সাড়া দিচ্ছে না। একটু পরে আবার চেষ্টা করো।");
-  const html = sanitizeNoteHtml(raw.replace(/^```(?:html)?\s*|\s*```$/g, ""));
-  // If the model ignored the HTML rule and sent plain text, wrap its paragraphs.
-  return /<(p|h[1-3]|ul|ol|blockquote)\b/i.test(html)
-    ? html
-    : html.split(/\n{2,}/).map((part) => `<p>${part.trim()}</p>`).join("");
+  return writeNoteWithAi(user, input);
 }
 
 /* ---------- Note → Preliminary set (MCQ) with AI ---------- */
@@ -228,32 +198,68 @@ const quizAnswer = z.object({
  */
 export async function generateQuizFromNote(input: { noteId: string; count: number; lang?: "bn" | "en" }) {
   const user = await requireUser();
-  const data = z.object({ noteId: z.string().min(1).max(64), count: z.number().int().min(3).max(20), lang: z.enum(["bn", "en"]).optional() }).parse(input);
+  const data = z.object({ noteId: z.string().min(1).max(64), count: z.number().int().min(3).max(50), lang: z.enum(["bn", "en"]).optional() }).parse(input);
   // A paid feature (owner, 2026-10-16): a running plan, or staff.
   if (!(await hasPremium(user))) throw new Error("Note থেকে Preliminary বানানো paid feature — একটা plan নিলে পাবে।");
   const note = await ownedNote(user.id, data.noteId);
-  const text = htmlToPlainText(note.content);
+  const text = htmlToPlainText(note.content).slice(0, 24_000);
   if (text.length < 40) throw new Error("Note-এ প্রশ্ন বানানোর মতো যথেষ্ট লেখা নেই।");
   const { blocked } = await checkAi(user, "suggestion");
   if (blocked) throw new Error(aiBlockedMessage(blocked, data.lang === "en" ? "en" : "bn"));
 
-  const prompt = `তুমি বাংলাদেশের চাকরির পরীক্ষার (BCS, প্রাইমারি, ব্যাংক) প্রশ্নকর্তা। নিচের study note থেকে ঠিক ${data.count}টা MCQ বানাও।
+  // One call writes up to 20 questions in time. More (up to 50) are split over parts of the note
+  // asked in parallel — each part its share — so they also cover the whole note without repeats.
+  const parts = Math.ceil(data.count / 20);
+  const shares = Array.from({ length: parts }, (_, index) => Math.floor(data.count / parts) + (index < data.count % parts ? 1 : 0));
+  const chunks = splitText(text, parts);
+  const batches = await Promise.all(chunks.map((chunk, index) => quizFromText(user.id, note.title, chunk, shares[index], data.lang, parts > 1 ? `এটা পুরো note-এর ${index + 1}/${parts} অংশ — শুধু এই অংশ থেকে প্রশ্ন করো।` : "")));
+  const seen = new Set<string>();
+  const questions = batches.flat().filter((question) => {
+    const key = question.text.replace(/\s+/g, " ").trim().toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  if (!questions.length) throw new Error("AI কোনো ঠিকঠাক প্রশ্ন বানাতে পারেনি, আবার চেষ্টা করো।");
+  return { questions, topicName: note.title || "Note থেকে প্রশ্ন", subjectId: note.subjectId, topicId: note.topicId };
+}
+
+/** The note's text in `parts` pieces of about equal length, cut at line ends. */
+function splitText(text: string, parts: number) {
+  if (parts <= 1) return [text];
+  const lines = text.split("\n");
+  const target = text.length / parts;
+  const chunks: string[] = [];
+  let current = "";
+  for (const line of lines) {
+    if (current.length >= target && chunks.length < parts - 1) { chunks.push(current); current = ""; }
+    current += `${line}\n`;
+  }
+  chunks.push(current);
+  // A short note may give fewer pieces than asked: repeat the whole text so every share is asked for.
+  while (chunks.length < parts) chunks.push(text);
+  return chunks;
+}
+
+/** One AI call: `count` MCQs from `text`; malformed ones are dropped. */
+async function quizFromText(userId: string, title: string, text: string, count: number, lang: "bn" | "en" | undefined, partNote: string): Promise<DraftQuestion[]> {
+  const prompt = `তুমি বাংলাদেশের চাকরির পরীক্ষার (BCS, প্রাইমারি, ব্যাংক) প্রশ্নকর্তা। নিচের study note থেকে ঠিক ${count}টা MCQ বানাও।${partNote ? `\n${partNote}` : ""}
 - প্রতিটা প্রশ্নের ঠিক ৪টা option, একটাই সঠিক (correctOption 1-4); সঠিক উত্তরের জায়গা প্রশ্নভেদে বদলাবে।
 - প্রশ্ন আর উত্তর শুধু note-এ যা আছে তা থেকে; note-এ নেই এমন তথ্য বানাবে না। ভুল option-গুলো বিশ্বাসযোগ্য কিন্তু স্পষ্টভাবে ভুল।
 - নানা অংশ থেকে প্রশ্ন নাও; একই কথা দুবার জিজ্ঞেস করবে না। "সবগুলো"/"কোনোটিই নয়" ধরনের option এড়াও।
 - explanation: কেন এটা সঠিক, এক-দুই লাইনে।
-- ভাষা: ${data.lang === "en" ? "English" : "note যে ভাষায় সেই ভাষায় (সাধারণত বাংলা)"}। গণিত থাকলে LaTeX $…$-এ। কোনো markdown নয়।
+- ভাষা: ${lang === "en" ? "English" : "note যে ভাষায় সেই ভাষায় (সাধারণত বাংলা)"}। গণিত থাকলে LaTeX $…$-এ। কোনো markdown নয়।
 
-Note-এর শিরোনাম: ${note.title || "(নেই)"}
+Note-এর শিরোনাম: ${title || "(নেই)"}
 Note:
-${text.slice(0, 24_000)}`;
-  const raw = await callAI(prompt, { responseSchema: quizSchema, userId: user.id, feature: "note_writer", timeoutMs: 55_000, reasoning: "low" });
-  if (!raw) throw new Error("AI এখন সাড়া দিচ্ছে না। একটু পরে আবার চেষ্টা করো।");
-  let parsed: z.infer<typeof quizAnswer>;
-  try { parsed = quizAnswer.parse(JSON.parse(raw)); } catch { throw new Error("AI-এর উত্তর বোঝা গেল না, আবার চেষ্টা করো।"); }
-  const questions: DraftQuestion[] = parsed.questions
-    .filter((question) => question.options.length === 4 && question.correctOption >= 1 && question.correctOption <= 4)
-    .map((question) => ({ text: question.text, options: question.options, correctIndex: question.correctOption - 1, explanation: question.explanation || null }));
-  if (!questions.length) throw new Error("AI কোনো ঠিকঠাক প্রশ্ন বানাতে পারেনি, আবার চেষ্টা করো।");
-  return { questions, topicName: note.title || "Note থেকে প্রশ্ন", subjectId: note.subjectId, topicId: note.topicId };
+${text}`;
+  const raw = await callAI(prompt, { responseSchema: quizSchema, userId, feature: "note_writer", timeoutMs: 55_000, reasoning: "low" });
+  if (!raw) return [];
+  try {
+    return quizAnswer.parse(JSON.parse(raw)).questions
+      .filter((question) => question.options.length === 4 && question.correctOption >= 1 && question.correctOption <= 4)
+      .map((question) => ({ text: question.text, options: question.options, correctIndex: question.correctOption - 1, explanation: question.explanation || null }));
+  } catch {
+    return [];
+  }
 }
