@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "reac
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronLeft, ClipboardCheck, FileText, Lock, Plus, Search, Sparkles, Trash2, Undo2 } from "lucide-react";
+import { Check, ChevronLeft, ClipboardCheck, FileText, ImagePlus, Lock, Plus, Search, Sparkles, Trash2, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import { QuillEditor, type QuillHandle } from "@/components/notes/quill-editor";
 import { NoteLinks, type SubjectOption, type TopicOption } from "@/components/notes/note-links";
@@ -21,6 +21,8 @@ import { APP_TIMEZONE, dayjs } from "@/lib/dayjs";
 import { ShareButton } from "@/components/collaboration/share-button";
 import { cn } from "@/lib/utils";
 import { NoteQuizDialog } from "@/components/notes/note-quiz-dialog";
+import { ImageViewer } from "@/components/image-viewer";
+import { compressImage } from "@/lib/compress-image";
 import { createNote, deleteNote, generateNoteContent, getNote, listNotes, updateNote } from "@/server/actions/notes";
 import { useAssistantStore } from "@/store/assistant";
 import { MathText } from "@/components/math-text";
@@ -31,6 +33,25 @@ type SaveState = "saved" | "saving" | "unsaved" | "error";
 function updatedLabel(date: Date) {
   const value = dayjs(date).tz(APP_TIMEZONE);
   return value.isSame(dayjs().tz(APP_TIMEZONE), "day") ? value.format("h:mm A") : value.format("D MMM YYYY");
+}
+
+const MAX_NOTE_IMAGES = 5;
+
+function readBase64(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",", 2)[1] ?? "");
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** One reference photo → its text (word for word), read on its own so the writing stays sharp. */
+async function readReferencePhoto(data: string, batch: string) {
+  const response = await fetch("/api/notes/read-image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data, batch }) });
+  const payload = (await response.json().catch(() => ({}))) as { text?: string; error?: string };
+  if (!response.ok) throw new Error(payload.error ?? "ছবিটা পড়া গেল না");
+  return payload.text ?? "";
 }
 
 /** Editor for one note: title + Quill body, autosaved 0.8s after typing stops, plus AI writing. */
@@ -46,6 +67,28 @@ function NoteEditor({ noteId, subjects, topics, premium, onSaved, onDeleted, onB
   // After an AI rewrite: the note as it was before, so it can be put back.
   const [beforeAi, setBeforeAi] = useState<string | null>(null);
   const [quizOpen, setQuizOpen] = useState(false);
+  // Reference photos for the AI (a book page…): it fills in and corrects the note from them.
+  const [images, setImages] = useState<Array<{ name: string; mimeType: "image/jpeg" | "image/png" | "image/webp"; data: string; preview: string }>>([]);
+  const imageInput = useRef<HTMLInputElement>(null);
+  const [viewing, setViewing] = useState<number | null>(null);
+  // "ছবি ২/৫ পড়া হচ্ছে…" while the photos are read, then while the note is rewritten.
+  const [progress, setProgress] = useState("");
+
+  async function addImages(files: FileList | null) {
+    if (!files?.length) return;
+    const room = MAX_NOTE_IMAGES - images.length;
+    if (room <= 0) { toast.error(`সর্বোচ্চ ${MAX_NOTE_IMAGES}টা ছবি`); return; }
+    const added: typeof images = [];
+    for (const file of [...files].slice(0, room)) {
+      if (!file.type.startsWith("image/")) continue;
+      // Each photo goes in its own request, so it can stay large enough for small Bangla print.
+      const shrunk = await compressImage(file, 1_800_000);
+      if (!shrunk) { toast.error(`${file.name} পড়া গেল না`); continue; }
+      const data = await readBase64(shrunk.blob);
+      added.push({ name: file.name, mimeType: shrunk.type, data, preview: `data:${shrunk.type};base64,${data}` });
+    }
+    setImages((current) => [...current, ...added].slice(0, MAX_NOTE_IMAGES));
+  }
   const [confirmDelete, setConfirmDelete] = useState(false);
   const latest = useRef({ title: "", content: "" });
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -84,11 +127,20 @@ function NoteEditor({ noteId, subjects, topics, premium, onSaved, onDeleted, onB
 
   async function writeWithAi() {
     const text = instruction.trim();
-    if (!text) return;
+    if (!text && !images.length) return;
     setWriting(true);
     try {
       const before = editorRef.current?.getHtml() ?? "";
-      const html = await generateNoteContent({ instruction: text, title: shownTitle, currentHtml: before, lang });
+      // Photos first, one at a time (sharper, and each fits a request); they count as one scan.
+      const references: string[] = [];
+      const batch = crypto.randomUUID();
+      for (const [index, image] of images.entries()) {
+        setProgress(`ছবি ${index + 1}/${images.length} পড়া হচ্ছে…`);
+        references.push(await readReferencePhoto(image.data, batch));
+      }
+      setProgress(images.length ? "note মিলিয়ে আপডেট হচ্ছে…" : "");
+      const html = await generateNoteContent({ instruction: text, title: shownTitle, currentHtml: before, lang, references });
+      setImages([]);
       // The AI returns the whole note with the change made: it replaces the note (no second copy).
       editorRef.current?.setHtml(html);
       setBeforeAi(before);
@@ -98,6 +150,7 @@ function NoteEditor({ noteId, subjects, topics, premium, onSaved, onDeleted, onB
       toast.error(error instanceof Error ? error.message : "AI couldn't write this");
     } finally {
       setWriting(false);
+      setProgress("");
     }
   }
 
@@ -135,13 +188,26 @@ function NoteEditor({ noteId, subjects, topics, premium, onSaved, onDeleted, onB
         autoFocus
         value={instruction}
         onChange={(event) => setInstruction(event.target.value)}
-        placeholder={lang === "en" ? "e.g. Explain Newton's 3 laws with examples" : "যেমন: Newton-এর ৩টি সূত্র উদাহরণসহ লেখো"}
+        placeholder={images.length ? "কী করবে? (ফাঁকা রাখলে ছবির সাথে মিলিয়ে note সম্পূর্ণ করবে)" : lang === "en" ? "e.g. Explain Newton's 3 laws with examples" : "যেমন: Newton-এর ৩টি সূত্র উদাহরণসহ লেখো"}
         className="h-10 min-w-0 flex-1 rounded-full border border-blue-200 bg-white px-3.5 text-sm outline-none focus:border-blue-400"
       />
-      <button type="submit" disabled={writing || !instruction.trim()} className="flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-        <Sparkles className="size-4" /> {writing ? "লিখছে…" : "লেখো"}
+      <input ref={imageInput} type="file" accept="image/*" multiple hidden onChange={(event) => { void addImages(event.target.files); event.target.value = ""; }} />
+      <button type="button" onClick={() => imageInput.current?.click()} disabled={writing || images.length >= MAX_NOTE_IMAGES} title="Reference ছবি দাও (বইয়ের পাতা ইত্যাদি) — AI দেখে note সম্পূর্ণ করবে" aria-label="Reference ছবি যোগ করো" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white text-blue-700 ring-1 ring-blue-200 transition hover:bg-blue-50 disabled:opacity-50"><ImagePlus className="size-5" /></button>
+      <button type="submit" disabled={writing || (!instruction.trim() && !images.length)} className="flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+        <Sparkles className="size-4" /> {writing ? progress || "লিখছে…" : "লেখো"}
       </button>
     </form> : null}
+    {aiOpen && premium && images.length ? <div className="flex gap-2 overflow-x-auto border-b border-blue-100 bg-blue-50/60 px-3 pb-2.5 [scrollbar-width:none]">
+      {images.map((image, index) => <div key={`${image.name}-${index}`} className="relative shrink-0">
+        <button type="button" onClick={() => setViewing(index)} aria-label={`${image.name} বড় করে দেখো`} className="block rounded-xl focus-visible:outline-2 focus-visible:outline-blue-600">
+          {/* eslint-disable-next-line @next/next/no-img-element -- a local preview of the user's own photo */}
+          <img src={image.preview} alt={image.name} className="size-16 rounded-xl object-cover ring-1 ring-blue-200" />
+        </button>
+        <button type="button" onClick={() => setImages((current) => current.filter((_, at) => at !== index))} aria-label={`${image.name} সরাও`} className="absolute -right-1.5 -top-1.5 flex size-6 items-center justify-center rounded-full bg-slate-900 text-white ring-2 ring-white"><X className="size-3.5" /></button>
+      </div>)}
+      <p className="self-center text-xs text-blue-800/80">{images.length}/{MAX_NOTE_IMAGES} ছবি · চাপলে বড় করে দেখবে · AI এগুলো পড়ে note সম্পূর্ণ করবে</p>
+    </div> : null}
+    {viewing !== null && images[viewing] ? <ImageViewer images={images.map((image) => ({ src: image.preview, name: image.name }))} index={viewing} onIndex={setViewing} onClose={() => setViewing(null)} /> : null}
 
     {/* The note now shows the AI's version (already saved); undo puts the old one back. */}
     {beforeAi !== null ? <div className="assistant-in flex flex-wrap items-center gap-2 border-b border-violet-100 bg-violet-50/80 px-3 py-2.5">
