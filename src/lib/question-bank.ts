@@ -246,3 +246,104 @@ export function checkRow(cells: unknown[], map: Partial<Record<BankField, number
 
 /** Rows that are entirely blank (trailing lines in a sheet) aren't rows at all. */
 export const isBlankRow = (cells: unknown[]) => cells.every((value) => String(value ?? "").trim() === "");
+
+/* ---------- v2: years, categories, chapter sheets (docs/question-bank-v2-plan.md) ---------- */
+
+/** The year in a set's name, "(2025)" or "(২০২৫)"; null when there is none (shown as "অন্যান্য"). */
+export function yearFromName(name: string): number | null {
+  const match = /(?:19[5-9]\d|20\d\d)/.exec(name.replace(/[০-৯]/g, (digit) => String("০১২৩৪৫৬৭৮৯".indexOf(digit))));
+  return match ? Number(match[0]) : null;
+}
+
+/** A URL slug for an admin-added category: Latin letters/digits kept, else a short random tail. */
+export function categorySlug(name: string, random = Math.random) {
+  const latin = name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+  return `${latin || "exam"}-${random().toString(36).slice(2, 7)}`;
+}
+
+/** Years newest first, sets without a year last ("অন্যান্য"). */
+export function groupByYear<T extends { year: number | null }>(sets: T[]) {
+  const groups = new Map<number | null, T[]>();
+  for (const set of sets) groups.set(set.year, [...(groups.get(set.year) ?? []), set]);
+  return [...groups].sort(([a], [b]) => (a === null ? 1 : b === null ? -1 : b - a)).map(([year, items]) => ({ year, sets: items }));
+}
+
+export type ChapterMcqRow = { serial: number; text: string; options: string[]; correctIndex: number; solution: string | null; explanation: string | null };
+export type ChapterShortRow = { serial: number; question: string; answer: string };
+export type ChapterSheetKind = "mcq" | "short";
+export type CheckedChapterRow<T> = { line: number; row: T | null; errors: string[] };
+
+/**
+ * A chapter's sheet: no exam/section/session columns, the chapter is the one the admin is on.
+ * MCQ: প্রশ্ন, ক–ঘ (+ অতিরিক্ত), সঠিক উত্তর (letter), সমাধান, ব্যাখ্যা, ক্রম. Short: প্রশ্ন, উত্তর, ক্রম.
+ */
+export function mapChapterColumns(headers: string[], kind: ChapterSheetKind) {
+  const map: Partial<Record<BankField, number>> = {};
+  headers.forEach((raw, index) => {
+    const header = raw.trim();
+    const option = OPTION_HEADERS.find(([, pattern]) => pattern.test(header));
+    const field: BankField | undefined = kind === "mcq" && option ? option[0]
+      : /ক্রম|serial/i.test(header) ? "serial"
+      : /^প্রশ্ন|^question/i.test(header) ? "question"
+      : kind === "mcq" && /অতিরিক্ত|extra/i.test(header) ? "o5"
+      : kind === "mcq" && /letter|সঠিক\s*উত্তর|^উত্তর$|^answer$/i.test(header) ? "letter"
+      : kind === "short" && /উত্তর|answer/i.test(header) ? "answer"
+      : kind === "mcq" && /সমাধান|solution/i.test(header) ? "solution"
+      : kind === "mcq" && /ব্যাখ্যা|explanation/i.test(header) ? "explanation"
+      : undefined;
+    if (field && map[field] === undefined) map[field] = index;
+  });
+  const required: BankField[] = kind === "mcq" ? ["question", "o1", "o2", "o3", "o4", "letter"] : ["question", "answer"];
+  return { map, missing: required.filter((field) => map[field] === undefined) };
+}
+
+function serialOf(text: string, line: number) {
+  const serial = Number.parseInt(text.replace(/[০-৯]/g, (digit) => String("০১২৩৪৫৬৭৮৯".indexOf(digit))), 10);
+  return Number.isFinite(serial) ? serial : line;
+}
+
+export function checkChapterMcqRow(cells: unknown[], map: Partial<Record<BankField, number>>, line: number): CheckedChapterRow<ChapterMcqRow> {
+  const get = (field: BankField) => cell(cells, map[field]);
+  const errors: string[] = [];
+  const text = get("question");
+  if (!text) errors.push("প্রশ্ন ফাঁকা");
+  const options = [get("o1"), get("o2"), get("o3"), get("o4")];
+  options.forEach((option, index) => { if (!option) errors.push(`অপশন ${BANK_OPTION_LETTERS[index]} ফাঁকা`); });
+  if (get("o5")) options.push(get("o5"));
+  const correctIndex = letterIndex(get("letter"));
+  if (correctIndex === null) errors.push(`সঠিক উত্তরের অক্ষর বোঝা যায়নি: "${get("letter") || "ফাঁকা"}"`);
+  else if (correctIndex >= options.length) errors.push(`উত্তর "${get("letter")}" কিন্তু অপশন আছে ${options.length}টি`);
+  if (text.length > 2000 || options.some((option) => option.length > 500)) errors.push("প্রশ্ন বা অপশন খুব লম্বা");
+  if (errors.length || correctIndex === null) return { line, row: null, errors };
+  const solution = get("solution");
+  return {
+    line, errors,
+    row: { serial: serialOf(get("serial"), line), text, options, correctIndex, solution: solution ? cleanSolution(solution, options[correctIndex]).slice(0, 5000) || null : null, explanation: get("explanation").slice(0, 5000) || null },
+  };
+}
+
+export function checkChapterShortRow(cells: unknown[], map: Partial<Record<BankField, number>>, line: number): CheckedChapterRow<ChapterShortRow> {
+  const question = cell(cells, map.question);
+  const answer = cell(cells, map.answer);
+  const errors = [!question && "প্রশ্ন ফাঁকা", !answer && "উত্তর ফাঁকা", (question.length > 2000 || answer.length > 10_000) && "খুব লম্বা"].filter((error): error is string => Boolean(error));
+  return errors.length ? { line, row: null, errors } : { line, errors, row: { serial: serialOf(cell(cells, map.serial), line), question, answer } };
+}
+
+/**
+ * Pasted text in pieces the AI can sort out within its time limit: cut at blank lines (between
+ * questions), else at line ends, never inside a line unless one line is longer than `max`.
+ */
+export function chunkPastedText(text: string, max = 6000) {
+  const chunks: string[] = [];
+  let current = "";
+  const push = () => { if (current.trim()) chunks.push(current.trim()); current = ""; };
+  for (const block of text.replace(/\r\n?/g, "\n").split(/\n\s*\n/)) {
+    const pieces = block.length > max ? block.split("\n").flatMap((line) => (line.length > max ? line.match(new RegExp(`[\\s\\S]{1,${max}}`, "g")) ?? [] : [line])) : [block];
+    for (const piece of pieces) {
+      if (current && current.length + piece.length + 2 > max) push();
+      current = current ? `${current}${block.length > max ? "\n" : "\n\n"}${piece}` : piece;
+    }
+  }
+  push();
+  return chunks;
+}

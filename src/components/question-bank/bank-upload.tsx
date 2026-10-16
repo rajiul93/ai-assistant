@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { formatDateTime } from "@/lib/dayjs";
 import {
-  BANK_CHECK_BATCH, BANK_EDITED, BANK_EXAMS, BANK_IMPORT_BATCH, checkRow, FIELD_LABELS, isBlankRow, mapColumns, questionFingerprint, repeatsInFile, rowContentHash, rowSetKey,
+  BANK_CHECK_BATCH, BANK_EDITED, BANK_IMPORT_BATCH, checkRow, FIELD_LABELS, isBlankRow, mapColumns, questionFingerprint, repeatsInFile, rowContentHash, rowSetKey,
   type BankField, type BankRow, type CheckedRow,
 } from "@/lib/question-bank";
 import { cn } from "@/lib/utils";
@@ -28,7 +28,6 @@ type Sorted = { line: number; row: BankRow; fate: Fate };
 type Checked = { fileName: string; sheet: string; sheets: string[]; file: File; missing: BankField[]; rows: CheckedRow[]; repeats: Map<number, number>; sorted: Sorted[] };
 type Progress = { done: number; total: number; created: number; updated: number; failed?: string };
 
-const examLabel = (id: string) => BANK_EXAMS.find((exam) => exam.id === id)?.label ?? id;
 
 /** The header is usually row 1, but a title row above it is common; look a few rows down. */
 function findHeader(rows: unknown[][]) {
@@ -134,7 +133,7 @@ export function BankUpload({ sets }: { sets: BankSetRow[] }) {
     router.refresh();
   }
 
-  const shownSets = examFilter === "ALL" ? sets : sets.filter((set) => set.exam === examFilter);
+  const shownSets = examFilter === "ALL" ? sets : sets.filter((set) => set.categoryName === examFilter);
   const allPicked = shownSets.length > 0 && shownSets.every((set) => picked.has(set.id));
   const toggle = (id: string) => setPicked((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const toggleAll = () => setPicked(allPicked ? new Set() : new Set(shownSets.map((set) => set.id)));
@@ -217,7 +216,7 @@ export function BankUpload({ sets }: { sets: BankSetRow[] }) {
         <h2 className="font-semibold">ব্যাংকে থাকা set ({sets.length})</h2>
         {sets.length ? <select value={examFilter} onChange={(event) => { setExamFilter(event.target.value); setPicked(new Set()); }} aria-label="পরীক্ষা অনুযায়ী দেখো" className="h-9 rounded-xl border border-zinc-200 bg-white px-2.5 text-sm">
           <option value="ALL">সব পরীক্ষা</option>
-          {BANK_EXAMS.map((exam) => <option key={exam.id} value={exam.id}>{exam.label}</option>)}
+          {[...new Set(sets.map((set) => set.categoryName))].map((name) => <option key={name} value={name}>{name}</option>)}
         </select> : null}
       </div>
 
@@ -235,7 +234,7 @@ export function BankUpload({ sets }: { sets: BankSetRow[] }) {
           {shownSets.map((set) => <label key={set.id} className={cn("flex cursor-pointer items-center gap-3 px-4 py-3", picked.has(set.id) && "bg-red-50/50")}>
             <input type="checkbox" checked={picked.has(set.id)} onChange={() => toggle(set.id)} className="size-4 shrink-0 accent-zinc-900" />
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-xs text-indigo-600">{examLabel(set.exam)} · {set.section}</span>
+              <span className="block truncate text-xs text-indigo-600">{set.categoryName} · {set.section}</span>
               <span className="block truncate font-medium">{set.name}</span>
               <span className="block text-xs text-zinc-500">{set.questionCount}টি প্রশ্ন · {set.copyCount} জন পাঠিয়েছে · {formatDateTime(set.updatedAt)}</span>
             </span>

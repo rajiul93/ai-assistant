@@ -167,9 +167,12 @@ alone. Record decisions and their reasons; don't restate code.
   unique per user+video.
 - `Confusion` (CONFUSION → CLEAR; old entries may have a free-text `topic`, kept for display). Jobs: `JobApplication`. Billing: `PlanPackage`, `Payment`,
   `Entitlement`, `AiUsage`.
-- Question Bank (shared): `BankSet` (exam + section + session) → `BankQuestion` (4–5 options,
-  solution, explanation, fingerprint). A user's copy is a normal `QuestionSet` with `bankSetId`
-  (one per user per bank set). Preliminary `Question` allows 4–5 options and stores
+- Question Bank (shared): `BankCategory` (3 built-ins tied to `BankExam`, + admin-added) →
+  `BankSet` (section + name, `year`, `free`; `exam` mirrors the category) → `BankQuestion` (4–5
+  options, solution, explanation, fingerprint; in a set **or** a chapter, `free` for chapters).
+  General: `BankSubject` → `BankChapter` → `BankArticle` / `BankQuestion` / `BankShortQuestion`.
+  A user's copy of a set is a normal `QuestionSet` with `bankSetId` (one per user per bank set); a
+  chapter sent to Preliminary / Short Question is a plain new set each time. Preliminary `Question` allows 4–5 options and stores
   solution/explanation, hidden during a test like the answer.
 - Vocabulary (shared, not per user): `VerbEntry`, `NounEntry`, `AffixEntry` — built-in rows come
   from the seed (no `userId`); admins add more; `VocabLearned` = per-user ticks.
@@ -198,7 +201,7 @@ alone. Record decisions and their reasons; don't restate code.
 | **Staff page + permissions** (`/admin/staff`; old `/admin/users` redirects) | **built; migration applied 2026-10-15; not yet tried signed in** | Existing admins get billing, question_bank, vocabulary (what admins could do before) |
 | **Device limit (2) + shared timer** | **built; migration `20261025000000_devices_and_shared_timer` applied 2026-10-15; not yet tried signed in on real devices** | see Auth and roles. Check: sign in on 2 browsers, a 3rd shows the chooser; start a timer on one, the other shows it within 15 s |
 | Set audio (TTS MP3 per set on Cloudflare R2) | planned, not started | owner deferred it |
-| **Question Bank** (BCS / প্রাইমারি / ১১–২০ গ্রেড; sets per exam session; "Preliminary-তে পাঠাও" copies a set; super admin uploads .xlsx) | **built; migration applied 2026-10-13; not yet tried with a real sheet** | [docs/question-bank-plan.md](docs/question-bank-plan.md) — sheet assumptions in §2 |
+| **Question Bank v2** (two halves: **General** subject → chapter → Article / MCQ / Short Question, and **বিগত বছরের প্রশ্ন** category → year → set; free/paid per item; staff add, upload .xlsx or paste text that AI sorts per chapter, move — sets into chapters with an AI duplicate check — price; no plan: any 3 past-year sets to read, nothing to Preliminary; plan: 2 bank sets at a time per kind until 60%) | **built; migrations `20261026000000_question_bank_v2` (75 BCS + 91 grade sets backfilled, 51 without a year) and `20261027000000_bank_limits` applied 2026-10-16; not tried signed in** | [docs/question-bank-v2-plan.md](docs/question-bank-v2-plan.md) (v1: [docs/question-bank-plan.md](docs/question-bank-plan.md)). Access in `src/server/bank-access.ts`; the three built-in categories keep `exam` so plan prices still come from `canOpenExam`. Old `/question-bank/[exam]/…` URLs redirect |
 | **Profile page (name + phone)** | **built; migration applied to Neon 2026-10-13** | [docs/profile-and-group-chat-plan.md](docs/profile-and-group-chat-plan.md) §1. Sign-in no longer overwrites a name the user saved (`profileUpdatedAt`) |
 | **Group chat (3–20 friends)** | **built; migration applied 2026-10-13; integration tests + three-browser check not run** | same doc §2. Separate tables (`ChatGroup`, `ChatGroupMember`, `GroupMessage`); 1:1 chat untouched |
 

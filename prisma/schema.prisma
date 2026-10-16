@@ -72,6 +72,7 @@ model User {
   payments               Payment[]
   entitlements           Entitlement[]
   devices                UserDevice[]
+  bankUnlocks            BankSetUnlock[]
   activeTimer            ActiveTimer?
 }
 
@@ -585,6 +586,9 @@ model QuestionSet {
   /// Set when this set was sent from the Question Bank; one copy per user per bank set.
   bankSetId String?
   bankSet   BankSet?          @relation(fields: [bankSetId], references: [id], onDelete: SetNull)
+  /// Sent from the Question Bank (a past-year set or a chapter's MCQs). Counts toward the "two at a
+  /// time until 60%" limit (src/server/bank-slots.ts) — kept even if the bank set is later removed.
+  fromBank  Boolean           @default(false)
 
   @@unique([userId, bankSetId])
   @@index([userId, status])
@@ -644,6 +648,8 @@ model ShortQuestionSet {
   updatedAt DateTime           @updatedAt
   questions ShortQuestion[]
   attempts  ShortTestAttempt[]
+  /// Sent from a Question Bank chapter; counts toward the "two at a time until 60%" limit.
+  fromBank  Boolean            @default(false)
 
   @@index([userId, status])
   @@index([subjectId])
@@ -1013,27 +1019,51 @@ enum BankExam {
   GRADE_11_20
 }
 
-/// One past paper (or other session) in the shared bank, uploaded by the super admin from a sheet.
-/// Users only read it and send a copy to their own Preliminary; there is no status or exam here.
-model BankSet {
-  id        String         @id @default(cuid())
-  exam      BankExam
-  /// The sheet's "ধরন (Section)", e.g. "বিগত সালের প্রশ্ন".
-  section   String
-  /// The sheet's "সেশন/বিষয়", e.g. "গণপূর্ত অধিদপ্তর (2025)".
-  name      String
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
-  questions BankQuestion[]
-  copies    QuestionSet[]
-
-  @@unique([exam, section, name])
+/// A tab under "বিগত বছরের প্রশ্ন" (docs/question-bank-v2-plan.md): the three built-in exams, linked
+/// to BankExam so their price stays the exam's track, and any an admin adds (exam null: any plan).
+model BankCategory {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  slug      String    @unique
+  exam      BankExam? @unique
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+  sets      BankSet[]
 }
 
+/// One past paper (or other session) in the shared bank, uploaded from a sheet or moved here by staff.
+/// Users read it and send a copy to their own Preliminary; there is no status here.
+model BankSet {
+  id         String          @id @default(cuid())
+  categoryId String
+  category   BankCategory    @relation(fields: [categoryId], references: [id])
+  /// Mirrors the category's exam (null for admin-added categories); the sheet upload finds sets by it.
+  exam       BankExam?
+  /// The sheet's "ধরন (Section)", e.g. "বিগত সালের প্রশ্ন".
+  section    String
+  /// The sheet's "সেশন/বিষয়", e.g. "গণপূর্ত অধিদপ্তর (2025)".
+  name       String
+  /// Read from the name when created; null shows under "অন্যান্য". Staff can change it.
+  year       Int?
+  /// Open to everyone, plan or not.
+  free       Boolean         @default(false)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  questions  BankQuestion[]
+  copies     QuestionSet[]
+  unlocks    BankSetUnlock[]
+
+  @@unique([categoryId, section, name])
+  @@index([exam])
+}
+
+/// An MCQ in a past-year set or in a General chapter (exactly one of the two; a CHECK in SQL).
 model BankQuestion {
-  id           String    @id @default(cuid())
-  setId        String
-  set          BankSet   @relation(fields: [setId], references: [id], onDelete: Cascade)
+  id           String       @id @default(cuid())
+  setId        String?
+  set          BankSet?     @relation(fields: [setId], references: [id], onDelete: Cascade)
+  chapterId    String?
+  chapter      BankChapter? @relation(fields: [chapterId], references: [id], onDelete: Cascade)
   /// The sheet's "ক্রম"; questions are shown in this order.
   serial       Int
   text         String
@@ -1047,13 +1077,83 @@ model BankQuestion {
   /// Hash of the question and its options: the sheet has no ID, so this is how a re-upload finds
   /// the same question (and updates it) instead of adding it twice.
   fingerprint  String
+  /// A chapter MCQ open without a plan (a past-year set is free or paid as a whole).
+  free         Boolean      @default(false)
   /// Set when an admin edits the question or has AI clean it. A later upload of the sheet then leaves
   /// it alone (the sheet still holds the old text). The fingerprint stays the sheet's, so the same
   /// row is still recognised and never added twice.
   editedAt     DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   @@unique([setId, fingerprint])
+  @@unique([chapterId, fingerprint])
   @@index([setId, serial])
+  @@index([chapterId, serial])
+}
+
+/// A past-year set a user without a plan chose to open (owner, 2026-10-16: any 3, kept for good).
+model BankSetUnlock {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  setId     String
+  set       BankSet  @relation(fields: [setId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([userId, setId])
+}
+
+/// A subject of the General bank (shared; staff add them).
+model BankSubject {
+  id        String        @id @default(cuid())
+  name      String        @unique
+  sortOrder Int           @default(0)
+  createdAt DateTime      @default(now())
+  chapters  BankChapter[]
+}
+
+model BankChapter {
+  id             String              @id @default(cuid())
+  subjectId      String
+  subject        BankSubject         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  name           String
+  sortOrder      Int                 @default(0)
+  createdAt      DateTime            @default(now())
+  articles       BankArticle[]
+  questions      BankQuestion[]
+  shortQuestions BankShortQuestion[]
+
+  @@unique([subjectId, name])
+}
+
+/// A lesson written in the Quill editor (sanitized HTML). Free unless staff mark it paid.
+model BankArticle {
+  id        String      @id @default(cuid())
+  chapterId String
+  chapter   BankChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  title     String
+  content   String
+  free      Boolean     @default(true)
+  sortOrder Int         @default(0)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([chapterId, sortOrder])
+}
+
+model BankShortQuestion {
+  id          String      @id @default(cuid())
+  chapterId   String
+  chapter     BankChapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  serial      Int         @default(0)
+  question    String
+  answer      String
+  /// Hash of the question, so an upload doesn't add it twice to the chapter.
+  fingerprint String
+  free        Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@unique([chapterId, fingerprint])
+  @@index([chapterId, serial])
 }

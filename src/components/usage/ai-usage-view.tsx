@@ -20,6 +20,8 @@ const featureLabels: Record<string, string> = {
   note_writer: "Note writing",
   bank_beautify: "Question bank clean-up",
   bank_solve: "Question bank solutions & explanations",
+  bank_paste: "Question bank pasted questions sorted",
+  bank_dupes: "Question bank duplicate check",
   vocab_explain: "Vocabulary explanations",
   speech: "Voice replies (spoken aloud)",
   transcribe: "Understanding your voice",
