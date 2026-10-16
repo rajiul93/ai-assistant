@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { aiBlockedMessage } from "@/lib/ai-limits";
+import { applyBlockEdits, splitBlocks, type BlockEdit } from "@/lib/note-blocks";
 import { htmlToPlainText, noteWritingRules, sanitizeNoteHtml } from "@/lib/note-html";
 import { checkAi } from "@/server/ai-access";
 import { callAI } from "@/server/assistant/ai";
@@ -15,9 +16,11 @@ export const noteWriteSchema = z.object({
 });
 
 /**
- * Writes the note with AI. It gets the whole note as it is now and returns the whole note with the
- * instruction applied ("improve", "add examples", "make a table"…) — not a piece to append, which
- * used to leave two copies of everything. With reference photos (a book page, a class sheet) it
+ * Writes the note with AI. It sees the whole note as numbered blocks and sends back only the edits
+ * (replace / insert after / delete a block) for the instruction ("improve", "add examples", "make
+ * a table"…); the edits are applied here and the whole updated note is returned. Not a piece to
+ * append (that left two copies of everything), and not the whole note rewritten (long notes ran
+ * past the time limit). With reference photos (a book page, a class sheet) it
  * gets their text, read one photo at a time beforehand, and adds or fixes from it what the note
  * misses or gets wrong — thinking first, since that comparison has to be right. The page shows
  * the result with an undo. A paid feature (owner, 2026-10-16). Server-only: takes the user, so
@@ -43,25 +46,58 @@ ${references.map((text, index) => `--- ছবি ${index + 1} ---\n${text.slice(
 ৩. Reference-এ টেবিল থাকলে note-এও টেবিল রাখো।
 ৪. হুবহু কপি নয় — note-এর ধরনে গুছিয়ে লেখো; reference-এ নেই এমন তথ্য বানাবে না; [অস্পষ্ট] অংশ বাদ দাও।
 ৫. শেষে আবার মিলিয়ে নাও কিছু বাদ পড়েনি তো।` : "";
+  // The note as numbered blocks: the AI sends back only what changes (see lib/note-blocks), which
+  // keeps long notes inside the time limit and leaves untouched parts exactly as they were.
+  const blocks = empty ? [] : splitBlocks(current);
+  const numbered = blocks.map((block, index) => `[${index + 1}] ${block}`).join("\n").slice(0, 60_000);
   const prompt = `তুমি একজন যত্নশীল শিক্ষক, ব্যবহারকারীর study note লিখতে সাহায্য করছো।
 ${noteWritingRules}
 ভাষা: ${data.lang === "en" ? "English" : "সহজ বাংলা (প্রয়োজনে technical শব্দ ইংরেজিতে)"}।
 Note-এর title: ${data.title || "(নেই)"}
-${empty ? "Note এখন ফাঁকা — নির্দেশ মতো নতুন করে লেখো।" : `Note-এ এখন যা আছে (HTML):
-${current.slice(0, 40_000)}
-
-নির্দেশটা এই note-এর ওপর প্রয়োগ করে **পুরো note-টা আবার দাও** — উন্নত/বদলানো অংশসহ, বাকি অংশ যেমন আছে তেমন রেখে। কোনো অংশ দুবার লিখবে না, পুরোনো লেখার পরে নতুন কপি জুড়বে না। নির্দেশে কিছু যোগ করতে বললে ঠিক জায়গায় বসাবে; বাদ দিতে বললে বাদ দেবে। গণিতের formula আর টেবিল আগের মতোই রাখবে।`}${imageRule}
+${empty ? "Note এখন ফাঁকা।" : `Note-এ এখন যা আছে — নম্বর দেওয়া block হিসেবে (প্রতিটা block একটা শিরোনাম, অনুচ্ছেদ, পুরো তালিকা বা পুরো টেবিল):
+${numbered}`}${imageRule}
 
 ব্যবহারকারীর নির্দেশ: ${instruction}
 
-শুধু পুরো note-এর HTML দাও, আর কিছু না।`;
+উত্তর দেবে শুধু পরিবর্তনগুলো (edits) হিসেবে — পুরো note আবার লিখবে না:
+- op "replace": block নম্বরের পুরো block-টা নতুন html দিয়ে বদলাও (উন্নত/সংশোধিত লেখা)।
+- op "insert_after": block নম্বরের পরে নতুন html বসাও (০ = একদম শুরুতে)। একই জায়গায় একাধিক insert দিলে যে ক্রমে দেবে সেই ক্রমে বসবে।
+- op "delete": block-টা বাদ দাও (html ফাঁকা)।
+- যে block বদলানোর দরকার নেই সেটা edits-এ রাখবে না। একই কথা দুবার লিখবে না।
+- html হবে note-এর নিয়ম মেনে সরল HTML (তালিকা হলে পুরো <ol>/<ul>, টেবিল হলে পুরো <table>)। Note ফাঁকা হলে পুরো note insert_after 0 দিয়ে দাও।`;
   const { blocked } = await checkAi(user, "suggestion");
   if (blocked) throw new Error(aiBlockedMessage(blocked, data.lang === "en" ? "en" : "bn"));
-  const raw = await callAI(prompt, { userId: user.id, feature: "note_writer", timeoutMs: 55_000, reasoning: references.length ? "medium" : undefined });
+  const raw = await callAI(prompt, { responseSchema: editsSchema, userId: user.id, feature: "note_writer", timeoutMs: 55_000, reasoning: references.length ? "low" : undefined });
   if (!raw) throw new Error(data.lang === "en" ? "The AI isn't responding right now. Please try again in a moment." : "AI এখন সাড়া দিচ্ছে না। একটু পরে আবার চেষ্টা করো।");
-  const html = sanitizeNoteHtml(raw.replace(/^```(?:html)?\s*|\s*```$/g, ""));
-  // If the model ignored the HTML rule and sent plain text, wrap its paragraphs.
-  return /<(p|h[1-3]|ul|ol|blockquote|table)\b/i.test(html)
-    ? html
-    : html.split(/\n{2,}/).map((part) => `<p>${part.trim()}</p>`).join("");
+  let edits: BlockEdit[];
+  try {
+    edits = editsAnswer.parse(JSON.parse(raw)).edits.map((edit) => ({ ...edit, html: edit.op === "delete" ? "" : sanitizeNoteHtml(edit.html) }));
+  } catch {
+    throw new Error("AI-এর উত্তর বোঝা গেল না, আবার চেষ্টা করো।");
+  }
+  if (!edits.length) throw new Error("AI কোনো পরিবর্তন দরকার মনে করেনি — নির্দেশটা আরেকটু স্পষ্ট করে লেখো।");
+  return applyBlockEdits(blocks, edits);
 }
+
+const editsSchema = {
+  type: "OBJECT",
+  properties: {
+    edits: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          op: { type: "STRING", enum: ["replace", "insert_after", "delete"] },
+          block: { type: "INTEGER" },
+          html: { type: "STRING" },
+        },
+        required: ["op", "block", "html"],
+      },
+    },
+  },
+  required: ["edits"],
+};
+
+const editsAnswer = z.object({
+  edits: z.array(z.object({ op: z.enum(["replace", "insert_after", "delete"]), block: z.number().int(), html: z.string().max(60_000) })).max(200),
+});
