@@ -12,7 +12,7 @@ const icons = { BCS: Landmark, PRIMARY: School, GRADE_11_20: GraduationCap };
 export default async function QuestionBankPage() {
   await requireUser();
   const counts = await bankOverview();
-  return <div className="mx-auto max-w-3xl space-y-4">
+  return <div className="space-y-4">
     <div>
       <h1 className="text-2xl font-semibold tracking-tight">প্রশ্ন ব্যাংক</h1>
       <p className="mt-1 text-sm text-zinc-500">বিগত সালের প্রশ্ন, set ধরে। পড়তে বা exam দিতে set-টা নিজের Preliminary-তে পাঠাও।</p>

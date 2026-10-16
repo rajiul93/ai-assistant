@@ -27,7 +27,7 @@ export function BillingView({ overview, paymentResult }: { overview: BillingOver
   const pending = payments.filter((payment) => payment.status === "PENDING").length;
   const note = paymentResult ? paymentNotes[paymentResult] : null;
 
-  return <div className="mx-auto max-w-3xl space-y-3">
+  return <div className="space-y-3">
     {/* One small banner: what runs now (one line each), today's AI use, and payments waiting. */}
     <section className="rounded-3xl bg-linear-to-br from-[#3f6ef3] via-[#5a87f8] to-[#8fa6fb] p-3.5 text-white shadow-[0_14px_32px_-18px_rgba(37,99,235,0.6)]">
       <div className="flex items-center justify-between gap-2">

@@ -149,7 +149,7 @@ export function AdminBilling({ payments, status, pendingCount, page, limit, tota
     { id: "pricing", label: "Prices" },
     { id: "numbers", label: "Numbers" },
   ];
-  return <div className="mx-auto max-w-3xl space-y-3">
+  return <div className="space-y-3">
     <div>
       <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Billing</h1>
       <p className="hidden text-sm text-zinc-500 sm:block">bKash/Nagad-এর TrxID মিলিয়ে approve করুন; online payment নিজে থেকেই approve হয়। নতুন দাম শুধু নতুন কেনায় লাগে।</p>

@@ -52,7 +52,7 @@ export function VideoLibrary({ videos, limit, subjects }: { videos: Video[]; lim
   const filed = subjects.filter((subject) => videos.some((video) => video.subjectId === subject.id));
   const shown = filter ? videos.filter((video) => video.subjectId === filter) : videos;
 
-  return <div className="mx-auto max-w-5xl space-y-4">
+  return <div className="space-y-4">
     <section className="rounded-3xl bg-linear-to-br from-[#3f6ef3] via-[#5a87f8] to-[#8fa6fb] p-4 text-white shadow-[0_14px_32px_-18px_rgba(37,99,235,0.6)]">
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">

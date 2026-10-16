@@ -205,7 +205,7 @@ export function PreliminaryBoard({ kind = "mcq", sets, subjects, topics = [] }: 
     return `${pathname}?${params}`;
   };
 
-  return <div className="mx-auto max-w-4xl space-y-3">
+  return <div className="space-y-3">
     {/* One slim header in the home page's blue: title, merge and new, and the four stages. */}
     <section className="rounded-3xl bg-linear-to-br from-[#3f6ef3] via-[#5a87f8] to-[#8fa6fb] p-3 text-white shadow-[0_14px_32px_-18px_rgba(37,99,235,0.6)]">
       <div className="flex items-center gap-2 px-1">
@@ -249,7 +249,7 @@ export function PreliminaryBoard({ kind = "mcq", sets, subjects, topics = [] }: 
       </div>}
 
     {selecting ? <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 border-t border-zinc-200 bg-white/90 px-4 py-3 backdrop-blur-xl lg:bottom-0 lg:pl-64">
-      <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
+      <div className="container mx-auto flex items-center justify-between gap-3">
         <p className="text-xs text-zinc-600">{pickedSets.length ? <><span className="font-semibold text-zinc-900">{pickedSets.length}টি set</span> · {pickedSets.reduce((sum, set) => sum + set.questionCount, 0)}টি প্রশ্ন</> : "অন্তত ২টা set বাছো"}</p>
         <button type="button" onClick={() => setMerging(true)} disabled={pickedSets.length < 2} className="flex h-11 items-center gap-1.5 rounded-full bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"><Combine className="size-4" /> এক করো</button>
       </div>

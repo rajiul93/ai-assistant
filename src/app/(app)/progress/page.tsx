@@ -63,7 +63,7 @@ export default async function ProgressPage({ searchParams }: { searchParams: Pro
   const prepDays = plan ? dayjs(plan.preparationDeadline).tz(APP_TIMEZONE).startOf("day").diff(appNow().startOf("day"), "day") : null;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-3">
+    <div className="space-y-3">
       <ProgressHero todayMinutes={Math.floor(today / 60)} targetMinutes={target} streak={streak} weekSeconds={weekly} monthSeconds={monthly} prepDays={prepDays} />
       <ProgressTabs initial={view} panels={{
         daily: <DailyChart days={daily} targetMinutes={target} />,

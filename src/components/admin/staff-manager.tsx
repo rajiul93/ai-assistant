@@ -74,7 +74,7 @@ export function StaffManager({ rows, mine }: { rows: Row[]; mine: StaffPermissio
     run(() => addStaff({ email, permissions: picked }), `${email.trim()} এখন staff`, () => { setEmail(""); setPicked([]); });
   }
 
-  return <div className="mx-auto max-w-3xl space-y-3">
+  return <div className="space-y-3">
     <div>
       <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Staff</h1>
       <p className="text-xs text-zinc-500 sm:text-sm">আমাদের staff আর কে কী করতে পারবে। কাস্টমারদের block, AI বন্ধ বা subscription cancel এখন Customers পেজে।</p>

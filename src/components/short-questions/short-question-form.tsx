@@ -221,7 +221,7 @@ export function ShortQuestionForm({ subjects, topics = [], initial }: {
     toast.success(`${added.length}টি প্রশ্ন যোগ হলো${note}`, { duration: 6000 });
   }
 
-  return <div className="mx-auto max-w-3xl space-y-4 pb-24">
+  return <div className="space-y-4 pb-24">
     <Link href="/short-questions" className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900"><ArrowLeft className="size-4" /> Short Question</Link>
     <h1 className="text-2xl font-semibold tracking-tight">{initial ? "Set edit করো" : "নতুন short question set"}</h1>
 
@@ -298,7 +298,7 @@ export function ShortQuestionForm({ subjects, topics = [], initial }: {
     <button type="button" onClick={() => setQuestions((list) => [...list, emptyQuestion()])} className="flex h-11 w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-zinc-300 text-sm font-medium text-zinc-600 hover:border-zinc-400 hover:bg-white"><Plus className="size-4" /> প্রশ্ন যোগ করো</button>
 
     <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 border-t border-zinc-200 bg-white/90 px-4 py-3 backdrop-blur-xl lg:bottom-0 lg:pl-64">
-      <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
+      <div className="container mx-auto flex items-center justify-between gap-3">
         {dictating ? <p role="status" className="flex min-w-0 items-center gap-2 text-xs font-medium text-red-600"><span className="size-2 shrink-0 animate-pulse rounded-full bg-red-500" /><span className="truncate">{heard && heard !== "…" ? heard : "শুনছি… বলো"}</span></p>
           : <p className="text-xs text-zinc-500">{questions.length}টি প্রশ্ন · {problems.filter((problem) => !problem).length}টি সম্পূর্ণ{unchecked ? <span className="font-medium text-amber-700"> · {unchecked} যাচাই বাকি</span> : null}</p>}
         <button type="button" onClick={() => void save()} disabled={saving} className="h-11 rounded-xl bg-zinc-950 px-5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50">{saving ? "Saving…" : initial ? "সেভ করো" : "Set বানাও"}</button>

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronLeft, FileText, Plus, Search, Sparkles, Trash2, Undo2 } from "lucide-react";
+import { Check, ChevronLeft, ClipboardCheck, FileText, Lock, Plus, Search, Sparkles, Trash2, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { QuillEditor, type QuillHandle } from "@/components/notes/quill-editor";
 import { NoteLinks, type SubjectOption, type TopicOption } from "@/components/notes/note-links";
@@ -19,6 +19,7 @@ import {
 import { APP_TIMEZONE, dayjs } from "@/lib/dayjs";
 import { ShareButton } from "@/components/collaboration/share-button";
 import { cn } from "@/lib/utils";
+import { NoteQuizDialog } from "@/components/notes/note-quiz-dialog";
 import { createNote, deleteNote, generateNoteContent, getNote, listNotes, updateNote } from "@/server/actions/notes";
 import { useAssistantStore } from "@/store/assistant";
 import { MathText } from "@/components/math-text";
@@ -32,7 +33,7 @@ function updatedLabel(date: Date) {
 }
 
 /** Editor for one note: title + Quill body, autosaved 0.8s after typing stops, plus AI writing. */
-function NoteEditor({ noteId, subjects, topics, onSaved, onDeleted, onBack }: { noteId: string; subjects: SubjectOption[]; topics: TopicOption[]; onSaved: () => void; onDeleted: () => void; onBack: () => void }) {
+function NoteEditor({ noteId, subjects, topics, premium, onSaved, onDeleted, onBack }: { noteId: string; subjects: SubjectOption[]; topics: TopicOption[]; premium: boolean; onSaved: () => void; onDeleted: () => void; onBack: () => void }) {
   const noteQuery = useQuery({ queryKey: ["note", noteId], queryFn: () => getNote(noteId), staleTime: 0 });
   const lang = useAssistantStore((state) => state.lang);
   const editorRef = useRef<QuillHandle>(null);
@@ -43,6 +44,7 @@ function NoteEditor({ noteId, subjects, topics, onSaved, onDeleted, onBack }: { 
   const [writing, setWriting] = useState(false);
   // After an AI rewrite: the note as it was before, so it can be put back.
   const [beforeAi, setBeforeAi] = useState<string | null>(null);
+  const [quizOpen, setQuizOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const latest = useRef({ title: "", content: "" });
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -112,6 +114,10 @@ function NoteEditor({ noteId, subjects, topics, onSaved, onDeleted, onBack }: { 
         <button type="button" onClick={() => setAiOpen(!aiOpen)} className={cn("flex h-9 items-center gap-1.5 rounded-full px-3 text-sm font-semibold transition lg:h-8", aiOpen ? "bg-blue-600 text-white" : "bg-blue-50 text-blue-700 hover:bg-blue-100")}>
           <Sparkles className="size-4" /> AI<span className="hidden lg:inline"> দিয়ে লিখুন</span>
         </button>
+        {/* Note → MCQ set: AI drafts, the dialog shows every answer, saved only on approve. */}
+        <button type="button" onClick={() => setQuizOpen(true)} title="এই note থেকে AI দিয়ে Preliminary প্রশ্ন বানাও" className="flex h-9 items-center gap-1.5 rounded-full bg-emerald-50 px-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 lg:h-8">
+          {premium ? <ClipboardCheck className="size-4" /> : <Lock className="size-4" />}<span className="hidden lg:inline">Preliminary বানাও</span>
+        </button>
         <ShareButton type="NOTE" itemId={noteId} title={shownTitle} label={false} className="size-10 justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-900 lg:size-8" />
         <button type="button" onClick={() => setConfirmDelete(true)} className="flex size-10 items-center justify-center rounded-full text-slate-500 hover:bg-red-50 hover:text-red-700 lg:size-8" aria-label="নোট মুছুন"><Trash2 className="size-4" /></button>
       </div>
@@ -166,6 +172,8 @@ function NoteEditor({ noteId, subjects, topics, onSaved, onDeleted, onBack }: { 
       />
     </div>
 
+    <NoteQuizDialog noteId={noteId} subjects={subjects} premium={premium} open={quizOpen} onOpenChange={setQuizOpen} />
+
     <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
       <AlertDialogContent>
         <div className="space-y-1">
@@ -201,7 +209,7 @@ function setUrl(id: string | null, replace: boolean) {
   else window.history.pushState(null, "", url);
 }
 
-export function NotesWorkspace({ initialNotes, subjects, topics }: { initialNotes: NoteSummary[]; subjects: SubjectOption[]; topics: TopicOption[] }) {
+export function NotesWorkspace({ initialNotes, subjects, topics, premium }: { initialNotes: NoteSummary[]; subjects: SubjectOption[]; topics: TopicOption[]; /** A running plan (or staff): Note → Preliminary is paid. */ premium: boolean }) {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const isDesktop = useIsDesktop();
@@ -326,6 +334,7 @@ export function NotesWorkspace({ initialNotes, subjects, topics }: { initialNote
             noteId={selectedId}
             subjects={subjects}
             topics={topics}
+            premium={premium}
             onSaved={refreshList}
             onDeleted={() => { closeNote(); refreshList(); }}
             onBack={closeNote}

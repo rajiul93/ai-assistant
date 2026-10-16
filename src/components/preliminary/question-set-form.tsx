@@ -248,7 +248,7 @@ export function QuestionSetForm({ subjects, topics = [], initial }: {
     toast.success(`${parsed.length}টি প্রশ্ন যোগ হলো${skipped ? ` · ${skipped}টি বোঝা যায়নি (উত্তর বা ৪টা option নেই)` : ""}`);
   }
 
-  return <div className="mx-auto max-w-3xl space-y-4 pb-24">
+  return <div className="space-y-4 pb-24">
     <Link href="/preliminary" className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900"><ArrowLeft className="size-4" /> Preliminary</Link>
     <h1 className="text-2xl font-semibold tracking-tight">{initial ? "Set edit করো" : "নতুন question set"}</h1>
 
@@ -345,7 +345,7 @@ export function QuestionSetForm({ subjects, topics = [], initial }: {
 
     {/* Save stays in reach while scrolling through many questions. */}
     <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 border-t border-zinc-200 bg-white/90 px-4 py-3 backdrop-blur-xl lg:bottom-0 lg:pl-64">
-      <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
+      <div className="container mx-auto flex items-center justify-between gap-3">
         {dictating ? <p role="status" className="flex min-w-0 items-center gap-2 text-xs font-medium text-red-600"><Mic className="size-4 shrink-0 animate-pulse" /><span className="truncate">{heard && heard !== "…" ? heard : "শুনছি… বলো"}</span></p> : <p className="text-xs text-zinc-500">{questions.length}টি প্রশ্ন · {problems.filter((problem) => !problem).length}টি সম্পূর্ণ{unchecked ? <span className="font-medium text-amber-700"> · {unchecked} যাচাই বাকি</span> : null}</p>}
         <button type="button" onClick={() => void save()} disabled={saving} className="h-11 rounded-xl bg-zinc-950 px-5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50">{saving ? "Saving…" : initial ? "সেভ করো" : "Set বানাও"}</button>
       </div>

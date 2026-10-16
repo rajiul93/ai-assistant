@@ -700,7 +700,7 @@ export function VocabularyView({ verbs, affixes, nouns, learnedKeys, canEdit }: 
   const allDone = Object.values(totals).reduce((sum, [done]) => sum + done, 0);
   const allTotal = Object.values(totals).reduce((sum, [, total]) => sum + total, 0);
 
-  return <div className="mx-auto max-w-2xl space-y-3">
+  return <div className="space-y-3">
     {/* The home page's blue: the overall progress, then the four lists. */}
     <section className="rounded-3xl bg-linear-to-br from-[#3f6ef3] via-[#5a87f8] to-[#8fa6fb] p-4 text-white shadow-[0_14px_32px_-18px_rgba(37,99,235,0.7)]">
       <div className="flex items-start justify-between gap-3">

@@ -118,7 +118,8 @@ alone. Record decisions and their reasons; don't restate code.
   words (`src/lib/pronounce.ts`, browser speechSynthesis, no AI) is free for everyone. `src/lib/voice-access.ts` is switched on by `AppShell` for
   admins only, and `/api/speech`, `/api/transcribe`, `/api/transcribe/live` check `isAdminUser`.
 - Solutions/explanations need a running plan (admins always): `hasPremium` / `gateNotes` in
-  `src/server/premium.ts`. Question-bank content (and copies of bank sets) is per exam:
+  `src/server/premium.ts`. Also paid: Note → Preliminary (`generateQuizFromNote`, AI drafts MCQs,
+  the dialog shows every answer, saved only on approve) and vocabulary explanations. Question-bank content (and copies of bank sets) is per exam:
   `canOpenExam` (`src/server/pricing.ts`) / `premiumForSet`. Gate on the server, never only in the UI.
 - Prices are never stored per plan or taken from the client: `src/lib/pricing.ts` computes them
   from `PricingSettings` + `AiTier` + `ExamTrack` + `PlanDuration`; only the super admin edits those.

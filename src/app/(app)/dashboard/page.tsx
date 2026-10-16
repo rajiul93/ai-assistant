@@ -43,10 +43,10 @@ export default async function DashboardPage() {
   return (
     <>
     {/* Friend requests and shared items waiting for an answer; renders nothing when there are none. */}
-    <div className="mx-auto mb-5 max-w-6xl empty:hidden"><RequestsPanel compact /></div>
+    <div className="mb-5 empty:hidden"><RequestsPanel compact /></div>
     {/* The profile is optional; this reminder stays until name and phone are both filled. */}
     {!name?.trim() || !profile?.phone ? (
-      <Link href="/profile" className="mx-auto mb-5 flex max-w-6xl items-center gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900 transition hover:bg-sky-100">
+      <Link href="/profile" className="mb-5 flex items-center gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900 transition hover:bg-sky-100">
         <UserRound className="size-5 shrink-0" />
         <span><span className="font-semibold">প্রোফাইল সম্পূর্ণ করুন</span> — আপনার নাম আর মোবাইল নম্বর দিন।</span>
       </Link>
