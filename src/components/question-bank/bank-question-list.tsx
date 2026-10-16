@@ -264,7 +264,7 @@ export function BankQuestionList({ questions: initial, canEdit, chapterItems = f
       })}
     </ol>
 
-    {moveToChapter ? <MoveToChapter key={moving ?? "none"} source={moving ? { kind: "questions", ids: [moving] } : null} onClose={() => setMoving(null)}
+    {moveToChapter ? <MoveToChapter key={`move-${moving ?? "none"}`} source={moving ? { kind: "questions", ids: [moving] } : null} onClose={() => setMoving(null)}
       onMoved={(ids) => setQuestions((current) => current.filter((question) => !ids.includes(question.id)))} /> : null}
     {chapterItems ? <ConfirmDelete open={Boolean(deleting)} onOpenChange={(open) => !open && setDeleting(null)} busy={itemBusy} title="প্রশ্নটা মুছবে?" description="ব্যাংক থেকে মুছে যাবে; যারা আগে নিজের Preliminary-তে পাঠিয়েছে, তাদের কপি থাকবে।"
       onConfirm={() => { const id = deleting; if (!id) return; void itemChange(() => deleteBankItems({ kind: "mcq", ids: [id] }), "মুছে ফেলা হলো", id).then(() => setDeleting(null)); }} /> : null}

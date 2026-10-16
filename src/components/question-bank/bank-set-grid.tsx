@@ -107,8 +107,8 @@ export function BankYears({ category }: { category: Category }) {
       </div>
     </section>) : <p className="rounded-2xl border border-dashed border-zinc-300 bg-white px-4 py-10 text-center text-sm text-zinc-500">এই খোঁজে কোনো set নেই।</p>}
 
-    <MoveToChapter key={toChapter?.kind === "set" ? toChapter.setId : "none"} source={toChapter} onClose={() => setToChapter(null)} />
-    <SetEditDialog key={editing?.id ?? "none"} set={editing} onClose={() => setEditing(null)} />
+    <MoveToChapter key={`chapter-${toChapter?.kind === "set" ? toChapter.setId : "none"}`} source={toChapter} onClose={() => setToChapter(null)} />
+    <SetEditDialog key={`edit-${editing?.id ?? "none"}`} set={editing} onClose={() => setEditing(null)} />
     <MoveDialog open={Boolean(moving)} onOpenChange={(open) => !open && setMoving(null)} title="Set-টা কোন category-তে যাবে?" busy={busy}
       targets={category.others.map((other) => ({ id: other.id, label: other.name }))}
       onSubmit={(target) => moving && run(() => moveBankSets([moving.id], target), (result) => (result.skipped ? "ওই category-তে এই নামে set আগেই আছে — সরানো হয়নি" : "সরানো হলো"), () => setMoving(null))} />
