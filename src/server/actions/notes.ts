@@ -7,6 +7,7 @@ import { htmlToPlainText, noteWritingRules, sanitizeNoteHtml } from "@/lib/note-
 import { prisma } from "@/lib/prisma";
 import { aiBlockedMessage } from "@/lib/ai-limits";
 import { checkAi } from "@/server/ai-access";
+import { hasPremium } from "@/server/premium";
 import { callAI } from "@/server/assistant/ai";
 import { createTask } from "@/server/actions/tasks";
 import { noteSummarySelect } from "@/server/queries";
@@ -183,4 +184,74 @@ ${current.slice(0, 40_000)}
   return /<(p|h[1-3]|ul|ol|blockquote)\b/i.test(html)
     ? html
     : html.split(/\n{2,}/).map((part) => `<p>${part.trim()}</p>`).join("");
+}
+
+/* ---------- Note → Preliminary set (MCQ) with AI ---------- */
+
+export type DraftQuestion = { text: string; options: string[]; correctIndex: number; explanation: string | null };
+
+const quizSchema = {
+  type: "OBJECT",
+  properties: {
+    questions: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          text: { type: "STRING" },
+          options: { type: "ARRAY", items: { type: "STRING" } },
+          correctOption: { type: "INTEGER", description: "1-4: which option is right" },
+          explanation: { type: "STRING" },
+        },
+        required: ["text", "options", "correctOption", "explanation"],
+      },
+    },
+  },
+  required: ["questions"],
+};
+
+const quizAnswer = z.object({
+  questions: z.array(z.object({
+    text: z.string().trim().min(1).max(2000),
+    options: z.array(z.string().trim().min(1).max(500)),
+    correctOption: z.number().int(),
+    explanation: z.string().trim().max(2000),
+  })),
+});
+
+/**
+ * MCQs from one of the user's notes, for a Preliminary set — only a draft: nothing is saved until
+ * the user has looked at every question with its answer and approved (the page then calls
+ * createQuestionSet). Questions come only from what the note says; malformed ones are dropped.
+ */
+export async function generateQuizFromNote(input: { noteId: string; count: number; lang?: "bn" | "en" }) {
+  const user = await requireUser();
+  const data = z.object({ noteId: z.string().min(1).max(64), count: z.number().int().min(3).max(20), lang: z.enum(["bn", "en"]).optional() }).parse(input);
+  // A paid feature (owner, 2026-10-16): a running plan, or staff.
+  if (!(await hasPremium(user))) throw new Error("Note থেকে Preliminary বানানো paid feature — একটা plan নিলে পাবে।");
+  const note = await ownedNote(user.id, data.noteId);
+  const text = htmlToPlainText(note.content);
+  if (text.length < 40) throw new Error("Note-এ প্রশ্ন বানানোর মতো যথেষ্ট লেখা নেই।");
+  const { blocked } = await checkAi(user, "suggestion");
+  if (blocked) throw new Error(aiBlockedMessage(blocked, data.lang === "en" ? "en" : "bn"));
+
+  const prompt = `তুমি বাংলাদেশের চাকরির পরীক্ষার (BCS, প্রাইমারি, ব্যাংক) প্রশ্নকর্তা। নিচের study note থেকে ঠিক ${data.count}টা MCQ বানাও।
+- প্রতিটা প্রশ্নের ঠিক ৪টা option, একটাই সঠিক (correctOption 1-4); সঠিক উত্তরের জায়গা প্রশ্নভেদে বদলাবে।
+- প্রশ্ন আর উত্তর শুধু note-এ যা আছে তা থেকে; note-এ নেই এমন তথ্য বানাবে না। ভুল option-গুলো বিশ্বাসযোগ্য কিন্তু স্পষ্টভাবে ভুল।
+- নানা অংশ থেকে প্রশ্ন নাও; একই কথা দুবার জিজ্ঞেস করবে না। "সবগুলো"/"কোনোটিই নয়" ধরনের option এড়াও।
+- explanation: কেন এটা সঠিক, এক-দুই লাইনে।
+- ভাষা: ${data.lang === "en" ? "English" : "note যে ভাষায় সেই ভাষায় (সাধারণত বাংলা)"}। গণিত থাকলে LaTeX $…$-এ। কোনো markdown নয়।
+
+Note-এর শিরোনাম: ${note.title || "(নেই)"}
+Note:
+${text.slice(0, 24_000)}`;
+  const raw = await callAI(prompt, { responseSchema: quizSchema, userId: user.id, feature: "note_writer", timeoutMs: 55_000 });
+  if (!raw) throw new Error("AI এখন সাড়া দিচ্ছে না। একটু পরে আবার চেষ্টা করো।");
+  let parsed: z.infer<typeof quizAnswer>;
+  try { parsed = quizAnswer.parse(JSON.parse(raw)); } catch { throw new Error("AI-এর উত্তর বোঝা গেল না, আবার চেষ্টা করো।"); }
+  const questions: DraftQuestion[] = parsed.questions
+    .filter((question) => question.options.length === 4 && question.correctOption >= 1 && question.correctOption <= 4)
+    .map((question) => ({ text: question.text, options: question.options, correctIndex: question.correctOption - 1, explanation: question.explanation || null }));
+  if (!questions.length) throw new Error("AI কোনো ঠিকঠাক প্রশ্ন বানাতে পারেনি, আবার চেষ্টা করো।");
+  return { questions, topicName: note.title || "Note থেকে প্রশ্ন", subjectId: note.subjectId, topicId: note.topicId };
 }
