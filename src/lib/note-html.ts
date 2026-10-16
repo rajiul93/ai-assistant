@@ -6,7 +6,7 @@ import { formulaSpan, hasMath, replaceFormulaSpans, textToFormulaHtml } from "@/
  * media, scripts, styles or event handlers. The result is only ever rendered through Quill.
  */
 
-const allowedTags = new Set(["p", "br", "h1", "h2", "h3", "strong", "b", "em", "i", "u", "s", "ul", "ol", "li", "blockquote", "pre", "code", "a", "span", "div"]);
+const allowedTags = new Set(["p", "br", "h1", "h2", "h3", "strong", "b", "em", "i", "u", "s", "ul", "ol", "li", "blockquote", "pre", "code", "a", "span", "div", "table", "thead", "tbody", "tr", "td", "th"]);
 // Elements whose whole content must go, not just the tags.
 const droppedBlocks = /<(script|style|iframe|object|embed|svg|math|template|noscript|video|audio|picture|canvas)\b[\s\S]*?<\/\1\s*>/gi;
 const qlClass = /^(ql-[a-z0-9-]+)( ql-[a-z0-9-]+)*$/;
@@ -46,6 +46,9 @@ export function sanitizeNoteHtml(html: string) {
       // Quill 2 marks bullet vs numbered items with data-list on <li>.
       const list = name === "li" ? attribute(attrs, "data-list") : null;
       if (list && /^(bullet|ordered|checked|unchecked)$/.test(list)) kept.push(`data-list="${list}"`);
+      // Quill 2 ties each table cell to its row with data-row.
+      const row = name === "td" ? attribute(attrs, "data-row") : null;
+      if (row && /^[a-z0-9-]{1,24}$/i.test(row)) kept.push(`data-row="${row}"`);
       // A formula's LaTeX (lib/math) — only ever drawn by KaTeX, never inserted as HTML.
       if (name === "span" && cls?.trim() === "ql-formula") {
         const latex = attribute(attrs, "data-value");
@@ -65,7 +68,8 @@ export function sanitizeNoteHtml(html: string) {
 export function htmlToPlainText(html: string) {
   // Formulas read back as `$…$`, the plain-text form of math.
   return replaceFormulaSpans(html, (latex) => (latex ? `$${latex}$` : ""))
-    .replace(/<(br|\/p|\/h[1-3]|\/li|\/blockquote|\/pre|\/div)\s*\/?>/gi, "\n")
+    .replace(/<\/t[dh]>\s*(?=<t[dh]\b)/gi, " | ")
+    .replace(/<(br|\/p|\/h[1-3]|\/li|\/blockquote|\/pre|\/div|\/tr)\s*\/?>/gi, "\n")
     .replace(/<[^>]+>/g, "")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
@@ -79,7 +83,7 @@ export function htmlToPlainText(html: string) {
 
 /** Rich text (Quill HTML) vs. plain text written before an editor was used, or by the assistant. */
 export function isRichHtml(text: string) {
-  return /<(p|h[1-6]|ul|ol|li|strong|em|blockquote)\b/i.test(text);
+  return /<(p|h[1-6]|ul|ol|li|strong|em|blockquote|table)\b/i.test(text);
 }
 
 /** Anything → sanitized editor HTML (plain lines become paragraphs), or null when it has no text. */
@@ -99,4 +103,4 @@ export function toEditorHtml(text: string | null | undefined) {
 }
 
 /** Shared instructions so AI-written notes fit the editor: simple HTML, no images. */
-export const noteWritingRules = `লেখা হবে Quill editor-এ বসানোর মতো সরল HTML: শুধু <h2>, <h3>, <p>, <strong>, <em>, <ul>/<ol> + <li>, <blockquote>, <code>। গণিতের প্রতিটি রাশি বইয়ের মতো দেখাতে LaTeX দিয়ে <span class="ql-formula" data-value="\\frac{1}{2}"></span> আকারে লিখবে (যেমন x² → data-value="x^{2}", √2 → "\\sqrt{2}"); কখনো 1/2 বা x^2 সরাসরি লেখায় নয়। কোনো ছবি, table, style, markdown (# বা **) বা \`\`\` code fence নয়। পড়ার উপযোগী, গোছানো study note — মূল ধারণা, ছোট ব্যাখ্যা, উদাহরণ, মনে রাখার পয়েন্ট। নিশ্চিত না হলে বানিয়ে লিখবে না।`;
+export const noteWritingRules = `লেখা হবে Quill editor-এ বসানোর মতো সরল HTML: শুধু <h2>, <h3>, <p>, <strong>, <em>, <ul>/<ol> + <li>, <blockquote>, <code>, আর তুলনা/সাল-ঘটনা/তালিকার মতো তথ্যে সরল টেবিল <table><tbody><tr><td>…</td></tr></tbody></table> (প্রথম সারি শিরোনাম; শুধু <td>, ঘরের ভেতরে শুধু লেখা — tag নয়; কথোপকথনে টেবিল থাকলে note-এও টেবিলই রাখবে)। গণিতের প্রতিটি রাশি বইয়ের মতো দেখাতে LaTeX দিয়ে <span class="ql-formula" data-value="\\frac{1}{2}"></span> আকারে লিখবে (যেমন x² → data-value="x^{2}", √2 → "\\sqrt{2}"); কখনো 1/2 বা x^2 সরাসরি লেখায় নয়। কোনো ছবি, style, markdown (# বা **) বা \`\`\` code fence নয়। পড়ার উপযোগী, গোছানো study note — মূল ধারণা, ছোট ব্যাখ্যা, উদাহরণ, মনে রাখার পয়েন্ট। নিশ্চিত না হলে বানিয়ে লিখবে না।`;

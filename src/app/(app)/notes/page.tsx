@@ -4,6 +4,9 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getFlatTopics, getSubjects, noteSummarySelect } from "@/server/queries";
 
+// "AI দিয়ে লিখুন" rewrites the whole note in a server action on this page; give it time.
+export const maxDuration = 60;
+
 export default async function NotesPage() {
   const user = await requireUser();
   const [notes, subjects, topics] = await Promise.all([

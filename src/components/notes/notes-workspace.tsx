@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, FileText, Plus, Search, Sparkles, Trash2 } from "lucide-react";
+import { Check, ChevronLeft, FileText, Plus, Search, Sparkles, Trash2, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { QuillEditor, type QuillHandle } from "@/components/notes/quill-editor";
 import { NoteLinks, type SubjectOption, type TopicOption } from "@/components/notes/note-links";
@@ -41,6 +41,8 @@ function NoteEditor({ noteId, subjects, topics, onSaved, onDeleted, onBack }: { 
   const [aiOpen, setAiOpen] = useState(false);
   const [instruction, setInstruction] = useState("");
   const [writing, setWriting] = useState(false);
+  // After an AI rewrite: the note as it was before, so it can be put back.
+  const [beforeAi, setBeforeAi] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const latest = useRef({ title: "", content: "" });
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -82,8 +84,11 @@ function NoteEditor({ noteId, subjects, topics, onSaved, onDeleted, onBack }: { 
     if (!text) return;
     setWriting(true);
     try {
-      const html = await generateNoteContent({ instruction: text, title: shownTitle, currentText: editorRef.current?.getText() ?? "", lang });
-      editorRef.current?.insertHtml(html);
+      const before = editorRef.current?.getHtml() ?? "";
+      const html = await generateNoteContent({ instruction: text, title: shownTitle, currentHtml: before, lang });
+      // The AI returns the whole note with the change made: it replaces the note (no second copy).
+      editorRef.current?.setHtml(html);
+      setBeforeAi(before);
       setInstruction("");
       setAiOpen(false);
     } catch (error) {
@@ -124,6 +129,16 @@ function NoteEditor({ noteId, subjects, topics, onSaved, onDeleted, onBack }: { 
         <Sparkles className="size-4" /> {writing ? "লিখছে…" : "লেখো"}
       </button>
     </form> : null}
+
+    {/* The note now shows the AI's version (already saved); undo puts the old one back. */}
+    {beforeAi !== null ? <div className="assistant-in flex flex-wrap items-center gap-2 border-b border-violet-100 bg-violet-50/80 px-3 py-2.5">
+      <Sparkles className="size-4 shrink-0 text-violet-600" />
+      <p className="min-w-0 flex-1 text-[13.5px] font-semibold text-violet-900">AI note-টা আপডেট করেছে — দেখে নাও</p>
+      <div className="flex shrink-0 gap-1.5">
+        <button type="button" onClick={() => { editorRef.current?.setHtml(beforeAi); setBeforeAi(null); toast.success("আগের note ফেরত এসেছে"); }} className="flex h-9 items-center gap-1.5 rounded-full bg-white px-3.5 text-[13px] font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:bg-slate-50 active:scale-95"><Undo2 className="size-4" /> আগেরটায় ফেরাও</button>
+        <button type="button" onClick={() => setBeforeAi(null)} className="flex h-9 items-center gap-1.5 rounded-full bg-violet-600 px-3.5 text-[13px] font-semibold text-white transition hover:bg-violet-700 active:scale-95"><Check className="size-4" /> ঠিক আছে, রাখো</button>
+      </div>
+    </div> : null}
 
     <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-3 lg:px-6 lg:pb-6 lg:pt-4">
       <input
