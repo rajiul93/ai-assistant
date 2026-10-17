@@ -122,7 +122,7 @@ export function ProfileForm({ initial, plan, staff }: { initial: Profile; plan: 
         <h2 className="px-2 pb-1 text-base font-bold text-slate-900">অ্যাকাউন্ট</h2>
         <AccountLink href="/billing" icon={Crown} tone="from-yellow-400 to-amber-500" title="আমার প্ল্যান" detail={plan.active && plan.endsAt ? `চলবে ${formatDate(plan.endsAt)} পর্যন্ত` : "Plan দেখো ও নাও"} />
         <AccountLink href="/usage" icon={Gauge} tone="from-orange-400 to-amber-600" title="AI ব্যবহার" detail="আজ আর মোট কতটা খরচ হলো" />
-        <AccountLink href="/affiliate" icon={Share2} tone="from-emerald-400 to-teal-600" title="Affiliate" detail="Link share করে আয় করো" />
+        <AccountLink href="/affiliate" icon={Share2} tone="from-emerald-400 to-teal-600" title="রেফার করে আয়" detail="বন্ধুদের link দাও, তারা plan কিনলে তুমি পাবে" />
       </section>
     </div>
   </div>;

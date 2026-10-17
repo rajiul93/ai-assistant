@@ -69,11 +69,11 @@ export function AffiliateView({ data }: { data: Data }) {
 
   if (!data.eligible) {
     return <div className="space-y-4">
-      <h1 className="text-2xl font-bold tracking-tight">Affiliate</h1>
+      <h1 className="text-2xl font-bold tracking-tight">রেফার করে আয়</h1>
       <div className={cn(card, "text-center")}>
         <span className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><Share2 className="size-6" /></span>
-        <p className="mt-3 font-semibold">{data.enabled ? "তুমি এখনো affiliate নও" : "Affiliate program এখন বন্ধ"}</p>
-        <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">{data.enabled ? "Admin তোমাকে affiliate বানালে এখানে তোমার নিজের link পাবে — সেটা share করে কেউ plan কিনলে commission পাবে।" : "চালু হলে এখানে তোমার নিজের link পাবে।"}</p>
+        <p className="mt-3 font-semibold">{data.enabled ? "তোমার জন্য রেফার এখনো চালু হয়নি" : "রেফার করে আয় এখন বন্ধ আছে"}</p>
+        <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">{data.enabled ? "Admin চালু করে দিলে এখানে তোমার নিজের link পাবে — সেটা বন্ধুদের দিলে তারা plan কিনলে তুমি টাকা পাবে।" : "চালু হলে এখানে তোমার নিজের link পাবে।"}</p>
       </div>
     </div>;
   }
@@ -101,7 +101,7 @@ export function AffiliateView({ data }: { data: Data }) {
 
   return <div className="space-y-4">
     <section className="rounded-3xl bg-linear-to-br from-emerald-500 via-teal-500 to-cyan-500 p-4 text-white shadow-[0_14px_32px_-18px_rgba(13,148,136,0.7)] sm:p-5">
-      <h1 className="text-xl font-bold tracking-tight">Affiliate</h1>
+      <h1 className="text-xl font-bold tracking-tight">রেফার করে আয়</h1>
       <p className="mt-1 text-[13px] leading-snug text-white/90">{rulesText(rules)}</p>
       <div className="mt-3 flex items-center gap-2 rounded-2xl bg-white p-1.5 pl-3 text-slate-900">
         <Link2 className="size-4 shrink-0 text-teal-600" />
@@ -112,7 +112,7 @@ export function AffiliateView({ data }: { data: Data }) {
         {canNativeShare ? <button type="button" onClick={() => void nativeShare()} className="flex h-9 items-center gap-1.5 rounded-full bg-white/20 px-3.5 text-[13px] font-semibold ring-1 ring-white/30 hover:bg-white/30"><Share2 className="size-4" /> Share</button> : null}
         {targets.map((target) => <a key={target.id} href={target.href} target="_blank" rel="noopener noreferrer" className="flex h-9 items-center rounded-full bg-white/20 px-3.5 text-[13px] font-semibold ring-1 ring-white/30 hover:bg-white/30">{target.label}</a>)}
       </div>
-      <p className="mt-2 text-[12px] text-white/80">তোমার code: <span className="font-mono font-semibold">{data.code}</span> · link যেকোনো জায়গায় দিলেই চলবে</p>
+      <p className="mt-2 text-[12px] text-white/80">তোমার রেফার code: <span className="font-mono font-semibold">{data.code}</span> · link যেকোনো জায়গায় দিলেই চলবে</p>
     </section>
 
     <section className={card}>
@@ -139,7 +139,7 @@ export function AffiliateView({ data }: { data: Data }) {
     </section>
 
     <section className={card}>
-      <h2 className="font-semibold">Commission</h2>
+      <h2 className="font-semibold">তোমার আয়</h2>
       {data.commissions.length ? <ul className="mt-2 divide-y divide-slate-100">
         {data.commissions.map((item) => <li key={item.id} className="flex items-center gap-3 py-2.5 text-sm">
           <span className="min-w-0 flex-1">

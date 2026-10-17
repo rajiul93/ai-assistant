@@ -64,12 +64,12 @@ function Checkout({ quote, overview, source, onBack, onSubmitted }: { quote: Quo
     setSaving(true);
     try {
       const result = await payWithCredit(choice);
-      toast.success(`${result.label} চালু হলো — affiliate credit দিয়ে`);
+      toast.success(`${result.label} চালু হলো — রেফারের আয় দিয়ে`);
       onSubmitted?.();
       router.refresh();
       onBack();
     } catch (error) {
-      toast.error(errorMessage(error, "Credit দিয়ে নেওয়া গেল না।"));
+      toast.error(errorMessage(error, "রেফারের আয় দিয়ে নেওয়া গেল না।"));
     } finally {
       setSaving(false);
     }
@@ -117,10 +117,10 @@ function Checkout({ quote, overview, source, onBack, onSubmitted }: { quote: Quo
       <p className="shrink-0 text-xl font-extrabold tabular-nums">{taka(quote.total)}</p>
     </div>
     {credit > 0 ? <div className="flex items-center justify-between gap-2 rounded-2xl bg-teal-50 px-3 py-2 text-sm text-teal-900 ring-1 ring-teal-200">
-      <span>Affiliate credit <b className="tabular-nums">−{taka(credit)}</b></span>
+      <span>রেফারের আয় <b className="tabular-nums">−{taka(credit)}</b></span>
       <span>দিতে হবে <b className="tabular-nums">{taka(toPay)}</b></span>
     </div> : null}
-    {credit > 0 && toPay === 0 ? <button type="button" disabled={saving} onClick={() => void payByCredit()} className={payButton}>{saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />} Credit দিয়ে নাও</button> : null}
+    {credit > 0 && toPay === 0 ? <button type="button" disabled={saving} onClick={() => void payByCredit()} className={payButton}>{saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />} রেফারের আয় দিয়ে নাও</button> : null}
     <details className="group rounded-2xl bg-slate-50 px-3 py-2 [&_summary::-webkit-details-marker]:hidden">
       <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-medium text-slate-600">দামের হিসাব <ChevronDown className="size-4 transition-transform group-open:rotate-180" /></summary>
       <div className="mt-2"><Breakdown quote={quote} /></div>
