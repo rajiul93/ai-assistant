@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { Activity, ArrowDownToLine, ArrowUpFromLine, CheckCircle2, Timer, Users } from "lucide-react";
+import { Activity, ArrowDownToLine, ArrowRight, ArrowUpFromLine, CheckCircle2, Crown, Timer, Users } from "lucide-react";
 import { formatTokens, quotaPercent, type AiQuota } from "@/lib/ai-limits";
+import { taka } from "@/lib/billing-display";
 import { dayjs, formatDateTime } from "@/lib/dayjs";
 import { cn } from "@/lib/utils";
 import type { AiUsageBreakdown, AiUserUsage, getAiUsage } from "@/server/queries";
@@ -256,12 +257,43 @@ function TodayUsageCard({ today }: { today: TodayShare }) {
 }
 
 /** A customer's usage page: today's use and the total spent, both as progress bars; no history, no token counts. */
-export function CustomerUsageView({ quota, requests, failed, today }: { quota: AiQuota; requests: number; failed: number; today: TodayShare | null }) {
+export type PlanOffer = {
+  /** Had a plan before (it ended), or never bought one. */
+  hadPlan: boolean;
+  tiers: Array<{ planType: string; name: string; messagesPerDay: number; scansPerDay: number; suggestionsPerDay: number; fromMonthly: number | null }>;
+};
+
+/** No running plan: say so plainly and show what each plan gives, with the way to buy one. */
+function NoPlanCard({ offer }: { offer: PlanOffer }) {
+  return <section className="overflow-hidden rounded-3xl bg-linear-to-br from-amber-400 via-orange-400 to-rose-400 p-4 text-white shadow-[0_14px_32px_-18px_rgba(234,88,12,0.7)] sm:p-5">
+    <div className="flex items-start gap-3">
+      <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-white/25 ring-1 ring-white/40"><Crown className="size-6" /></span>
+      <div className="min-w-0 flex-1">
+        <h2 className="text-lg font-bold leading-snug">{offer.hadPlan ? "তোমার plan-এর মেয়াদ শেষ হয়ে গেছে" : "তোমার কোনো plan চালু নেই"}</h2>
+        <p className="mt-0.5 text-[13px] leading-snug text-white/90">AI দিয়ে প্রশ্নের উত্তর, ছবি থেকে প্রশ্ন পড়া, note লেখা — এগুলো plan চালু থাকলে পাবে। কোনটা নেবে?</p>
+      </div>
+    </div>
+    {offer.tiers.length ? <div className="mt-3 grid gap-2 sm:grid-cols-2">
+      {offer.tiers.map((tier) => <Link key={tier.planType} href="/billing" className="group rounded-2xl bg-white p-3 text-slate-900 transition hover:shadow-md">
+        <span className="flex items-baseline justify-between gap-2">
+          <span className="font-bold">{tier.name}</span>
+          {tier.fromMonthly !== null ? <span className="shrink-0 text-sm"><span className="text-xs text-slate-500">মাসে </span><b className="tabular-nums">{taka(tier.fromMonthly)}</b><span className="text-xs text-slate-500"> থেকে</span></span> : null}
+        </span>
+        <span className="mt-1 block text-xs text-slate-500">দিনে {number(tier.messagesPerDay)}টা AI প্রশ্ন · {number(tier.scansPerDay)}টা ছবি পড়া · {number(tier.suggestionsPerDay)}টা AI লেখা</span>
+        <span className="mt-2 inline-flex items-center gap-1 text-[13px] font-semibold text-orange-600 group-hover:underline">এটা নাও <ArrowRight className="size-3.5" /></span>
+      </Link>)}
+    </div> : null}
+    <Link href="/billing" className="mt-3 flex h-11 items-center justify-center gap-1.5 rounded-2xl bg-slate-950 text-sm font-semibold text-white hover:bg-slate-800">সব plan দেখো <ArrowRight className="size-4" /></Link>
+  </section>;
+}
+
+export function CustomerUsageView({ quota, requests, failed, today, noPlan }: { quota: AiQuota; requests: number; failed: number; today: TodayShare | null; noPlan: PlanOffer | null }) {
   return <div className="space-y-4">
     <div>
       <h1 className="text-[28px] font-bold tracking-tight text-slate-900">AI ব্যবহার</h1>
       <p className="mt-1 text-sm text-slate-500">আজ কতটা AI ব্যবহার হলো, আর তোমার plan-এর মোট কতটা খরচ হয়েছে।</p>
     </div>
+    {noPlan ? <NoPlanCard offer={noPlan} /> : null}
     {today ? <TodayUsageCard today={today} /> : null}
     <CustomerQuotaCard quota={quota} />
     <section className={cn(card, "flex items-center gap-4")}>
