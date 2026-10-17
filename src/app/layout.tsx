@@ -12,17 +12,21 @@ const geistSans = Geist({
 
 // Geist has no Bangla letters, so Bangla used to fall back to the phone's own (often heavy) font.
 // The browser takes English from Geist and all Bangla from Tiro Bangla (the owner's choice,
-// 2026-10-15). It has one weight, so bold Bangla is drawn bold by the browser.
+// 2026-10-15). It has one weight, so bold Bangla is drawn bold by the browser. Only its Bengali
+// part: English always comes from Geist, so a preloaded Latin copy went unused (console warning).
 const bangla = Tiro_Bangla({
   variable: "--font-bangla",
-  subsets: ["bengali", "latin"],
+  subsets: ["bengali"],
   weight: "400",
   fallback: ["serif"],
 });
 
+// Used on a few pages only (timers, typing, code), so it isn't preloaded on every page — that
+// showed as "preloaded but not used" in the console; it loads when a page needs it.
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  preload: false,
 });
 
 export const metadata: Metadata = {

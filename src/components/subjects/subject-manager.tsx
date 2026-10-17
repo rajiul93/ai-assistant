@@ -22,6 +22,7 @@ import { SortableList } from "@/components/sortable-list";
 import { VoiceFormAssistant } from "@/components/voice-form-assistant";
 import { MathText } from "@/components/math-text";
 import { errorMessage } from "@/lib/user-error";
+import { SUBJECT_NAME_MAX, TOPIC_NAME_MAX } from "@/lib/validations";
 
 type Topic = { id: string; name: string; parentId: string | null };
 type Subject = { id: string; name: string; topics: Topic[] };
@@ -50,7 +51,7 @@ function RowMenu({ label, items }: { label: string; items: Array<{ label: string
 }
 
 /** Renaming in place: the name turns into a box; Enter (or ✓) saves, Esc (or ✕) cancels. */
-function RenameForm({ initial, label, onSave, onCancel }: { initial: string; label: string; onSave: (name: string) => Promise<unknown>; onCancel: () => void }) {
+function RenameForm({ initial, label, maxLength, onSave, onCancel }: { initial: string; label: string; maxLength: number; onSave: (name: string) => Promise<unknown>; onCancel: () => void }) {
   const router = useRouter();
   const [name, setName] = useState(initial);
   const save = useMutation({
@@ -60,7 +61,7 @@ function RenameForm({ initial, label, onSave, onCancel }: { initial: string; lab
   });
   const submit = () => { if (!name.trim() || name.trim() === initial) { onCancel(); return; } save.mutate(); };
   return <form className="flex min-w-0 flex-1 items-center gap-1.5" onSubmit={(event) => { event.preventDefault(); submit(); }}>
-    <input value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") onCancel(); }} maxLength={80} autoFocus aria-label={label} className="h-10 min-w-0 flex-1 rounded-xl border border-blue-300 bg-white px-3 text-[15px] outline-none ring-4 ring-blue-50" />
+    <input value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") onCancel(); }} maxLength={maxLength} autoFocus aria-label={label} className="h-10 min-w-0 flex-1 rounded-xl border border-blue-300 bg-white px-3 text-[15px] outline-none ring-4 ring-blue-50" />
     <button type="submit" disabled={save.isPending} aria-label="সেভ" className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"><Check className="size-4" /></button>
     <button type="button" onClick={onCancel} aria-label="বাতিল" className="flex size-10 shrink-0 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-100"><X className="size-4" /></button>
   </form>;
@@ -81,7 +82,7 @@ function AddTopicForm({ subjectId, parentId, placeholder, onDone, autoFocus }: {
     onError: (error: Error) => toast.error(errorMessage(error)),
   });
   return <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); if (name.trim()) create.mutate(); }}>
-    <input value={name} onChange={(event) => setName(event.target.value)} placeholder={placeholder} autoFocus={autoFocus} aria-label={placeholder} className="h-11 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-3.5 text-[15px] outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:bg-white" />
+    <input value={name} onChange={(event) => setName(event.target.value)} placeholder={placeholder} autoFocus={autoFocus} aria-label={placeholder} maxLength={TOPIC_NAME_MAX} className="h-11 min-w-0 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-3.5 text-[15px] outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:bg-white" />
     <button type="submit" disabled={create.isPending || !name.trim()} className="flex h-11 shrink-0 items-center gap-1 rounded-2xl bg-blue-50 px-4 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"><Plus className="size-4" /> যোগ</button>
   </form>;
 }
@@ -144,7 +145,7 @@ function TopicRow({ topic, subject, depth, openTasks, onDelete, path, handle }: 
     <div className="flex min-h-12 items-center gap-1 rounded-2xl py-1 pr-0.5">
       {handle}
       {depth > 0 ? <CornerDownRight className="size-3.5 shrink-0 text-slate-300" aria-hidden /> : null}
-      {renaming ? <RenameForm initial={topic.name} label="Topic-এর নতুন নাম" onSave={(name) => updateTopic(topic.id, { name })} onCancel={() => setRenaming(false)} /> : <>
+      {renaming ? <RenameForm initial={topic.name} label="Topic-এর নতুন নাম" maxLength={TOPIC_NAME_MAX} onSave={(name) => updateTopic(topic.id, { name })} onCancel={() => setRenaming(false)} /> : <>
         <button type="button" onClick={() => setRenaming(true)} title="নাম বদলাতে চাপুন" className="min-w-0 flex-1 truncate py-1.5 text-left text-[15px] font-medium text-slate-800"><MathText text={topic.name} /></button>
         {inTasks
           ? <Link href="/tasks" className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-3 text-xs font-semibold text-emerald-700" title="আগেই tasks-এ আছে">
@@ -178,7 +179,7 @@ function SubjectCard({ subject, index, startOpen, openTasks, onDelete, handle }:
   return <section className={cn("rounded-3xl bg-white", cardShadow)}>
     <div className="flex items-center gap-1.5 py-3 pl-1.5 pr-2">
       {handle}
-      {renaming ? <RenameForm initial={subject.name} label="Subject-এর নতুন নাম" onSave={(name) => updateSubject(subject.id, { name })} onCancel={() => setRenaming(false)} /> : <>
+      {renaming ? <RenameForm initial={subject.name} label="Subject-এর নতুন নাম" maxLength={SUBJECT_NAME_MAX} onSave={(name) => updateSubject(subject.id, { name })} onCancel={() => setRenaming(false)} /> : <>
         <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} className="flex min-w-0 flex-1 items-center gap-3 text-left">
           <span className={cn("flex size-11 shrink-0 items-center justify-center rounded-2xl text-lg font-bold", tone)}>{subject.name.trim().charAt(0).toUpperCase() || "?"}</span>
           <span className="min-w-0 flex-1">

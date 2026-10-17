@@ -5,7 +5,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { subjectSchema, topicSchema } from "@/lib/validations";
+import { subjectSchema, topicNameSchema, topicSchema } from "@/lib/validations";
 import { userError } from "@/lib/user-error";
 
 function revalidateSubjects() {
@@ -98,7 +98,7 @@ export async function createTopic(input: unknown) {
 /** Renames a topic (fixing a typo, say). Tasks made from it keep their own titles. */
 export async function updateTopic(topicId: string, input: unknown) {
   const user = await requireUser();
-  const { name } = subjectSchema.parse(input);
+  const { name } = topicNameSchema.parse(input);
   const existing = await prisma.topic.findFirst({ where: { id: topicId, userId: user.id } });
   if (!existing) throw userError("Topic not found.");
   await prisma.topic.update({ where: { id: existing.id }, data: { name } });
