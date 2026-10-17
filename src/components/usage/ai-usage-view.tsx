@@ -283,7 +283,7 @@ function NoPlanCard({ offer }: { offer: PlanOffer }) {
         <span className="mt-2 inline-flex items-center gap-1 text-[13px] font-semibold text-orange-600 group-hover:underline">এটা নাও <ArrowRight className="size-3.5" /></span>
       </Link>)}
     </div> : null}
-    <Link href="/billing" className="mt-3 flex h-11 items-center justify-center gap-1.5 rounded-2xl bg-slate-950 text-sm font-semibold text-white hover:bg-slate-800">সব plan দেখো <ArrowRight className="size-4" /></Link>
+    <Link href="/billing" className="mt-3 flex h-11 items-center justify-center gap-1.5 rounded-2xl bg-white/95 text-sm font-bold text-orange-600 shadow-[0_8px_20px_-12px_rgba(154,52,18,0.8)] ring-1 ring-white transition hover:bg-white active:scale-[0.99]">সব plan দেখো <ArrowRight className="size-4" /></Link>
   </section>;
 }
 
@@ -294,16 +294,18 @@ export function CustomerUsageView({ quota, requests, failed, today, noPlan }: { 
       <p className="mt-1 text-sm text-slate-500">আজ কতটা AI ব্যবহার হলো, আর তোমার plan-এর মোট কতটা খরচ হয়েছে।</p>
     </div>
     {noPlan ? <NoPlanCard offer={noPlan} /> : null}
-    {today ? <TodayUsageCard today={today} /> : null}
-    <CustomerQuotaCard quota={quota} />
-    <section className={cn(card, "flex items-center gap-4")}>
+    {/* Today's share and the plan total describe a running plan; once it has ended they only
+        showed the old plan's numbers ("99.7% বাকি" with nothing left to use), so they go. */}
+    {today && !noPlan ? <TodayUsageCard today={today} /> : null}
+    {noPlan ? null : <CustomerQuotaCard quota={quota} />}
+    {noPlan && !noPlan.hadPlan ? null : <section className={cn(card, "flex items-center gap-4")}>
       <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-blue-500 to-indigo-600 text-white shadow-[0_8px_16px_-10px_rgba(37,99,235,0.9)]"><Activity className="size-6" /></span>
       <div className="min-w-0 flex-1">
-        <h2 className="text-sm font-semibold text-slate-500">AI requests · এই plan-এ</h2>
+        <h2 className="text-sm font-semibold text-slate-500">AI requests · {noPlan ? "শেষ plan-এ" : "এই plan-এ"}</h2>
         <p className="text-2xl font-bold tabular-nums text-slate-900">{number(requests)}</p>
       </div>
       <p className="shrink-0 text-right text-xs text-slate-500"><span className="font-semibold text-emerald-600">{number(requests - failed)}</span> সফল<br /><span className={cn("font-semibold", failed ? "text-orange-600" : "text-slate-400")}>{number(failed)}</span> ব্যর্থ</p>
-    </section>
+    </section>}
   </div>;
 }
 
