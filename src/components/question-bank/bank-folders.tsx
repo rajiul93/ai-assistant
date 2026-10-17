@@ -6,26 +6,28 @@ import { ArrowRightLeft, BookMarked, FolderOpen, Landmark, Pencil, Plus, Trash2 
 import { createBankCategory, deleteBankCategory, renameBankCategory } from "@/server/actions/question-bank";
 import { createBankChapter, createBankSubject, deleteBankChapter, deleteBankSubject, moveBankChapter, renameBankChapter, renameBankSubject } from "@/server/actions/question-bank-general";
 import { adminButton, ConfirmDelete, iconButton, MoveDialog, NameDialog, useBankRun } from "./bank-admin";
-import { BankEmpty, BankTile, tileGrid } from "./bank-nav";
+import { BankEmpty, BankTile, tileGrid, wideTileGrid } from "./bank-nav";
 
 /**
  * The folder levels of the Question Bank — subjects, chapters, categories — as card grids. Staff
  * (the `question_bank` permission) also add, rename, move and delete from here.
  */
 
-type Folder = { id: string; title: string; detail: string; href: string; deletable?: boolean; deleteNote?: string };
+type Folder = { id: string; title: string; description?: string | null; detail: string; href: string; deletable?: boolean; deleteNote?: string };
 type Editing = { kind: "add" } | { kind: "rename"; folder: Folder } | { kind: "delete"; folder: Folder } | { kind: "move"; folder: Folder } | null;
 
 const tones = ["bg-indigo-50 text-indigo-700", "bg-emerald-50 text-emerald-700", "bg-amber-50 text-amber-800", "bg-sky-50 text-sky-700", "bg-rose-50 text-rose-700", "bg-violet-50 text-violet-700"];
 
-function FolderGrid({ folders, canEdit, icon, noun, empty, onAdd, onRename, onDelete, move }: {
+function FolderGrid({ folders, canEdit, icon, noun, empty, onAdd, onRename, onDelete, move, withDescription = false }: {
   folders: Folder[];
+  /** Chapters: a short description under the name, and one card per row on phones. */
+  withDescription?: boolean;
   canEdit: boolean;
   icon: typeof FolderOpen;
   noun: string;
   empty: string;
-  onAdd: (name: string) => Promise<unknown>;
-  onRename: (id: string, name: string) => Promise<unknown>;
+  onAdd: (name: string, description: string) => Promise<unknown>;
+  onRename: (id: string, name: string, description: string) => Promise<unknown>;
   onDelete: (id: string) => Promise<unknown>;
   move?: { title: string; targets: Array<{ id: string; label: string }>; onMove: (id: string, target: string) => Promise<unknown> };
 }) {
@@ -39,8 +41,8 @@ function FolderGrid({ folders, canEdit, icon, noun, empty, onAdd, onRename, onDe
       <button type="button" onClick={() => setEditing({ kind: "add" })} className={adminButton}><Plus className="size-4" /> {noun} যোগ করো</button>
     </div> : null}
 
-    {folders.length ? <div className={tileGrid}>
-      {folders.map((folder, index) => <BankTile key={folder.id} href={folder.href} icon={icon} tone={tones[index % tones.length]} title={folder.title} detail={folder.detail}
+    {folders.length ? <div className={withDescription ? wideTileGrid : tileGrid}>
+      {folders.map((folder, index) => <BankTile key={folder.id} href={folder.href} icon={icon} tone={tones[index % tones.length]} title={folder.title} description={folder.description} detail={folder.detail}
         actions={canEdit ? <>
           <button type="button" onClick={() => setEditing({ kind: "rename", folder })} aria-label={`${folder.title} নাম বদলাও`} title="নাম বদলাও" className={iconButton}><Pencil className="size-3.5" /></button>
           {move ? <button type="button" onClick={() => setEditing({ kind: "move", folder })} aria-label={`${folder.title} সরাও`} title="অন্য জায়গায় সরাও" className={iconButton}><ArrowRightLeft className="size-3.5" /></button> : null}
@@ -48,10 +50,11 @@ function FolderGrid({ folders, canEdit, icon, noun, empty, onAdd, onRename, onDe
         </> : null} />)}
     </div> : <BankEmpty icon={icon} text={empty} />}
 
-    <NameDialog open={editing?.kind === "add"} onOpenChange={(open) => !open && close()} title={`নতুন ${noun}`} label={`${noun}-এর নাম`} busy={busy}
-      onSubmit={(name) => run(() => onAdd(name), `${noun} যোগ হলো`, close)} />
-    <NameDialog open={editing?.kind === "rename"} onOpenChange={(open) => !open && close()} title="নাম বদলাও" label={`${noun}-এর নাম`} initial={editing?.kind === "rename" ? editing.folder.title : ""} busy={busy}
-      onSubmit={(name) => editing?.kind === "rename" && run(() => onRename(editing.folder.id, name), "নাম বদলানো হলো", close)} />
+    <NameDialog open={editing?.kind === "add"} onOpenChange={(open) => !open && close()} title={`নতুন ${noun}`} label={`${noun}-এর নাম`} withDescription={withDescription} busy={busy}
+      onSubmit={(name, description) => run(() => onAdd(name, description), `${noun} যোগ হলো`, close)} />
+    <NameDialog open={editing?.kind === "rename"} onOpenChange={(open) => !open && close()} title={withDescription ? "নাম ও বর্ণনা বদলাও" : "নাম বদলাও"} label={`${noun}-এর নাম`} withDescription={withDescription}
+      initial={editing?.kind === "rename" ? editing.folder.title : ""} initialDescription={editing?.kind === "rename" ? editing.folder.description ?? "" : ""} busy={busy}
+      onSubmit={(name, description) => editing?.kind === "rename" && run(() => onRename(editing.folder.id, name, description), "সেভ হলো", close)} />
     <ConfirmDelete open={editing?.kind === "delete"} onOpenChange={(open) => !open && close()} busy={busy}
       title={`"${editing?.kind === "delete" ? editing.folder.title : ""}" মুছবে?`}
       description={editing?.kind === "delete" ? editing.folder.deleteNote ?? `${editing.folder.detail} — সব মুছে যাবে, ফেরানো যাবে না।` : ""}
@@ -69,12 +72,12 @@ export function SubjectGrid({ subjects, canEdit }: { subjects: Array<{ id: strin
     onRename={renameBankSubject} onDelete={deleteBankSubject} />;
 }
 
-export function ChapterGrid({ subjectId, chapters, others, canEdit }: { subjectId: string; chapters: Array<{ id: string; name: string; articles: number; mcqs: number; shorts: number }>; others: Array<{ id: string; name: string }>; canEdit: boolean }) {
+export function ChapterGrid({ subjectId, chapters, others, canEdit }: { subjectId: string; chapters: Array<{ id: string; name: string; description: string | null; articles: number; mcqs: number; shorts: number }>; others: Array<{ id: string; name: string }>; canEdit: boolean }) {
   const router = useRouter();
   const detail = (chapter: (typeof chapters)[number]) => [chapter.articles && `${chapter.articles} article`, chapter.mcqs && `${chapter.mcqs} MCQ`, chapter.shorts && `${chapter.shorts} short`].filter(Boolean).join(" · ") || "এখনো খালি";
-  return <FolderGrid canEdit={canEdit} icon={FolderOpen} noun="Chapter" empty="এই subject-এ এখনো কোনো chapter নেই।"
-    folders={chapters.map((chapter) => ({ id: chapter.id, title: chapter.name, detail: detail(chapter), href: `/question-bank/general/${subjectId}/${chapter.id}` }))}
-    onAdd={async (name) => { const { id } = await createBankChapter(subjectId, name); router.push(`/question-bank/general/${subjectId}/${id}`); }}
+  return <FolderGrid canEdit={canEdit} icon={FolderOpen} noun="Chapter" empty="এই subject-এ এখনো কোনো chapter নেই।" withDescription
+    folders={chapters.map((chapter) => ({ id: chapter.id, title: chapter.name, description: chapter.description, detail: detail(chapter), href: `/question-bank/general/${subjectId}/${chapter.id}` }))}
+    onAdd={async (name, description) => { const { id } = await createBankChapter(subjectId, name, description); router.push(`/question-bank/general/${subjectId}/${id}`); }}
     onRename={renameBankChapter} onDelete={deleteBankChapter}
     move={{ title: "Chapter-টা কোন subject-এ যাবে?", targets: others.map((subject) => ({ id: subject.id, label: subject.name })), onMove: moveBankChapter }} />;
 }

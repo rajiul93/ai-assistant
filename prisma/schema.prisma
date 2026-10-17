@@ -1117,6 +1117,8 @@ model BankChapter {
   subjectId      String
   subject        BankSubject         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   name           String
+  /// A line or two under the short name on the chapter's card (owner, 2026-10-17).
+  description    String?
   sortOrder      Int                 @default(0)
   createdAt      DateTime            @default(now())
   articles       BankArticle[]

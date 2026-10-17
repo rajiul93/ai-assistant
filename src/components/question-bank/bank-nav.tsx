@@ -21,15 +21,19 @@ export function BankBreadcrumb({ trail }: { trail: Array<{ label: string; href?:
   </nav>;
 }
 
-/** One card of a grid level: an icon, the name, and what's inside; staff controls sit top-right. */
-export function BankTile({ href, icon: Icon, title, detail, tone = "bg-indigo-50 text-indigo-700", actions }: { href: string; icon: LucideIcon; title: string; detail: string; tone?: string; actions?: ReactNode }) {
+/**
+ * One card of a grid level: the icon and the short name side by side, an optional description
+ * under them (two lines at most), then what's inside. Staff controls sit top-right.
+ */
+export function BankTile({ href, icon: Icon, title, description, detail, tone = "bg-indigo-50 text-indigo-700", actions }: { href: string; icon: LucideIcon; title: string; description?: string | null; detail: string; tone?: string; actions?: ReactNode }) {
   return <div className="relative">
-    <Link href={href} className="group flex h-full min-h-36 flex-col justify-between rounded-2xl border border-zinc-200 bg-white p-4 transition hover:border-zinc-300 hover:shadow-sm">
-      <span className={`flex size-10 items-center justify-center rounded-xl ${tone}`}><Icon className="size-5" /></span>
-      <span className="mt-4 block">
-        <span className="block text-base font-semibold leading-snug group-hover:underline group-hover:underline-offset-2">{title}</span>
-        <span className="mt-0.5 block text-xs text-zinc-500">{detail}</span>
+    <Link href={href} className="group flex h-full min-h-28 flex-col rounded-2xl border border-zinc-200 bg-white p-4 transition hover:border-zinc-300 hover:shadow-sm">
+      <span className={`flex items-start gap-3 ${actions ? "pr-24" : ""}`}>
+        <span className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${tone}`}><Icon className="size-5" /></span>
+        <span className="min-w-0 pt-2 text-base font-semibold leading-snug group-hover:underline group-hover:underline-offset-2 line-clamp-2">{title}</span>
       </span>
+      {description ? <span className="mt-2 line-clamp-2 text-sm leading-snug text-zinc-600">{description}</span> : null}
+      <span className="mt-auto block pt-3 text-xs text-zinc-500">{detail}</span>
     </Link>
     {actions ? <div className="absolute right-2 top-2 flex gap-0.5">{actions}</div> : null}
   </div>;
@@ -43,3 +47,5 @@ export function BankEmpty({ icon: Icon, text }: { icon: LucideIcon; text: string
 }
 
 export const tileGrid = "grid grid-cols-2 gap-3 sm:grid-cols-3";
+/** Cards with a description need the width: one per row on phones. */
+export const wideTileGrid = "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3";

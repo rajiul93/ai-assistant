@@ -45,17 +45,33 @@ export function FreePill({ free, onToggle, busy }: { free: boolean; onToggle?: (
   return <button type="button" disabled={busy} onClick={onToggle} title={free ? "Paid করো" : "Free করো"} className={cn(pill, "hover:brightness-95 disabled:opacity-50")}>{content}</button>;
 }
 
-/** A name to add or rename something. */
-export function NameDialog({ open, onOpenChange, title, label, initial = "", busy, onSubmit }: { open: boolean; onOpenChange: (open: boolean) => void; title: string; label: string; initial?: string; busy?: boolean; onSubmit: (name: string) => void }) {
+/** A name to add or rename something; `withDescription` adds a short description under it (chapters). */
+export function NameDialog({ open, onOpenChange, title, label, initial = "", initialDescription = "", withDescription = false, busy, onSubmit }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  label: string;
+  initial?: string;
+  initialDescription?: string;
+  withDescription?: boolean;
+  busy?: boolean;
+  onSubmit: (name: string, description: string) => void;
+}) {
   const [name, setName] = useState(initial);
-  return <Dialog open={open} onOpenChange={(next) => { if (next) setName(initial); onOpenChange(next); }}>
+  const [description, setDescription] = useState(initialDescription);
+  return <Dialog open={open} onOpenChange={(next) => { if (next) { setName(initial); setDescription(initialDescription); } onOpenChange(next); }}>
     <DialogContent>
       <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
-      <form onSubmit={(event) => { event.preventDefault(); if (name.trim()) onSubmit(name.trim()); }} className="space-y-4">
+      <form onSubmit={(event) => { event.preventDefault(); if (name.trim()) onSubmit(name.trim(), description.trim()); }} className="space-y-4">
         <label className="block space-y-1.5">
           <span className="text-sm font-medium text-zinc-700">{label}</span>
-          <input autoFocus value={name} onChange={(event) => setName(event.target.value)} maxLength={120} className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-base outline-none focus:border-zinc-400" />
+          <input autoFocus value={name} onChange={(event) => setName(event.target.value)} maxLength={120} placeholder={withDescription ? "ছোট নাম, যেমন: বাংলা ভাষার উৎপত্তি" : undefined} className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-base outline-none focus:border-zinc-400" />
         </label>
+        {withDescription ? <label className="block space-y-1.5">
+          <span className="text-sm font-medium text-zinc-700">ছোট বর্ণনা <span className="font-normal text-zinc-400">(ইচ্ছা হলে)</span></span>
+          <textarea value={description} onChange={(event) => setDescription(event.target.value.slice(0, 300))} rows={3} placeholder="এই chapter-এ কী আছে, এক-দুই লাইনে" className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm leading-relaxed outline-none focus:border-zinc-400" />
+          <span className="block text-right text-xs text-zinc-400 tabular-nums">{description.length}/300</span>
+        </label> : null}
         <button type="submit" disabled={busy || !name.trim()} className="flex h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-zinc-950 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50">
           {busy ? <Loader2 className="size-4 animate-spin" /> : null} সেভ
         </button>

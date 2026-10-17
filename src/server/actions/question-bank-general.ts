@@ -58,7 +58,7 @@ export async function getBankSubject(id: string) {
     where: { id: idSchema.parse(id) },
     select: {
       id: true, name: true,
-      chapters: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], select: { id: true, name: true, _count: { select: { articles: true, questions: true, shortQuestions: true } } } },
+      chapters: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], select: { id: true, name: true, description: true, _count: { select: { articles: true, questions: true, shortQuestions: true } } } },
     },
   });
   if (!subject) return null;
@@ -79,7 +79,7 @@ export async function getBankChapter(id: string) {
   const chapter = await prisma.bankChapter.findUnique({
     where: { id: idSchema.parse(id) },
     select: {
-      id: true, name: true, subject: { select: { id: true, name: true } },
+      id: true, name: true, description: true, subject: { select: { id: true, name: true } },
       articles: { orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }], select: { id: true, title: true, content: true, free: true } },
       questions: { orderBy: [{ serial: "asc" }, { id: "asc" }], select: { id: true, text: true, options: true, correctIndex: true, solution: true, explanation: true, editedAt: true, free: true } },
       shortQuestions: { orderBy: [{ serial: "asc" }, { id: "asc" }], select: { id: true, question: true, answer: true, free: true } },
@@ -89,7 +89,7 @@ export async function getBankChapter(id: string) {
   const [canEdit, premium] = await Promise.all([can(me, "question_bank"), hasPremium(me)]);
   const open = (item: { free: boolean }) => premium || item.free;
   return {
-    id: chapter.id, name: chapter.name, subject: chapter.subject, canEdit, premium,
+    id: chapter.id, name: chapter.name, description: chapter.description, subject: chapter.subject, canEdit, premium,
     articles: chapter.articles.map((article) => (open(article) ? { ...article, locked: false } : { ...article, content: "", locked: true })),
     questions: chapter.questions.map((question) => (open(question)
       ? { ...gateNotes(question, true), locked: false }
@@ -202,12 +202,15 @@ export async function deleteBankSubject(id: string) {
   revalidateBank();
 }
 
-export async function createBankChapter(subjectId: string, name: string) {
+/** A chapter's short description under its name on the card (optional). */
+const descriptionSchema = z.string().trim().max(300, "বর্ণনা ৩০০ অক্ষরের মধ্যে রাখো").nullish().transform((value) => value || null);
+
+export async function createBankChapter(subjectId: string, name: string, description?: string | null) {
   await requireBankEditor();
   const subject = idSchema.parse(subjectId);
   const last = await prisma.bankChapter.aggregate({ where: { subjectId: subject }, _max: { sortOrder: true } });
   try {
-    const chapter = await prisma.bankChapter.create({ data: { subjectId: subject, name: nameSchema.parse(name), sortOrder: (last._max.sortOrder ?? 0) + 1 }, select: { id: true } });
+    const chapter = await prisma.bankChapter.create({ data: { subjectId: subject, name: nameSchema.parse(name), description: descriptionSchema.parse(description), sortOrder: (last._max.sortOrder ?? 0) + 1 }, select: { id: true } });
     revalidateBank();
     return chapter;
   } catch (error) {
@@ -216,10 +219,11 @@ export async function createBankChapter(subjectId: string, name: string) {
   }
 }
 
-export async function renameBankChapter(id: string, name: string) {
+/** A chapter's name and description. */
+export async function renameBankChapter(id: string, name: string, description?: string | null) {
   await requireBankEditor();
   try {
-    await prisma.bankChapter.update({ where: { id: idSchema.parse(id) }, data: { name: nameSchema.parse(name) } });
+    await prisma.bankChapter.update({ where: { id: idSchema.parse(id) }, data: { name: nameSchema.parse(name), description: descriptionSchema.parse(description) } });
   } catch (error) {
     if (duplicate(error)) throw userError("এই subject-এ এই নামে chapter আগেই আছে।");
     throw error;
