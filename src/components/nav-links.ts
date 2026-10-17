@@ -7,6 +7,7 @@ import {
   ClipboardCheck,
   CreditCard,
   Gauge,
+  HandCoins,
   Keyboard,
   Languages,
   LayoutDashboard,
@@ -18,6 +19,7 @@ import {
   MonitorPlay,
   NotebookPen,
   Receipt,
+  Share2,
   TrendingUp,
   UserRound,
   UsersRound,
@@ -46,6 +48,7 @@ export const links: NavLink[] = [
   { href: "/jobs", label: "Jobs", short: "Jobs", icon: BriefcaseBusiness },
   { href: "/usage", label: "AI Usage", short: "AI Usage", icon: Gauge },
   { href: "/billing", label: "Plans", short: "Plans", icon: CreditCard },
+  { href: "/affiliate", label: "Affiliate", short: "Affiliate", icon: Share2 },
   { href: "/profile", label: "Profile", short: "Profile", icon: UserRound },
 ];
 
@@ -53,10 +56,11 @@ export const billingAdminLink: NavLink = { href: "/admin/billing", label: "Billi
 export const staffLink: NavLink = { href: "/admin/staff", label: "Staff", short: "Staff", icon: UsersRound };
 export const customersLink: NavLink = { href: "/admin/customers", label: "Customers", short: "Customers", icon: Contact };
 export const bankUploadLink: NavLink = { href: "/admin/question-bank", label: "Bank upload", short: "Bank upload", icon: LibraryBig };
+export const affiliatesAdminLink: NavLink = { href: "/admin/affiliates", label: "Affiliates", short: "Affiliates", icon: HandCoins };
 
 /** The admin pages this user may open, from their staff permissions (src/lib/staff.ts). */
 export const adminLinksFor = (permissions: readonly StaffPermission[]) => [
-  ...(permissions.includes("billing") ? [billingAdminLink] : []),
+  ...(permissions.includes("billing") ? [billingAdminLink, affiliatesAdminLink] : []),
   ...(permissions.includes("customers") ? [customersLink] : []),
   ...(permissions.includes("staff") ? [staffLink] : []),
   ...(permissions.includes("question_bank") ? [bankUploadLink] : []),
@@ -81,6 +85,7 @@ export const searchWords: Record<string, string> = {
   "/jobs": "jobs জব চাকরি application আবেদন",
   "/usage": "ai usage token টোকেন",
   "/billing": "plans billing প্ল্যান কেনা package প্যাকেজ",
+  "/affiliate": "affiliate অ্যাফিলিয়েট refer রেফার link লিংক commission কমিশন আয়",
   "/profile": "profile প্রোফাইল নাম phone ফোন",
 };
 
@@ -103,11 +108,13 @@ const TONES: Record<string, string> = {
   "/messages": "from-blue-500 to-indigo-600",
   "/usage": "from-orange-400 to-amber-600",
   "/billing": "from-yellow-400 to-amber-500",
+  "/affiliate": "from-emerald-400 to-teal-600",
   "/profile": "from-slate-400 to-slate-600",
   "/admin/billing": "from-emerald-500 to-green-700",
   "/admin/customers": "from-pink-400 to-rose-600",
   "/admin/staff": "from-indigo-400 to-violet-600",
   "/admin/question-bank": "from-orange-400 to-red-500",
+  "/admin/affiliates": "from-teal-400 to-cyan-600",
 };
 
 export const toneOf = (href: string) => TONES[href] ?? "from-blue-400 to-blue-600";
@@ -126,4 +133,5 @@ export const NAV_GROUPS: Array<{ title: string; hrefs: string[] }> = [
 export const ACCOUNT_LINKS = [
   { href: "/billing", label: "আমার প্ল্যান" },
   { href: "/usage", label: "AI ব্যবহার" },
+  { href: "/affiliate", label: "Affiliate" },
 ];

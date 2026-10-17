@@ -45,7 +45,7 @@ function PaymentRow({ payment }: { payment: AdminPayment }) {
       <div className="min-w-0">
         <p className="truncate text-sm"><span className="font-medium">{payment.user.name || payment.user.email}</span> <span className="text-zinc-500">· {planLabel(payment)}</span></p>
         {payment.user.name ? <p className="truncate text-[11px] text-zinc-500">{payment.user.email}</p> : null}
-        <p className="truncate text-[11px] text-zinc-500">{gift ? "🎁 Gift" : <>{methodNames[payment.method]} · <span className="font-mono">{payment.transactionId}</span></>} · {formatDateTime(payment.createdAt)}{payment.adminNote ? ` · “${payment.adminNote}”` : ""}</p>
+        <p className="truncate text-[11px] text-zinc-500">{gift ? "🎁 Gift" : payment.source === "credit" ? "🤝 Affiliate credit" : <>{methodNames[payment.method]} · <span className="font-mono">{payment.transactionId}</span></>} · {formatDateTime(payment.createdAt)}{payment.adminNote ? ` · “${payment.adminNote}”` : ""}</p>
       </div>
       <div className="shrink-0 text-right">
         <p className="text-sm font-semibold tabular-nums">{taka(payment.amountBdt)}</p>

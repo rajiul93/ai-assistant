@@ -51,16 +51,16 @@ model User {
   nounEntries            NounEntry[]
   vocabLearned           VocabLearned[]
   // Collaboration (docs/collaboration-plan.md)
-  friendRequestsSent     FriendRequest[]    @relation("FriendRequestFrom")
-  friendRequestsReceived FriendRequest[]    @relation("FriendRequestTo")
-  friendshipsA           Friendship[]       @relation("FriendshipA")
-  friendshipsB           Friendship[]       @relation("FriendshipB")
-  sharesSent             ShareRequest[]     @relation("ShareSender")
-  sharesReceived         ShareRequest[]     @relation("ShareRecipient")
-  notifications          Notification[]     @relation("NotificationUser")
-  notificationsCaused    Notification[]     @relation("NotificationActor")
-  conversationsA         Conversation[]     @relation("ConversationA")
-  conversationsB         Conversation[]     @relation("ConversationB")
+  friendRequestsSent     FriendRequest[]       @relation("FriendRequestFrom")
+  friendRequestsReceived FriendRequest[]       @relation("FriendRequestTo")
+  friendshipsA           Friendship[]          @relation("FriendshipA")
+  friendshipsB           Friendship[]          @relation("FriendshipB")
+  sharesSent             ShareRequest[]        @relation("ShareSender")
+  sharesReceived         ShareRequest[]        @relation("ShareRecipient")
+  notifications          Notification[]        @relation("NotificationUser")
+  notificationsCaused    Notification[]        @relation("NotificationActor")
+  conversationsA         Conversation[]        @relation("ConversationA")
+  conversationsB         Conversation[]        @relation("ConversationB")
   messagesSent           Message[]
   // Group chat (docs/profile-and-group-chat-plan.md §2)
   groupMemberships       ChatGroupMember[]
@@ -73,6 +73,21 @@ model User {
   entitlements           Entitlement[]
   devices                UserDevice[]
   bankUnlocks            BankSetUnlock[]
+  /// Affiliate (docs/affiliate-plan.md): this user's code in links (`?ref=CODE`), made when first needed.
+  affiliateCode          String?               @unique
+  /// Chosen as an affiliate by an admin (needed unless the program is open to everyone).
+  affiliateActive        Boolean               @default(false)
+  /// Where cash commission is sent (bKash/Nagad number), given by the affiliate.
+  affiliatePayoutNumber  String?
+  /// The affiliate whose link brought this user (first one wins, kept for good).
+  referredById           String?
+  referredBy             User?                 @relation("Referrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referredAt             DateTime?
+  referrals              User[]                @relation("Referrals")
+  affiliateClicks        AffiliateClick[]
+  commissionsEarned      AffiliateCommission[] @relation("CommissionAffiliate")
+  commissionsBrought     AffiliateCommission[] @relation("CommissionCustomer")
+  affiliatePayouts       AffiliatePayout[]
   activeTimer            ActiveTimer?
 }
 
@@ -435,11 +450,11 @@ model PaymentAccount {
 
 /// One purchase request. Everything about the package is copied in at submit time and never changes.
 model Payment {
-  id            String        @id @default(cuid())
+  id            String               @id @default(cuid())
   userId        String
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   packageId     String?
-  package       PlanPackage?  @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  package       PlanPackage?         @relation(fields: [packageId], references: [id], onDelete: SetNull)
   planType      PlanType
   packageName   String
   durationDays  Int
@@ -449,20 +464,23 @@ model Payment {
   method        PaymentMethod
   senderNumber  String
   transactionId String
-  status        PaymentStatus @default(PENDING)
+  status        PaymentStatus        @default(PENDING)
   /// "page" or "chat" — where the user bought it.
-  source        String        @default("page")
+  source        String               @default("page")
   /// Exams bought (ExamTrack ids, as they were at purchase). Empty for old package payments.
-  trackIds      String[]      @default([])
+  trackIds      String[]             @default([])
   /// Bought as the "all exams" plan.
-  allTracks     Boolean       @default(false)
+  allTracks     Boolean              @default(false)
   /// How the price was made up at purchase (system, AI, exams, discounts, days), for the record.
   breakdown     Json?
+  /// Affiliate credit taken off the price (credit payout mode); amountBdt is what was left to pay.
+  creditUsedBdt Int                  @default(0)
   adminNote     String?
   reviewedAt    DateTime?
   reviewedBy    String?
-  createdAt     DateTime      @default(now())
+  createdAt     DateTime             @default(now())
   entitlement   Entitlement?
+  commission    AffiliateCommission?
 
   /// A transaction ID can be used only once per method.
   @@unique([method, transactionId])
@@ -1158,4 +1176,79 @@ model BankShortQuestion {
 
   @@unique([chapterId, fingerprint])
   @@index([chapterId, serial])
+}
+
+enum AffiliateCommissionMode {
+  /// A share of what the customer paid.
+  PERCENT
+  /// A fixed amount per purchase.
+  FIXED
+}
+
+enum AffiliatePayoutMode {
+  /// Sent by the admin to the affiliate's bKash/Nagad, recorded as AffiliatePayout.
+  CASH
+  /// Taken off the affiliate's own plan purchases (Payment.creditUsedBdt).
+  CREDIT
+}
+
+/// The affiliate program's rules (one row, id "default"); every choice is the super admin's.
+model AffiliateSettings {
+  id             String                  @id @default("default")
+  enabled        Boolean                 @default(false)
+  /// Everyone gets a link, or only users an admin made affiliates.
+  openToAll      Boolean                 @default(false)
+  commissionMode AffiliateCommissionMode @default(PERCENT)
+  percent        Int                     @default(20)
+  fixedBdt       Int                     @default(50)
+  /// Every purchase of the customer earns, or only their first.
+  recurring      Boolean                 @default(false)
+  /// Days after a click within which signing up / buying ties the customer to the affiliate.
+  windowDays     Int                     @default(30)
+  payoutMode     AffiliatePayoutMode     @default(CASH)
+  updatedAt      DateTime                @updatedAt
+}
+
+/// One visit through an affiliate link (counted once per browser per code).
+model AffiliateClick {
+  id          String   @id @default(cuid())
+  affiliateId String
+  affiliate   User     @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@index([affiliateId, createdAt])
+}
+
+/// Earned when a referred customer's payment is approved; amounts are copied in at that moment.
+model AffiliateCommission {
+  id          String    @id @default(cuid())
+  affiliateId String
+  affiliate   User      @relation("CommissionAffiliate", fields: [affiliateId], references: [id], onDelete: Cascade)
+  customerId  String
+  customer    User      @relation("CommissionCustomer", fields: [customerId], references: [id], onDelete: Cascade)
+  paymentId   String    @unique
+  payment     Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  /// What the customer paid, and the rule applied ("20%", "৳50").
+  basisBdt    Int
+  rule        String
+  amountBdt   Int
+  /// Voided by an admin (a refund or abuse); it no longer counts.
+  canceledAt  DateTime?
+  canceledBy  String?
+  createdAt   DateTime  @default(now())
+
+  @@index([affiliateId, createdAt])
+}
+
+/// Cash sent to an affiliate by an admin.
+model AffiliatePayout {
+  id          String   @id @default(cuid())
+  affiliateId String
+  affiliate   User     @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  amountBdt   Int
+  note        String?
+  paidBy      String
+  createdAt   DateTime @default(now())
+
+  @@index([affiliateId, createdAt])
 }

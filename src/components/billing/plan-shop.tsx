@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { methodNames, taka } from "@/lib/billing-display";
 import { formatBdPhone } from "@/lib/phone";
 import { cn } from "@/lib/utils";
-import { startOnlinePayment, submitPayment, type getBillingOverview } from "@/server/actions/billing";
+import { payWithCredit, startOnlinePayment, submitPayment, type getBillingOverview } from "@/server/actions/billing";
 import { errorMessage } from "@/lib/user-error";
 
 export type BillingOverview = Awaited<ReturnType<typeof getBillingOverview>>;
@@ -56,6 +56,24 @@ function Checkout({ quote, overview, source, onBack, onSubmitted }: { quote: Quo
   const [done, setDone] = useState<{ amount: number; label: string } | null>(null);
   const account = overview.accounts.find((item) => item.method === method) ?? null;
   const choice = { planType: quote.planType, track: quote.track, durationId: quote.durationId, source };
+  // Affiliate credit comes off the price on the server too; this is only what the page shows.
+  const credit = Math.min(overview.credit, quote.total);
+  const toPay = quote.total - credit;
+
+  async function payByCredit() {
+    setSaving(true);
+    try {
+      const result = await payWithCredit(choice);
+      toast.success(`${result.label} চালু হলো — affiliate credit দিয়ে`);
+      onSubmitted?.();
+      router.refresh();
+      onBack();
+    } catch (error) {
+      toast.error(errorMessage(error, "Credit দিয়ে নেওয়া গেল না।"));
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function payManually() {
     if (!account) return;
@@ -98,35 +116,40 @@ function Checkout({ quote, overview, source, onBack, onSubmitted }: { quote: Quo
       </div>
       <p className="shrink-0 text-xl font-extrabold tabular-nums">{taka(quote.total)}</p>
     </div>
+    {credit > 0 ? <div className="flex items-center justify-between gap-2 rounded-2xl bg-teal-50 px-3 py-2 text-sm text-teal-900 ring-1 ring-teal-200">
+      <span>Affiliate credit <b className="tabular-nums">−{taka(credit)}</b></span>
+      <span>দিতে হবে <b className="tabular-nums">{taka(toPay)}</b></span>
+    </div> : null}
+    {credit > 0 && toPay === 0 ? <button type="button" disabled={saving} onClick={() => void payByCredit()} className={payButton}>{saving ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />} Credit দিয়ে নাও</button> : null}
     <details className="group rounded-2xl bg-slate-50 px-3 py-2 [&_summary::-webkit-details-marker]:hidden">
       <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-medium text-slate-600">দামের হিসাব <ChevronDown className="size-4 transition-transform group-open:rotate-180" /></summary>
       <div className="mt-2"><Breakdown quote={quote} /></div>
     </details>
 
-    {methods.length ? <div className={cn("grid gap-2", methods.length === 3 ? "grid-cols-3" : methods.length === 2 ? "grid-cols-2" : "grid-cols-1")}>
+    {toPay === 0 ? null : methods.length ? <div className={cn("grid gap-2", methods.length === 3 ? "grid-cols-3" : methods.length === 2 ? "grid-cols-2" : "grid-cols-1")}>
       {methods.map((item) => <button key={item} type="button" data-on={method === item} onClick={() => setMethod(item)} className={cn("flex h-11 items-center justify-center gap-1.5 rounded-2xl px-2 text-sm font-semibold ring-1 transition", methodStyle[item])}>
         {item === "SSLCOMMERZ" ? <><CreditCard className="size-4" /> Card/অন্য</> : methodNames[item]}
       </button>)}
     </div> : <p className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-800">এখন কোনো payment পদ্ধতি চালু নেই। একটু পরে আবার চেষ্টা করুন।</p>}
     {!method && methods.length > 1 ? <p className="text-center text-xs text-slate-500">কীভাবে দেবেন, বেছে নিন</p> : null}
 
-    {account ? <form className="space-y-2.5" onSubmit={(event) => { event.preventDefault(); void payManually(); }}>
+    {account && toPay > 0 ? <form className="space-y-2.5" onSubmit={(event) => { event.preventDefault(); void payManually(); }}>
       <p className="text-[13px] text-slate-600">{methodNames[account.method]} app থেকে এই নম্বরে <b>Send Money</b> করুন:</p>
       <div className="grid grid-cols-[1fr_auto] divide-y divide-slate-100 rounded-2xl bg-slate-50 ring-1 ring-slate-200">
         <div className="col-span-2 flex items-center gap-2 px-3 py-1.5"><span className="w-10 shrink-0 text-[11px] text-slate-500">নম্বর</span><span className="min-w-0 flex-1 truncate font-mono text-base font-semibold">{account.number}</span><span className="text-[10.5px] text-slate-400">{account.accountType}</span><CopyButton value={account.number} label="নম্বর" /></div>
-        <div className="col-span-2 flex items-center gap-2 px-3 py-1.5"><span className="w-10 shrink-0 text-[11px] text-slate-500">টাকা</span><span className="min-w-0 flex-1 text-base font-semibold tabular-nums">{taka(quote.total)}</span><CopyButton value={String(quote.total)} label="টাকা" /></div>
+        <div className="col-span-2 flex items-center gap-2 px-3 py-1.5"><span className="w-10 shrink-0 text-[11px] text-slate-500">টাকা</span><span className="min-w-0 flex-1 text-base font-semibold tabular-nums">{taka(toPay)}</span><CopyButton value={String(toPay)} label="টাকা" /></div>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <label className="min-w-0 space-y-1"><span className="block text-[11px] font-medium text-slate-600">যে নম্বর থেকে</span><input value={sender} onChange={(event) => setSender(event.target.value)} inputMode="tel" autoComplete="tel" placeholder="01XXXXXXXXX" required className={field} /></label>
         <label className="min-w-0 space-y-1"><span className="block text-[11px] font-medium text-slate-600">TrxID (SMS-এ)</span><input value={trxId} onChange={(event) => setTrxId(event.target.value.toUpperCase())} autoCapitalize="characters" autoComplete="off" placeholder="9GH4K2L8QX" required className={cn(field, "uppercase")} /></label>
       </div>
-      <button type="submit" disabled={saving || !sender.trim() || !trxId.trim()} className={payButton}>{saving ? <Loader2 className="size-4 animate-spin" /> : null} জমা দিন · {taka(quote.total)}</button>
+      <button type="submit" disabled={saving || !sender.trim() || !trxId.trim()} className={payButton}>{saving ? <Loader2 className="size-4 animate-spin" /> : null} জমা দিন · {taka(toPay)}</button>
     </form> : null}
 
-    {method === "SSLCOMMERZ" ? <form className="space-y-2.5" onSubmit={(event) => { event.preventDefault(); void payOnline(); }}>
+    {method === "SSLCOMMERZ" && toPay > 0 ? <form className="space-y-2.5" onSubmit={(event) => { event.preventDefault(); void payOnline(); }}>
       <p className="text-[13px] text-slate-600">Card, bKash, Nagad, Rocket বা internet banking — SSLCommerz-এর নিরাপদ পাতায়। টাকা কাটা হলেই plan চালু।</p>
       <label className="block space-y-1"><span className="block text-[11px] font-medium text-slate-600">আপনার মোবাইল নম্বর</span><input value={phone} onChange={(event) => setPhone(event.target.value)} inputMode="tel" autoComplete="tel" placeholder="01XXXXXXXXX" required className={field} /></label>
-      <button type="submit" disabled={saving || !phone.trim()} className={payButton}>{saving ? <Loader2 className="size-4 animate-spin" /> : <CreditCard className="size-4" />} {taka(quote.total)} দিন</button>
+      <button type="submit" disabled={saving || !phone.trim()} className={payButton}>{saving ? <Loader2 className="size-4 animate-spin" /> : <CreditCard className="size-4" />} {taka(toPay)} দিন</button>
     </form> : null}
   </section>;
 }

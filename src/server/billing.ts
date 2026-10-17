@@ -1,6 +1,7 @@
 import type { PaymentMethod } from "@prisma/client";
 import { startOfDay } from "@/lib/dayjs";
 import { prisma } from "@/lib/prisma";
+import { addCommissionForPayment } from "@/server/affiliate";
 import { userError } from "@/lib/user-error";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -89,6 +90,8 @@ export async function approvePayment(paymentId: string, reviewer: string, note?:
     const startsAt = new Date(Math.max(Date.now(), latestSame));
     const endsAt = new Date(startsAt.getTime() + payment.durationDays * DAY_MS);
     await tx.entitlement.create({ data: { userId: payment.userId, paymentId: payment.id, tokens: payment.tokens, startsAt, endsAt, ...scope } });
+    // The affiliate who brought this customer earns in the same transaction (docs/affiliate-plan.md).
+    await addCommissionForPayment(tx, payment);
     return { startsAt, endsAt };
   });
 }
