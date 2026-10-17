@@ -7,6 +7,7 @@ import { getAiQuota } from "@/server/ai-access";
 import { getPlanStatus, getTodayUsageShare } from "@/server/billing";
 import { getAiUsage } from "@/server/queries";
 import { getOpenAiCosts } from "@/server/openai-costs";
+import { allQuotes, loadCatalog } from "@/server/pricing";
 import { isAdminUser, isSuperAdminEmail } from "@/server/roles";
 
 /** The owner's OpenAI money: top-ups entered on the page and costs from OpenAI since the first one (and the last 30 days). */
@@ -21,6 +22,25 @@ async function ownerBalance() {
   return <OpenAiBalance credits={credits.map((credit) => ({ id: credit.id, amountCents: credit.amountCents, addedAt: credit.addedAt.toISOString(), note: credit.note }))} costs={costs} today={new Date().toISOString().slice(0, 10)} />;
 }
 
+/**
+ * Without a running plan: the AI levels on sale, each with its daily limits and the lowest monthly
+ * price (from the server's own quotes), so the page can say "no plan — pick one" (owner, 2026-10-17).
+ */
+async function planOffer(hadPlan: boolean) {
+  const [catalog, tiers] = await Promise.all([
+    loadCatalog(),
+    prisma.aiTier.findMany({ where: { active: true }, orderBy: { priceBdt: "asc" }, select: { planType: true, name: true, messagesPerDay: true, scansPerDay: true, suggestionsPerDay: true } }),
+  ]);
+  const quotes = allQuotes(catalog);
+  return {
+    hadPlan,
+    tiers: tiers.map((tier) => {
+      const prices = quotes.filter((quote) => quote.planType === tier.planType).map((quote) => quote.monthly);
+      return { ...tier, fromMonthly: prices.length ? Math.min(...prices) : null };
+    }),
+  };
+}
+
 export default async function UsagePage({ searchParams }: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
   const user = await requireUser();
   // Customers get only their own totals — the detailed breakdown is never loaded for them.
@@ -32,7 +52,7 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
       ? await Promise.all([prisma.aiUsage.count({ where: inPlan }), prisma.aiUsage.count({ where: { ...inPlan, status: { not: "ok" } } })])
       : [0, 0];
     const today = plan.hasPlan ? await getTodayUsageShare(user.id, plan) : null;
-    return <CustomerUsageView quota={quota} requests={requests} failed={failed} today={today} />;
+    return <CustomerUsageView quota={quota} requests={requests} failed={failed} today={today} noPlan={plan.active ? null : await planOffer(plan.hasPlan)} />;
   }
   const requested = (await searchParams).period;
   const period = usagePeriods.find((item) => item.key === requested)?.key ?? "30d";
