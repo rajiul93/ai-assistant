@@ -48,7 +48,7 @@ export const links: NavLink[] = [
   { href: "/jobs", label: "Jobs", short: "Jobs", icon: BriefcaseBusiness },
   { href: "/usage", label: "AI Usage", short: "AI Usage", icon: Gauge },
   { href: "/billing", label: "Plans", short: "Plans", icon: CreditCard },
-  { href: "/affiliate", label: "Affiliate", short: "Affiliate", icon: Share2 },
+  { href: "/affiliate", label: "রেফার করে আয়", short: "রেফার", icon: Share2 },
   { href: "/profile", label: "Profile", short: "Profile", icon: UserRound },
 ];
 
@@ -85,7 +85,7 @@ export const searchWords: Record<string, string> = {
   "/jobs": "jobs জব চাকরি application আবেদন",
   "/usage": "ai usage token টোকেন",
   "/billing": "plans billing প্ল্যান কেনা package প্যাকেজ",
-  "/affiliate": "affiliate অ্যাফিলিয়েট refer রেফার link লিংক commission কমিশন আয়",
+  "/affiliate": "refer earn রেফার আয় affiliate অ্যাফিলিয়েট refer রেফার link লিংক commission কমিশন আয়",
   "/profile": "profile প্রোফাইল নাম phone ফোন",
 };
 
@@ -133,5 +133,5 @@ export const NAV_GROUPS: Array<{ title: string; hrefs: string[] }> = [
 export const ACCOUNT_LINKS = [
   { href: "/billing", label: "আমার প্ল্যান" },
   { href: "/usage", label: "AI ব্যবহার" },
-  { href: "/affiliate", label: "Affiliate" },
+  { href: "/affiliate", label: "রেফার করে আয়" },
 ];

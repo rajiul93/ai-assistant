@@ -112,7 +112,7 @@ export async function submitPayment(input: unknown) {
   if (!account) throw userError("এই payment পদ্ধতি এখন বন্ধ আছে।");
   await claimReferral(user.id, (await cookies()).get(REF_COOKIE)?.value);
   const row = await paymentData(user.id, data);
-  if (row.amountBdt <= 0) throw userError("পুরো দামটা affiliate credit দিয়েই হয়ে যাচ্ছে — \"Credit দিয়ে নাও\" চাপো।");
+  if (row.amountBdt <= 0) throw userError("পুরো দামটা রেফারের আয় দিয়েই হয়ে যাচ্ছে — \"রেফারের আয় দিয়ে নাও\" চাপো।");
   try {
     const payment = await prisma.payment.create({
       data: { userId: user.id, ...row, method: data.method, senderNumber: data.senderNumber, transactionId: data.transactionId },
@@ -143,7 +143,7 @@ export async function startOnlinePayment(input: unknown) {
   if (!settings.gatewayEnabled || !gatewayConfigured()) throw userError("Online payment এখন বন্ধ আছে। bKash বা Nagad দিয়ে দিন।");
   await claimReferral(user.id, (await cookies()).get(REF_COOKIE)?.value);
   const data = await paymentData(user.id, parsed.data);
-  if (data.amountBdt <= 0) throw userError("পুরো দামটা affiliate credit দিয়েই হয়ে যাচ্ছে — \"Credit দিয়ে নাও\" চাপো।");
+  if (data.amountBdt <= 0) throw userError("পুরো দামটা রেফারের আয় দিয়েই হয়ে যাচ্ছে — \"রেফারের আয় দিয়ে নাও\" চাপো।");
   const tranId = newTransactionId();
   const payment = await prisma.payment.create({ data: { userId: user.id, ...data, method: "SSLCOMMERZ", senderNumber: parsed.data.phone, transactionId: tranId } });
   // Where SSLCommerz sends the customer and its notices back: APP_URL when set, else this request's host.
@@ -168,11 +168,11 @@ export async function payWithCredit(input: unknown) {
   const user = await requireUser();
   const choice = choiceSchema.strict().parse(input);
   const row = await paymentData(user.id, choice);
-  if (row.amountBdt > 0) throw userError("Credit দিয়ে পুরো দাম হচ্ছে না — বাকিটা bKash/Nagad-এ দিন।");
+  if (row.amountBdt > 0) throw userError("রেফারের আয় দিয়ে পুরো দাম হচ্ছে না — বাকিটা bKash/Nagad-এ দিন।");
   const payment = await prisma.payment.create({
     data: { userId: user.id, ...row, source: "credit", method: "BKASH", senderNumber: "credit", transactionId: `CREDIT-${newTransactionId()}` },
   });
-  await approvePayment(payment.id, "affiliate-credit", "Affiliate credit দিয়ে কেনা");
+  await approvePayment(payment.id, "affiliate-credit", "রেফারের আয় দিয়ে কেনা");
   revalidateBilling();
   return { id: payment.id, label: payment.packageName };
 }
