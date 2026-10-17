@@ -100,7 +100,6 @@ function TaskCard({ task, todayStart, now, timerRunning, onStart, onStatus, onEd
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const finished = task.status === "FINISHED";
   const description = task.description ? (isRichHtml(task.description) ? htmlToPlainText(task.description) : task.description).trim() : "";
   const due = task.dueDate ? dueLabel(task.dueDate, todayStart, now, finished) : null;
@@ -120,19 +119,19 @@ function TaskCard({ task, todayStart, now, timerRunning, onStart, onStatus, onEd
       ><Check className="size-3.5" strokeWidth={3} /></button>
 
       <div className="min-w-0 flex-1 pl-1">
-        <h2 className={cn("line-clamp-2 text-[15px] font-semibold leading-snug text-slate-900", finished && "text-slate-400 line-through")}><MathText text={task.title} /></h2>
-        <p className="mt-0.5 flex items-center gap-x-2 overflow-hidden whitespace-nowrap text-[12px] text-slate-500">
+        {/* Everything shows in full on every screen (owner, 2026-10-17): no clipped title, path or details. */}
+        <h2 className={cn("break-words text-[15px] font-semibold leading-snug text-slate-900", finished && "text-slate-400 line-through")}><MathText text={task.title} /></h2>
+        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] text-slate-500">
           {task.status === "IN_PROGRESS" || task.status === "REVISION" ? <span className={cn("flex shrink-0 items-center gap-1 font-medium", task.status === "IN_PROGRESS" ? "text-amber-700" : "text-rose-600")}><span className={cn("size-1.5 rounded-full", statusDot[task.status])} aria-hidden />{statusOptions.find((option) => option.value === task.status)!.label}</span> : null}
           {due ? <span className={cn("shrink-0", due.tone)}>{due.text}</span> : null}
           <span className="flex shrink-0 items-center gap-0.5"><Clock className="size-3" aria-hidden />{task.estimatedMinutes}m</span>
-          {task.subject ? <span className="min-w-0 truncate text-blue-700">{task.subject.name}{task.topic ? ` › ${task.topic.name}` : ""}</span> : null}
+          {task.subject ? <span className="min-w-0 break-words text-blue-700">{task.subject.name}{task.topic ? ` › ${task.topic.name}` : ""}</span> : null}
         </p>
-        {description && detailsOpen ? <RichHtml html={toEditorHtml(task.description)} className="mt-1.5 rounded-lg bg-slate-50" /> : null}
-        {task.notes.length || description ? <div className="mt-1 flex flex-wrap items-center gap-1.5">
+        {description ? <RichHtml html={toEditorHtml(task.description)} className="mt-1.5 rounded-lg bg-slate-50" /> : null}
+        {task.notes.length ? <div className="mt-1 flex flex-wrap items-center gap-1.5">
           {task.notes.map(({ note }) => <Link key={note.id} href={`/notes?id=${encodeURIComponent(note.id)}`} className="flex max-w-full items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-[11.5px] text-orange-700 hover:bg-orange-100">
-            <FileText className="size-3 shrink-0" /><span className="truncate"><MathText text={note.title || "শিরোনাম নেই"} /></span>
+            <FileText className="size-3 shrink-0" /><span className="min-w-0 break-words"><MathText text={note.title || "শিরোনাম নেই"} /></span>
           </Link>)}
-          {description ? <button type="button" onClick={() => setDetailsOpen((open) => !open)} aria-expanded={detailsOpen} className="rounded-full px-1 text-[11.5px] font-medium text-slate-500 hover:text-slate-900">{detailsOpen ? "কম ▴" : "বিস্তারিত ▾"}</button> : null}
         </div> : null}
       </div>
 
