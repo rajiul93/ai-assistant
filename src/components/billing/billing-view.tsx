@@ -59,7 +59,7 @@ export function BillingView({ overview, paymentResult }: { overview: BillingOver
         {payments.map((payment) => <li key={payment.id} className="flex items-center justify-between gap-2 py-2 text-[13px]">
           <div className="min-w-0">
             <p className="font-medium">{payment.packageName} <span className="tabular-nums text-slate-600">{taka(payment.amountBdt)}</span></p>
-            <p className="text-xs text-slate-500">{payment.source === "gift" ? "🎁 উপহার" : <>{methodNames[payment.method]}{payment.method === "SSLCOMMERZ" ? null : <> · TrxID <span className="font-mono">{payment.transactionId}</span></>}</>} · {formatDateTime(payment.createdAt)}</p>
+            <p className="text-xs text-slate-500">{payment.source === "gift" ? "🎁 উপহার" : payment.source === "credit" ? "🤝 Affiliate credit দিয়ে" : <>{methodNames[payment.method]}{payment.method === "SSLCOMMERZ" ? null : <> · TrxID <span className="font-mono">{payment.transactionId}</span></>}</>} · {formatDateTime(payment.createdAt)}</p>
             {payment.adminNote && payment.method !== "SSLCOMMERZ" ? <p className="mt-0.5 text-xs text-slate-600">Admin: {payment.adminNote}</p> : null}
           </div>
           <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-medium ring-1", statusStyle[payment.status].className)}>{statusStyle[payment.status].label}</span>

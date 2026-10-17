@@ -14,6 +14,9 @@ import { approvePayment, getPlanStatus, listPaymentAccounts, rejectPayment } fro
 import { allQuotes, loadCatalog, loadSettings, priceChoice, runningSubscriptions } from "@/server/pricing";
 import { createSession, gatewayConfigured, newTransactionId } from "@/server/sslcommerz";
 import { userError } from "@/lib/user-error";
+import { REF_COOKIE } from "@/lib/affiliate";
+import { cookies } from "next/headers";
+import { claimReferral, creditFor } from "@/server/affiliate";
 
 function revalidateBilling() {
   revalidatePath("/", "layout");
@@ -42,6 +45,8 @@ export async function getBillingOverview() {
     aiToday(user.id),
     prisma.user.findUnique({ where: { id: user.id }, select: { phone: true } }),
   ]);
+  // Affiliate credit (credit payout mode): taken off the next purchase, shown at checkout.
+  const credit = await creditFor(user.id, Number.MAX_SAFE_INTEGER);
   return {
     catalog: { tiers: catalog.tiers, tracks: catalog.tracks, durations: catalog.durations, allTracksDiscountPct: catalog.allTracksDiscountPct, systemPriceBdt: catalog.systemPriceBdt },
     quotes: allQuotes(catalog),
@@ -54,6 +59,7 @@ export async function getBillingOverview() {
     running,
     today,
     payments,
+    credit,
   };
 }
 
@@ -71,15 +77,20 @@ const paymentSchema = choiceSchema.extend({
   transactionId: z.string().trim().toUpperCase().refine((value) => /^[A-Z0-9]{6,20}$/.test(value), "Payment SMS-এর Transaction ID দিন (অক্ষর আর সংখ্যা)।"),
 }).strict();
 
-/** The payment row for a choice: the server's price and everything it buys, copied in now. */
-async function paymentData(choice: z.infer<typeof choiceSchema>) {
+/**
+ * The payment row for a choice: the server's price and everything it buys, copied in now. Affiliate
+ * credit (credit payout mode) comes off the price; `amountBdt` is what is left to pay.
+ */
+async function paymentData(userId: string, choice: z.infer<typeof choiceSchema>) {
   const { quote, tier } = await priceChoice(choice);
+  const creditUsedBdt = await creditFor(userId, quote.total);
   return {
     planType: quote.planType,
     packageName: quoteLabel(quote),
     durationDays: quote.days,
     tokens: tokensForDays(tier.tokensPerMonth, quote.days),
-    amountBdt: quote.total,
+    amountBdt: quote.total - creditUsedBdt,
+    creditUsedBdt,
     trackIds: quote.trackIds,
     allTracks: quote.allTracks,
     breakdown: quote,
@@ -99,9 +110,12 @@ export async function submitPayment(input: unknown) {
   const data = parsed.data;
   const account = await prisma.paymentAccount.findFirst({ where: { method: data.method, enabled: true } });
   if (!account) throw userError("এই payment পদ্ধতি এখন বন্ধ আছে।");
+  await claimReferral(user.id, (await cookies()).get(REF_COOKIE)?.value);
+  const row = await paymentData(user.id, data);
+  if (row.amountBdt <= 0) throw userError("পুরো দামটা affiliate credit দিয়েই হয়ে যাচ্ছে — \"Credit দিয়ে নাও\" চাপো।");
   try {
     const payment = await prisma.payment.create({
-      data: { userId: user.id, ...(await paymentData(data)), method: data.method, senderNumber: data.senderNumber, transactionId: data.transactionId },
+      data: { userId: user.id, ...row, method: data.method, senderNumber: data.senderNumber, transactionId: data.transactionId },
     });
     revalidateBilling();
     return { id: payment.id, amountBdt: payment.amountBdt, label: payment.packageName };
@@ -127,7 +141,9 @@ export async function startOnlinePayment(input: unknown) {
   if (!parsed.success) throw userError(parsed.error.issues[0]?.message ?? "তথ্য দেখে আবার দিন।");
   const settings = await loadSettings();
   if (!settings.gatewayEnabled || !gatewayConfigured()) throw userError("Online payment এখন বন্ধ আছে। bKash বা Nagad দিয়ে দিন।");
-  const data = await paymentData(parsed.data);
+  await claimReferral(user.id, (await cookies()).get(REF_COOKIE)?.value);
+  const data = await paymentData(user.id, parsed.data);
+  if (data.amountBdt <= 0) throw userError("পুরো দামটা affiliate credit দিয়েই হয়ে যাচ্ছে — \"Credit দিয়ে নাও\" চাপো।");
   const tranId = newTransactionId();
   const payment = await prisma.payment.create({ data: { userId: user.id, ...data, method: "SSLCOMMERZ", senderNumber: parsed.data.phone, transactionId: tranId } });
   // Where SSLCommerz sends the customer and its notices back: APP_URL when set, else this request's host.
@@ -142,6 +158,23 @@ export async function startOnlinePayment(input: unknown) {
     await prisma.payment.updateMany({ where: { id: payment.id, status: "PENDING" }, data: { status: "REJECTED", adminNote: "Gateway session খোলা যায়নি", reviewedAt: new Date(), reviewedBy: "sslcommerz" } });
     throw error;
   }
+}
+
+/**
+ * A plan paid entirely with affiliate credit (credit payout mode): nothing to send, so it is
+ * approved at once. Only when the credit covers the whole price.
+ */
+export async function payWithCredit(input: unknown) {
+  const user = await requireUser();
+  const choice = choiceSchema.strict().parse(input);
+  const row = await paymentData(user.id, choice);
+  if (row.amountBdt > 0) throw userError("Credit দিয়ে পুরো দাম হচ্ছে না — বাকিটা bKash/Nagad-এ দিন।");
+  const payment = await prisma.payment.create({
+    data: { userId: user.id, ...row, source: "credit", method: "BKASH", senderNumber: "credit", transactionId: `CREDIT-${newTransactionId()}` },
+  });
+  await approvePayment(payment.id, "affiliate-credit", "Affiliate credit দিয়ে কেনা");
+  revalidateBilling();
+  return { id: payment.id, label: payment.packageName };
 }
 
 // ---------- Admin ----------

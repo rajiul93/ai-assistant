@@ -6,6 +6,8 @@ import { loginCookieOptions, REFRESH_COOKIE, SESSION_COOKIE } from "@/lib/sessio
 import { isFirebaseClientConfigured } from "@/lib/firebase/config";
 import { DEVICE_COOKIE, deviceCookieOptions, MAX_DEVICES, registerDevice } from "@/server/devices";
 import { errorMessage } from "@/lib/user-error";
+import { REF_COOKIE } from "@/lib/affiliate";
+import { claimReferral } from "@/server/affiliate";
 
 /**
  * Sign in: the ID token becomes the session; the refresh token keeps it alive (see src/proxy.ts).
@@ -35,6 +37,8 @@ export async function POST(request: Request) {
     cookieStore.set(SESSION_COOKIE, token, loginCookieOptions());
     if (refreshToken) cookieStore.set(REFRESH_COOKIE, refreshToken, loginCookieOptions());
     cookieStore.set(DEVICE_COOKIE, device.id, deviceCookieOptions());
+    // Opened an affiliate link before signing in: tie this user to that affiliate (never fails the sign-in).
+    await claimReferral(userId, cookieStore.get(REF_COOKIE)?.value).catch(() => undefined);
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message = errorMessage(error, "Authentication failed.");
