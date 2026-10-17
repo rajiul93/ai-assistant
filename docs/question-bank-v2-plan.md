@@ -28,7 +28,7 @@ exam. The owner asked for two halves:
 - `BankSet` + `categoryId` (required), `year Int?`, `free`. `exam` became nullable and is kept as a
   mirror of the category's exam (the sheet upload still finds sets by exam). The unique key moved
   from (exam, section, name) to (categoryId, section, name).
-- `BankSubject` → `BankChapter` → `BankArticle` (HTML, sanitized; `free` default true),
+- `BankSubject` → `BankChapter` (short `name` + optional `description`, shown under it on the card — owner, 2026-10-17) → `BankArticle` (HTML, sanitized; `free` default true),
   `BankQuestion` (now either in a set **or** a chapter — CHECK constraint; `free` default false),
   `BankShortQuestion` (`free` default false). Chapter MCQ / short questions dedupe by fingerprint.
 - The migration seeds five subjects (বাংলা, ইংরেজি, গণিত, সাধারণ জ্ঞান, বিজ্ঞান) with no chapters.
