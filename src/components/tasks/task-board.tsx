@@ -188,7 +188,8 @@ export function TaskBoard({
   const view = searchParams.get("view") === "revisions" ? "revisions" : "tasks";
   const setView = (next: "tasks" | "revisions") => router.replace(next === "revisions" ? "/tasks?view=revisions" : "/tasks", { scroll: false });
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<FilterId>("ALL");
+  // Opens on what is still to start (owner, 2026-10-17); "সব" is one tap away.
+  const [filter, setFilter] = useState<FilterId>("NOT_STARTED");
   // "manual" is the user's own drag-and-drop order (Task.position).
   const [sort, setSort] = useState<"manual" | "dueDate" | "priority" | "createdAt">("manual");
   const [createOpen, setCreateOpen] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("add") === "1");
