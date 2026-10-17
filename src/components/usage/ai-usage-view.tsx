@@ -237,8 +237,6 @@ function CustomerQuotaCard({ quota }: { quota: AiQuota }) {
 type TodayShare = {
   todayPercent: number;
   dailySharePercent: number;
-  /** Only present in development (the server leaves it out in production). */
-  dev?: { todayTokens: number; dailyShareTokens: number; planTokens: number; planUsedTokens: number };
 };
 
 /** Today's use, big, as a share of today's allowance (the plan spread evenly over its days) — nothing else. */
@@ -254,13 +252,6 @@ function TodayUsageCard({ today }: { today: TodayShare }) {
       </Ring>
     </div>
     {ofShare > 100 ? <p className="mt-2 text-xs font-medium text-rose-600">আজকের ভাগের বেশি খরচ হয়েছে।</p> : <p className="mt-2 text-xs text-slate-500">প্রতিদিন সমান ভাগে ব্যবহার করলে plan শেষ পর্যন্ত চলবে।</p>}
-    {today.dev ? <dl className="mt-3 grid w-full grid-cols-2 gap-x-3 gap-y-1 rounded-lg border border-dashed border-violet-300 bg-violet-50 p-2.5 font-mono text-[11px] text-violet-900">
-      <dt className="col-span-2 font-sans text-[10px] font-semibold uppercase tracking-wide text-violet-500">Dev only · tokens</dt>
-      <dt>today</dt><dd className="text-right tabular-nums">{number(today.dev.todayTokens)}</dd>
-      <dt>daily share</dt><dd className="text-right tabular-nums">{number(today.dev.dailyShareTokens)}</dd>
-      <dt>plan used</dt><dd className="text-right tabular-nums">{number(today.dev.planUsedTokens)}</dd>
-      <dt>plan total</dt><dd className="text-right tabular-nums">{number(today.dev.planTokens)}</dd>
-    </dl> : null}
   </section>;
 }
 
