@@ -120,10 +120,6 @@ export async function getTodayUsageShare(userId: string, plan: PlanStatus) {
   return {
     todayPercent: plan.tokensTotal ? round((todayTokens / plan.tokensTotal) * 100) : 0,
     dailySharePercent: planDays ? round(100 / planDays) : 0,
-    // Token counts for developers only: sent to the page in development, never in production.
-    ...(process.env.NODE_ENV === "development"
-      ? { dev: { todayTokens, dailyShareTokens: planDays ? Math.round(plan.tokensTotal / planDays) : 0, planTokens: plan.tokensTotal, planUsedTokens: plan.tokensUsed } }
-      : {}),
   };
 }
 
