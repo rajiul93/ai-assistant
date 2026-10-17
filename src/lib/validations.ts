@@ -22,12 +22,21 @@ export const taskSchema = z.object({
   status: taskStatusSchema,
 });
 
+export const SUBJECT_NAME_MAX = 80;
+/** Topics are often whole lecture titles ("লেকচার-৩: বাঙালি জাতির উদ্ভব…"), so they get more room (owner, 2026-10-17). */
+export const TOPIC_NAME_MAX = 300;
+
 export const subjectSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(80),
+  name: z.string().trim().min(1, "নাম লেখো").max(SUBJECT_NAME_MAX, `Subject-এর নাম ${SUBJECT_NAME_MAX} অক্ষরের মধ্যে রাখো`),
+});
+
+/** A topic's name alone (renaming). */
+export const topicNameSchema = z.object({
+  name: z.string().trim().min(1, "নাম লেখো").max(TOPIC_NAME_MAX, `Topic-এর নাম ${TOPIC_NAME_MAX} অক্ষরের মধ্যে রাখো`),
 });
 
 export const topicSchema = z.object({
-  name: z.string().trim().min(1, "Name is required").max(80),
+  name: topicNameSchema.shape.name,
   subjectId: z.string().min(1),
   parentId: z.string().optional().or(z.literal("")),
 });
