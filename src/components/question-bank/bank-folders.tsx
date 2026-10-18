@@ -18,8 +18,38 @@ type Editing = { kind: "add" } | { kind: "rename"; folder: Folder } | { kind: "d
 
 const tones = ["bg-indigo-50 text-indigo-700", "bg-emerald-50 text-emerald-700", "bg-amber-50 text-amber-800", "bg-sky-50 text-sky-700", "bg-rose-50 text-rose-700", "bg-violet-50 text-violet-700"];
 
-function FolderGrid({ folders, canEdit, icon, noun, empty, onAdd, onRename, onDelete, move, withDescription = false }: {
+// Subject cards each wear a soft colour of their own (owner, 2026-10-18: colourful, but easy on the eyes).
+const softCards = [
+  { surface: "border-sky-100 bg-sky-50 hover:border-sky-200", icon: "bg-sky-100 text-sky-700" },
+  { surface: "border-emerald-100 bg-emerald-50 hover:border-emerald-200", icon: "bg-emerald-100 text-emerald-700" },
+  { surface: "border-amber-100 bg-amber-50 hover:border-amber-200", icon: "bg-amber-100 text-amber-800" },
+  { surface: "border-rose-100 bg-rose-50 hover:border-rose-200", icon: "bg-rose-100 text-rose-700" },
+  { surface: "border-violet-100 bg-violet-50 hover:border-violet-200", icon: "bg-violet-100 text-violet-700" },
+  { surface: "border-teal-100 bg-teal-50 hover:border-teal-200", icon: "bg-teal-100 text-teal-700" },
+  { surface: "border-orange-100 bg-orange-50 hover:border-orange-200", icon: "bg-orange-100 text-orange-700" },
+  { surface: "border-indigo-100 bg-indigo-50 hover:border-indigo-200", icon: "bg-indigo-100 text-indigo-700" },
+  { surface: "border-lime-100 bg-lime-50 hover:border-lime-200", icon: "bg-lime-100 text-lime-800" },
+  { surface: "border-pink-100 bg-pink-50 hover:border-pink-200", icon: "bg-pink-100 text-pink-700" },
+];
+
+/**
+ * A colour per card that looks random but comes from the id, so a subject keeps its colour (and the
+ * server and browser agree); a card never matches the one before it or the one above it (two per row).
+ */
+function softColours(ids: string[]) {
+  const picked: number[] = [];
+  for (const id of ids) {
+    let pick = [...id].reduce((hash, char) => (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0, 7) % softCards.length;
+    while (pick === picked.at(-1) || pick === picked.at(-2)) pick = (pick + 1) % softCards.length;
+    picked.push(pick);
+  }
+  return picked.map((index) => softCards[index]);
+}
+
+function FolderGrid({ folders, canEdit, icon, noun, empty, onAdd, onRename, onDelete, move, withDescription = false, colourful = false }: {
   folders: Folder[];
+  /** Each card in its own soft colour (subjects). */
+  colourful?: boolean;
   /** Chapters: a short description under the name, and one card per row on phones. */
   withDescription?: boolean;
   canEdit: boolean;
@@ -34,6 +64,7 @@ function FolderGrid({ folders, canEdit, icon, noun, empty, onAdd, onRename, onDe
   const [editing, setEditing] = useState<Editing>(null);
   const { busy, run } = useBankRun();
   const close = () => setEditing(null);
+  const colours = colourful ? softColours(folders.map((folder) => folder.id)) : null;
 
   return <div className="space-y-3">
     {canEdit ? <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-violet-200 bg-violet-50/80 p-3">
@@ -42,7 +73,7 @@ function FolderGrid({ folders, canEdit, icon, noun, empty, onAdd, onRename, onDe
     </div> : null}
 
     {folders.length ? <div className={withDescription ? wideTileGrid : tileGrid}>
-      {folders.map((folder, index) => <BankTile key={folder.id} href={folder.href} icon={icon} tone={tones[index % tones.length]} title={folder.title} description={folder.description} detail={folder.detail}
+      {folders.map((folder, index) => <BankTile key={folder.id} href={folder.href} icon={icon} tone={colours ? colours[index].icon : tones[index % tones.length]} surface={colours?.[index].surface} title={folder.title} description={folder.description} detail={folder.detail}
         actions={canEdit ? <>
           <button type="button" onClick={() => setEditing({ kind: "rename", folder })} aria-label={`${folder.title} নাম বদলাও`} title="নাম বদলাও" className={iconButton}><Pencil className="size-3.5" /></button>
           {move ? <button type="button" onClick={() => setEditing({ kind: "move", folder })} aria-label={`${folder.title} সরাও`} title="অন্য জায়গায় সরাও" className={iconButton}><ArrowRightLeft className="size-3.5" /></button> : null}
@@ -66,7 +97,7 @@ function FolderGrid({ folders, canEdit, icon, noun, empty, onAdd, onRename, onDe
 
 export function SubjectGrid({ subjects, canEdit }: { subjects: Array<{ id: string; name: string; chapters: number }>; canEdit: boolean }) {
   const router = useRouter();
-  return <FolderGrid canEdit={canEdit} icon={BookMarked} noun="Subject" empty="এখনো কোনো subject নেই।"
+  return <FolderGrid canEdit={canEdit} icon={BookMarked} noun="Subject" empty="এখনো কোনো subject নেই।" colourful
     folders={subjects.map((subject) => ({ id: subject.id, title: subject.name, detail: subject.chapters ? `${subject.chapters}টি chapter` : "Chapter নেই", href: `/question-bank/general/${subject.id}` }))}
     onAdd={async (name) => { const { id } = await createBankSubject(name); router.push(`/question-bank/general/${id}`); }}
     onRename={renameBankSubject} onDelete={deleteBankSubject} />;
