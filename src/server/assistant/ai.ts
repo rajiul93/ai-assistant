@@ -1,10 +1,13 @@
 import { repairLatexInJson } from "@/lib/ai-json";
 import { prisma } from "@/lib/prisma";
+import { getAiSettings } from "@/server/ai-settings";
+import { GEMINI_DEFAULT_MODEL, geminiCall } from "@/server/assistant/gemini";
 
 /**
- * One entry point for every AI call in the app, backed by OpenAI.
- * If the main model is busy, fails or times out, the fallback model answers. Every attempt is logged
- * for the AI Usage page.
+ * One entry point for every AI call in the app: OpenAI, or Google Gemini when the super admin picks
+ * it on /usage (owner, 2026-10-18). The chosen one answers; if it fails and the other has a key, the
+ * other does. Within OpenAI, if the main model is busy, fails or times out, the fallback model
+ * answers. Every attempt is logged for the AI Usage page.
  */
 
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-6-luna";
@@ -16,9 +19,9 @@ const PER_ATTEMPT_WITH_BACKUP_MS = 25_000;
 /** Who is using the AI and for what — every call is logged for the AI usage page. */
 export type AiFeature = "assistant" | "file_assistant" | "answer" | "answer_search" | "note_writer" | "speech" | "transcribe" | "voice_fix" | "image" | "bank_beautify" | "bank_solve" | "bank_paste" | "bank_dupes" | "vocab_explain";
 /** Images/PDFs sent alongside the prompt (base64). */
-type InlineFile = { mimeType: string; data: string; name?: string };
+export type InlineFile = { mimeType: string; data: string; name?: string };
 /** `responseSchema` is written in an OpenAPI style (type: "OBJECT", nullable: true) and converted to JSON Schema. */
-type CallOptions = {
+export type CallOptions = {
   search?: boolean;
   responseSchema?: object;
   files?: InlineFile[];
@@ -36,8 +39,8 @@ type CallOptions = {
    */
   reasoning?: "low" | "medium" | "high";
 };
-type Usage = { input: number; output: number; total: number };
-type Attempt = { status: number | null; text: string | null; usage?: Usage };
+export type Usage = { input: number; output: number; total: number };
+export type Attempt = { status: number | null; text: string | null; usage?: Usage };
 
 // After web search hits its quota, skip it for a while instead of wasting a request per question.
 let searchBlockedUntil = 0;
@@ -220,13 +223,58 @@ async function webSearchResponse(model: string, apiKey: string, prompt: string, 
   return { status: 200, text: text || null, usage: { input, output, total: payload.usage?.total_tokens ?? input + output } };
 }
 
-/** Returns the model's text, or null when no API key is configured or every attempt fails. */
+/**
+ * Returns the model's text, or null when no AI has a key or every attempt fails. The chosen
+ * provider goes first; the other one (when it has a key) gets what is left of the time, unless the
+ * user stopped it or part of the answer has already been streamed.
+ */
 export async function callAI(prompt: string, options: CallOptions) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return null;
-  if (options.search && Date.now() < searchBlockedUntil) return null;
-  const models = [...new Set([OPENAI_MODEL, OPENAI_FALLBACK_MODEL].filter((model): model is string => Boolean(model)))];
+  const settings = await getAiSettings();
+  const order = settings.provider === "gemini" ? (["gemini", "openai"] as const) : (["openai", "gemini"] as const);
   const deadline = Date.now() + (options.timeoutMs ?? TOTAL_BUDGET_MS);
+  for (const provider of order) {
+    if (options.signal?.aborted) return null;
+    if (deadline - Date.now() < 3_000) break;
+    const result = provider === "openai" ? await callOpenAI(prompt, options, deadline) : settings.gemini ? await callGemini(prompt, options, deadline, settings.gemini) : { text: null, final: false };
+    if (result.text || result.final) return result.text;
+  }
+  return null;
+}
+
+/** Gemini's attempt: one model (the chosen or the default), logged like OpenAI's. */
+async function callGemini(prompt: string, options: CallOptions, deadline: number, gemini: { key: string; model: string | null }): Promise<{ text: string | null; final: boolean }> {
+  const model = gemini.model || GEMINI_DEFAULT_MODEL;
+  const started = Date.now();
+  let streamedChars = 0;
+  const attemptOptions = options.onDelta ? { ...options, onDelta: (piece: string) => { streamedChars += piece.length; options.onDelta!(piece); } } : options;
+  try {
+    const attempt = await geminiCall(model, gemini.key, prompt, attemptOptions, withTimeout(options.signal, deadline - Date.now()));
+    logUsage({ userId: options.userId, feature: options.feature, model, httpStatus: attempt.status, latencyMs: Date.now() - started, usage: attempt.usage });
+    if (attempt.text) return { text: options.responseSchema ? repairLatexInJson(attempt.text) : attempt.text, final: true };
+    return { text: null, final: streamedChars > 0 };
+  } catch (error) {
+    if (options.signal?.aborted) {
+      const input = Math.ceil(prompt.length / 3);
+      const output = Math.ceil(streamedChars / 3);
+      logUsage({ userId: options.userId, feature: options.feature, model, httpStatus: 200, latencyMs: Date.now() - started, usage: { input, output, total: input + output } });
+      return { text: null, final: true };
+    }
+    const timedOut = error instanceof Error && error.name === "TimeoutError";
+    logUsage({ userId: options.userId, feature: options.feature, model, httpStatus: null, timedOut, latencyMs: Date.now() - started });
+    console.warn(`[ai] ${model} failed: ${timedOut ? "timed out" : String(error)}`);
+    return { text: null, final: streamedChars > 0 };
+  }
+}
+
+/**
+ * OpenAI's attempts (unchanged): the main model, then the fallback model when the first was busy.
+ * `final`: nothing more should be tried (the user stopped it, or streamed text already went out).
+ */
+async function callOpenAI(prompt: string, options: CallOptions, deadline: number): Promise<{ text: string | null; final: boolean }> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return { text: null, final: false };
+  if (options.search && Date.now() < searchBlockedUntil) return { text: null, final: false };
+  const models = [...new Set([OPENAI_MODEL, OPENAI_FALLBACK_MODEL].filter((model): model is string => Boolean(model)))];
 
   for (let index = 0; index < models.length; index++) {
     const model = models[index];
@@ -240,7 +288,7 @@ export async function callAI(prompt: string, options: CallOptions) {
     let streamedChars = 0;
     const attemptOptions = options.onDelta ? { ...options, onDelta: (piece: string) => { streamed = true; streamedChars += piece.length; options.onDelta!(piece); } } : options;
     try {
-      if (options.signal?.aborted) return null;
+      if (options.signal?.aborted) return { text: null, final: true };
       attempt = await (options.search ? webSearchResponse : chatCompletion)(model, apiKey, prompt, attemptOptions, timeout);
     } catch (error) {
       if (options.signal?.aborted) {
@@ -249,23 +297,23 @@ export async function callAI(prompt: string, options: CallOptions) {
         const input = Math.ceil(prompt.length / 3);
         const output = Math.ceil(streamedChars / 3);
         logUsage({ userId: options.userId, feature: options.feature, model, httpStatus: 200, latencyMs: Date.now() - started, usage: { input, output, total: input + output } });
-        return null;
+        return { text: null, final: true };
       }
       const timedOut = error instanceof Error && error.name === "TimeoutError";
       logUsage({ userId: options.userId, feature: options.feature, model, httpStatus: null, timedOut, latencyMs: Date.now() - started });
       console.warn(`[ai] ${model} failed: ${timedOut ? "timed out" : String(error)}`);
-      if (streamed) return null;
+      if (streamed) return { text: null, final: true };
       continue;
     }
     logUsage({ userId: options.userId, feature: options.feature, model, httpStatus: attempt.status, latencyMs: Date.now() - started, usage: attempt.usage });
     // JSON answers: LaTeX written with one backslash ("\frac") would be eaten by JSON.parse.
-    if (attempt.text) return options.responseSchema ? repairLatexInJson(attempt.text) : attempt.text;
+    if (attempt.text) return { text: options.responseSchema ? repairLatexInJson(attempt.text) : attempt.text, final: true };
     console.warn(`[ai] ${model}${options.search ? " (search)" : ""} failed: HTTP ${attempt.status}`);
-    if (options.search && attempt.status === 429) { searchBlockedUntil = Date.now() + 30 * 60_000; return null; }
+    if (options.search && attempt.status === 429) { searchBlockedUntil = Date.now() + 30 * 60_000; return { text: null, final: false }; }
     // The fallback model only helps when the first was busy or rate-limited.
     if (attempt.status !== 503 && attempt.status !== 429) break;
   }
-  return null;
+  return { text: null, final: false };
 }
 
 // ---------- Images ----------
