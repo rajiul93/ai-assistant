@@ -523,7 +523,7 @@ model AiSettings {
   provider    String   @default("openai")
   /// The Gemini API key, encrypted (AES-256-GCM, src/server/secret-box.ts) — never sent to a page.
   geminiKey   String?
-  /// The Gemini model; empty = the default in src/server/assistant/gemini.ts.
+  /// The Gemini model; empty = the default in src/server/assistant/gemini.ts (gemini-3.8-flash).
   geminiModel String?
   updatedAt   DateTime @updatedAt
 }
