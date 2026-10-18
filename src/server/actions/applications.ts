@@ -78,3 +78,18 @@ export async function deleteApplication(applicationId: string) {
   await prisma.jobApplication.delete({ where: { id: existing.id } });
   revalidateJobs();
 }
+
+/**
+ * For the once-a-day jobs reminder (components/jobs/jobs-reminder.tsx): the user's applications
+ * still in play, with their links to check, and how many still have no link.
+ */
+export async function getJobReminder() {
+  const user = await requireUser();
+  const active = await prisma.jobApplication.findMany({
+    where: { userId: user.id, status: { notIn: ["REJECTED", "WITHDRAWN"] } },
+    orderBy: [{ updatedAt: "desc" }],
+    select: { id: true, title: true, organization: true, link: true },
+  });
+  const withLink = active.filter((item) => item.link?.trim());
+  return { total: active.length, links: withLink.slice(0, 8), withoutLink: active.length - withLink.length };
+}

@@ -62,6 +62,9 @@ function Flashcard({ card, missed, enter, onUnlearn, onNext, onPrev }: { card: V
   }
 
   return <div className="space-y-2">
+    {/* Sideways movement stays inside this box: a card sticking out past the screen edge made
+        phones zoom the whole page out and back, which looked like a reload. */}
+    <div className="-mx-2 overflow-x-clip px-2">
     <button type="button" aria-label={back ? "সামনের দিক দেখো" : "উল্টে দেখো"}
       onClick={() => { if (swiped.current) { swiped.current = false; return; } setBack(!back); }}
       onPointerDown={(event) => { drag.current = { x: event.clientX, y: event.clientY, dx: 0, sideways: null }; swiped.current = false; }}
@@ -106,6 +109,7 @@ function Flashcard({ card, missed, enter, onUnlearn, onNext, onPrev }: { card: V
         <span className="mt-2 block text-xs text-white/80">চাপ দিয়ে উল্টাও · পাশে টেনে পরেরটা</span>
       </span>}
     </button>
+    </div>
     <div className="flex items-center justify-center gap-2">
       <button type="button" onClick={() => (canPronounce() ? pronounce(card.word) : toast.error("এই browser-এ উচ্চারণ শোনা যায় না।"))} className="flex h-9 items-center gap-1.5 rounded-full bg-blue-50 px-3 text-[13px] font-semibold text-blue-700"><Volume2 className="size-4" /> শোনো</button>
       <button type="button" onClick={onUnlearn} title="ভুল করে টিক দিয়েছ বা আবার শিখতে চাও — শব্দটা তালিকায় ফিরে যাবে" className="flex h-9 items-center gap-1.5 rounded-full bg-amber-50 px-3 text-[13px] font-semibold text-amber-800 ring-1 ring-amber-200"><Undo2 className="size-4" /> তালিকায় ফেরত পাঠাও</button>

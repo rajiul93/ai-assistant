@@ -23,11 +23,13 @@ import { TimerAlarm } from "@/components/timer/timer-alarm";
 import { TimerSync } from "@/components/timer/timer-sync";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { MoreSheet } from "@/components/more-sheet";
+import { JobsReminder } from "@/components/jobs/jobs-reminder";
 import { SideNav } from "@/components/side-nav";
 
-// Phones get the four daily pages in the tab bar, around a "+" for adding; the rest is under "More".
-// The study timer lives on the Tasks page and in the session bar, so it has no page of its own.
-const tabHrefs = ["/dashboard", "/tasks", "/notes", "/jobs"];
+// Phones get five items in the tab bar — Home, Tasks, "+", Notes, More (owner, 2026-10-18: Jobs moved
+// under More); the rest is under "More". The study timer lives on the Tasks page and in the session
+// bar, so it has no page of its own.
+const tabHrefs = ["/dashboard", "/tasks", "/notes"];
 const tabs = tabHrefs.map((href) => links.find((link) => link.href === href)!);
 const baseMoreLinks = links.filter((link) => !tabHrefs.includes(link.href));
 
@@ -131,6 +133,8 @@ export function AppShell({
         {/* One timer across the user's devices (see TimerSync). */}
         <TimerSync />
         <SubjectPickerDialog />
+        {/* Once a day: check the job applications' links. */}
+        <JobsReminder />
         {/* Desktop only; phones have the chip in the top bar. */}
         <div className="hidden lg:block"><SessionBar /></div>
         {/* Bottom padding leaves room for the tab bar and a running session bar. */}
@@ -141,7 +145,7 @@ export function AppShell({
         </main>
 
         <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-30 rounded-t-3xl border-t border-slate-200/70 bg-white/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_30px_-12px_rgba(15,23,42,0.18)] backdrop-blur-xl lg:hidden">
-          <div className="grid grid-cols-6 items-center">
+          <div className="grid grid-cols-5 items-center">
             {tabs.slice(0, 2).map(tab)}
             <QuickCreate />
             {tabs.slice(2).map(tab)}

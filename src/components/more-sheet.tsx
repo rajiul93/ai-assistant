@@ -44,7 +44,7 @@ export function MoreSheet({ links, adminLinks, userName, userImage, isActive, ba
   // A page added later shows up under "আরো" until it is given a group.
   const others = links.filter((link) => !grouped.has(link.href) && !skip.has(link.href));
   const sections = [
-    ...GROUPS.map((group) => ({ title: group.title, items: [...group.hrefs.map((href) => links.find((link) => link.href === href)).filter((link): link is NavLink => Boolean(link)), ...(group.title === "আরো" ? [...refer, ...others] : [])] })),
+    ...GROUPS.map((group) => ({ title: group.title, items: [...group.hrefs.map((href) => links.find((link) => link.href === href)).filter((link): link is NavLink => Boolean(link)), ...(group.title === "আরো" ? [...others, ...refer] : [])] })),
     { title: "Admin", items: adminLinks },
   ].filter((section) => section.items.length);
 

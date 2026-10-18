@@ -150,7 +150,7 @@ alone. Record decisions and their reasons; don't restate code.
 
 - `src/app/(app)/*`: signed-in pages (dashboard, tasks, notes, subjects, plan, progress, revisions,
   timer, preliminary, short-questions, confusions, vocabulary, typing, jobs, usage, billing, admin).
-  The shell/nav is `src/components/app-shell.tsx` (sidebar on desktop; 4-tab bar + "More" on phones).
+  The shell/nav is `src/components/app-shell.tsx` (sidebar on desktop; on phones Home, Tasks, "+", Notes, More — Jobs is under More since 2026-10-18; a once-a-day dialog, `JobsReminder`, shows the job links to check).
 - `src/app/api/*`: route handlers (assistant, speech, transcribe, extract/spellcheck for question
   sets, vocabulary AI fill, …).
 - `src/components/<feature>/*`: feature UI. `src/server/actions/*`: server actions per feature.
