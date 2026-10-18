@@ -1,11 +1,13 @@
 "use server";
 
+import type { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { bareAffix } from "@/lib/vocabulary/affixes";
 import { namesAPerson, nounKey } from "@/lib/vocabulary/nouns";
+import { readSentences } from "@/lib/vocabulary/sentences";
 import { hasPremium } from "@/server/premium";
 import { can } from "@/server/roles";
 import { userError } from "@/lib/user-error";
@@ -27,11 +29,15 @@ async function requireEditor() {
 }
 
 /**
- * A word's Bangla explanation is for paid users (and staff) only: others get only whether one
- * exists, so the text never reaches their page (owner, 2026-10-15).
+ * A word's Bangla explanation and its example sentences are for paid users (and staff) only:
+ * others get only whether they exist, so the text never reaches their page (owner, 2026-10-15,
+ * sentences 2026-10-18).
  */
-function gateExplanation<T extends { explanation: string | null }>(rows: T[], premium: boolean) {
-  return rows.map((row) => ({ ...row, explanation: premium ? row.explanation : null, hasExplanation: Boolean(row.explanation) }));
+function gateExplanation<T extends { explanation: string | null; sentences: Prisma.JsonValue }>(rows: T[], premium: boolean) {
+  return rows.map(({ sentences: stored, ...row }) => {
+    const sentences = readSentences(stored);
+    return { ...row, explanation: premium ? row.explanation : null, hasExplanation: Boolean(row.explanation), sentences: premium ? sentences : null, hasSentences: Boolean(sentences) };
+  });
 }
 
 const alreadyThere = (word: string) => new Error(`“${word}” আগেই table-এ আছে।`);
@@ -54,7 +60,7 @@ export async function listVerbs() {
   const user = await requireUser();
   const [rows, premium] = await Promise.all([prisma.verbEntry.findMany({
     orderBy: { present: "asc" },
-    select: { id: true, present: true, past: true, pastParticiple: true, meaning: true, explanation: true, userId: true },
+    select: { id: true, present: true, past: true, pastParticiple: true, meaning: true, explanation: true, sentences: true, userId: true },
   }), hasPremium(user)]);
   return gateExplanation(rows, premium);
 }
@@ -100,7 +106,7 @@ export async function listAffixes() {
   const user = await requireUser();
   const [rows, premium] = await Promise.all([prisma.affixEntry.findMany({
     orderBy: [{ kind: "asc" }, { affix: "asc" }],
-    select: { id: true, kind: true, affix: true, meaning: true, example: true, explanation: true, userId: true },
+    select: { id: true, kind: true, affix: true, meaning: true, example: true, explanation: true, sentences: true, userId: true },
   }), hasPremium(user)]);
   return gateExplanation(rows, premium);
 }
@@ -145,7 +151,7 @@ async function nounExists(noun: { singular: string; plural: string }, exceptId?:
 export async function listNouns() {
   const user = await requireUser();
   const [rows, premium] = await Promise.all([
-    prisma.nounEntry.findMany({ orderBy: { singular: "asc" }, select: { id: true, singular: true, plural: true, meaning: true, person: true, explanation: true, userId: true } }),
+    prisma.nounEntry.findMany({ orderBy: { singular: "asc" }, select: { id: true, singular: true, plural: true, meaning: true, person: true, explanation: true, sentences: true, userId: true } }),
     hasPremium(user),
   ]);
   return gateExplanation(rows, premium);
