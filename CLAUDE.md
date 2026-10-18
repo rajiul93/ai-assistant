@@ -17,8 +17,11 @@ alone. Record decisions and their reasons; don't restate code.
 - React 19, TypeScript strict, Tailwind 4, Radix UI (`src/components/ui`), lucide icons, `sonner`
   toasts, `@tanstack/react-query`, zustand (`src/store`).
 - **Prisma 6.19 + Neon Postgres** (`prisma/schema.prisma`, client in `src/lib/prisma.ts`).
-- **Firebase Auth** (client SDK sign-in; firebase-admin on the server). AI via OpenAI
-  (`src/server/assistant/ai.ts` `callAI`).
+- **Firebase Auth** (client SDK sign-in; firebase-admin on the server). AI via OpenAI or Google Gemini
+  (`src/server/assistant/ai.ts` `callAI`; the super admin picks one on /usage — owner, 2026-10-18 — and
+  the other, when it has a key, answers if the chosen one fails. The Gemini key is entered there and
+  stored AES-encrypted in `AiSettings` (`src/server/secret-box.ts`, secret `AI_SETTINGS_SECRET` or the
+  Firebase private key); migration `20261102000000_ai_settings`. Voice and images stay on OpenAI).
 - Deployed on **Vercel** (serverless). The production build runs `prisma migrate deploy`.
 
 ## Commands

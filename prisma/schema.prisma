@@ -515,6 +515,19 @@ model Entitlement {
 }
 
 /// Prices that apply to every plan. One row (id "default"); the super admin edits it.
+/// Which AI answers (src/server/ai-settings.ts): OpenAI (its key stays in OPENAI_API_KEY) or Gemini,
+/// whose key the super admin enters on /usage. One row, id "default".
+model AiSettings {
+  id          String   @id @default("default")
+  /// "openai" or "gemini"; the other one (when it has a key) answers if this one fails.
+  provider    String   @default("openai")
+  /// The Gemini API key, encrypted (AES-256-GCM, src/server/secret-box.ts) — never sent to a page.
+  geminiKey   String?
+  /// The Gemini model; empty = the default in src/server/assistant/gemini.ts.
+  geminiModel String?
+  updatedAt   DateTime @updatedAt
+}
+
 model PricingSettings {
   id                   String   @id @default("default")
   /// The app itself (system features), per 30 days.
