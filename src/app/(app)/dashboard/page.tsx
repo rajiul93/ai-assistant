@@ -2,10 +2,12 @@ import Link from "next/link";
 import { UserRound } from "lucide-react";
 import { RequestsPanel } from "@/components/collaboration/requests-panel";
 import { DashboardView } from "@/components/dashboard/dashboard-view";
+import { VocabScore } from "@/components/dashboard/vocab-score";
 import { now } from "@/lib/dayjs";
 import { dueRevisionCount } from "@/lib/revisions";
 import { requireUser } from "@/lib/auth";
 import { freshUserFlags } from "@/server/user-flags";
+import { countVocabWords, getVocabStatus } from "@/server/vocab-progress";
 import {
   getPendingTasks,
   getProgressCounts,
@@ -19,7 +21,7 @@ import {
 
 export default async function DashboardPage() {
   const user = await requireUser();
-  const [plan, todayTasks, studiedSeconds, toRevise, counts, planStartedAt, pendingTasks, profile, streak] = await Promise.all([
+  const [plan, todayTasks, studiedSeconds, toRevise, counts, planStartedAt, pendingTasks, profile, streak, vocab, vocabWords] = await Promise.all([
     getStudyPlan(user.id),
     getTodayTasks(user.id),
     getTodayStudySeconds(user.id),
@@ -29,6 +31,8 @@ export default async function DashboardPage() {
     getPendingTasks(user.id),
     freshUserFlags(user.id),
     getStudyStreak(user.id),
+    getVocabStatus(user.id),
+    countVocabWords(),
   ]);
   const name = profile?.name ?? user.name;
   const todayMs = now().valueOf();
@@ -69,6 +73,7 @@ export default async function DashboardPage() {
       firstName={name?.split(" ")[0] ?? ""}
       firstTask={firstTask ? { title: firstTask.title, subjectId: firstTask.subjectId ?? "", topicId: firstTask.topicId ?? "", subjectName: firstTask.subject?.name ?? "" } : null}
     />
+    <VocabScore status={vocab} words={vocabWords} />
     </>
   );
 }

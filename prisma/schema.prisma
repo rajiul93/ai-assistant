@@ -53,6 +53,7 @@ model User {
   affixEntries           AffixEntry[]
   nounEntries            NounEntry[]
   vocabLearned           VocabLearned[]
+  vocabExams             VocabExam[]
   // Collaboration (docs/collaboration-plan.md)
   friendRequestsSent     FriendRequest[]       @relation("FriendRequestFrom")
   friendRequestsReceived FriendRequest[]       @relation("FriendRequestTo")
@@ -815,6 +816,27 @@ model NounEntry {
   @@index([userId])
 }
 
+/// The three vocabulary exams: drag the other form, drag the meaning, type the spelling.
+enum VocabExamType {
+  FORMS
+  MEANING
+  SPELLING
+}
+
+/// One finished vocabulary exam on a user's current set of words (revision exams are not stored).
+model VocabExam {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  batch     Int
+  type      VocabExamType
+  score     Int
+  total     Int
+  createdAt DateTime      @default(now())
+
+  @@index([userId, batch])
+}
+
 enum VocabKind {
   VERB
   NOUN
@@ -830,6 +852,12 @@ model VocabLearned {
   kind      VocabKind
   entryId   String
   createdAt DateTime  @default(now())
+  /// Which set of 50 the word was learned in (src/lib/vocabulary/exam.ts): the next set opens only
+  /// after the three exams on this one are passed.
+  batch     Int       @default(1)
+  /// Answered wrong in the last exam that asked it, so it waits in "ভুলগুলো" for revision; cleared
+  /// when it is answered right.
+  missedAt  DateTime?
 
   @@id([userId, kind, entryId])
 }

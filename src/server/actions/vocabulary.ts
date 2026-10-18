@@ -9,6 +9,8 @@ import { namesAPerson, nounKey } from "@/lib/vocabulary/nouns";
 import { hasPremium } from "@/server/premium";
 import { can } from "@/server/roles";
 import { userError } from "@/lib/user-error";
+import { batchForNewWord, BATCH_SIZE, PASS_PERCENT } from "@/lib/vocabulary/exam";
+import { getVocabStatus } from "@/server/vocab-progress";
 
 /**
  * Vocabulary: shared tables of verbs, nouns (singular/plural) and prefixes/suffixes, all in the
@@ -175,18 +177,60 @@ export async function deleteNoun(id: string) {
 
 const learnedSchema = z.object({ kind: z.enum(["VERB", "NOUN", "AFFIX", "PERSON"]), entryId: z.string().min(1).max(120), learned: z.boolean() });
 
-/** The rows this user has ticked, as "KIND:id" keys. */
-export async function listLearned() {
+/** The rows this user has ticked ("KIND:id"), each with its set and whether it waits for revision; and where they stand. */
+export async function getVocabState() {
   const user = await requireUser();
-  const rows = await prisma.vocabLearned.findMany({ where: { userId: user.id }, select: { kind: true, entryId: true } });
-  return rows.map((row) => `${row.kind}:${row.entryId}`);
+  const [rows, status] = await Promise.all([
+    prisma.vocabLearned.findMany({ where: { userId: user.id }, select: { kind: true, entryId: true, batch: true, missedAt: true } }),
+    getVocabStatus(user.id),
+  ]);
+  return { learned: rows.map((row) => ({ key: `${row.kind}:${row.entryId}`, batch: row.batch, missed: Boolean(row.missedAt) })), status };
 }
 
-/** Ticks (or unticks) one row for the signed-in user only. */
+/**
+ * Ticks (or unticks) one row for the signed-in user only. A word goes into the current set of 50;
+ * a full set takes no more until its three exams are passed (the person table is never locked).
+ */
 export async function setLearned(input: unknown) {
   const user = await requireUser();
   const { kind, entryId, learned } = learnedSchema.parse(input);
   const key = { userId_kind_entryId: { userId: user.id, kind, entryId } };
-  if (learned) await prisma.vocabLearned.upsert({ where: key, create: { userId: user.id, kind, entryId }, update: {} });
-  else await prisma.vocabLearned.deleteMany({ where: { userId: user.id, kind, entryId } });
+  if (!learned) {
+    await prisma.vocabLearned.deleteMany({ where: { userId: user.id, kind, entryId } });
+  } else if (kind === "PERSON") {
+    await prisma.vocabLearned.upsert({ where: key, create: { userId: user.id, kind, entryId }, update: {} });
+  } else {
+    const batch = batchForNewWord(await getVocabStatus(user.id));
+    if (batch === null) throw userError(`${BATCH_SIZE}টা শব্দ শেখা হয়েছে — নতুন শব্দ নিতে আগে Done-এ তিনটা exam দাও, প্রতিটায় ${PASS_PERCENT}% পেতে হবে।`);
+    await prisma.vocabLearned.upsert({ where: key, create: { userId: user.id, kind, entryId, batch }, update: {} });
+  }
+  revalidatePath("/dashboard");
+}
+
+const examSchema = z.object({
+  type: z.enum(["FORMS", "MEANING", "SPELLING"]),
+  /** A revision of "ভুলগুলো": marks words but isn't stored as a set exam. */
+  revision: z.boolean(),
+  results: z.array(z.object({ kind: z.enum(["VERB", "NOUN", "AFFIX"]), entryId: z.string().min(1).max(120), correct: z.boolean() })).min(1).max(100),
+});
+
+/**
+ * One finished exam: every word answered wrong waits in "ভুলগুলো", every word answered right leaves
+ * it; a set exam's score is kept for the 80% rule.
+ */
+export async function finishVocabExam(input: unknown) {
+  const user = await requireUser();
+  const { type, revision, results } = examSchema.parse(input);
+  const now = new Date();
+  const mark = (correct: boolean) => results.filter((result) => result.correct === correct).map(({ kind, entryId }) => ({ kind, entryId }));
+  const status = await getVocabStatus(user.id);
+  const wrong = mark(false);
+  const right = mark(true);
+  await prisma.$transaction([
+    ...(wrong.length ? [prisma.vocabLearned.updateMany({ where: { userId: user.id, OR: wrong }, data: { missedAt: now } })] : []),
+    ...(right.length ? [prisma.vocabLearned.updateMany({ where: { userId: user.id, OR: right }, data: { missedAt: null } })] : []),
+    ...(revision ? [] : [prisma.vocabExam.create({ data: { userId: user.id, batch: status.batch, type, score: right.length, total: results.length } })]),
+  ]);
+  revalidatePath("/dashboard");
+  revalidatePath("/vocabulary");
 }
