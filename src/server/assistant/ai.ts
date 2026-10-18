@@ -40,10 +40,15 @@ export type CallOptions = {
   reasoning?: "low" | "medium" | "high";
 };
 export type Usage = { input: number; output: number; total: number };
-export type Attempt = { status: number | null; text: string | null; usage?: Usage };
+/** `retryAfterMs`: how long the AI asked to wait before trying again (Gemini's "too many requests"). */
+export type Attempt = { status: number | null; text: string | null; usage?: Usage; retryAfterMs?: number };
 
 // After web search hits its quota, skip it for a while instead of wasting a request per question.
 let searchBlockedUntil = 0;
+// OpenAI out of credits: skip it for a while (Gemini answers meanwhile) instead of a failed request each time.
+let openaiBlockedUntil = 0;
+const OUT_OF_CREDITS_PAUSE_MS = 10 * 60_000;
+const outOfCredits = (body: string) => /insufficient_quota|credit_balance_exhausted|no credits remaining/i.test(body);
 
 export function isAIConfigured() {
   return Boolean(process.env.OPENAI_API_KEY);
@@ -140,7 +145,9 @@ async function chatCompletion(model: string, apiKey: string, prompt: string, opt
     signal: withTimeout(options.signal, timeoutMs),
   });
   if (!response.ok) {
-    console.warn(`[ai] openai ${model}: HTTP ${response.status} ${(await response.text().catch(() => "")).slice(0, 300)}`);
+    const error = await response.text().catch(() => "");
+    console.warn(`[ai] openai ${model}: HTTP ${response.status} ${error.slice(0, 300)}`);
+    if (outOfCredits(error)) openaiBlockedUntil = Date.now() + OUT_OF_CREDITS_PAUSE_MS;
     return { status: response.status, text: null };
   }
   if (stream && response.body) return readChatStream(response.body, options.onDelta!);
@@ -207,7 +214,9 @@ async function webSearchResponse(model: string, apiKey: string, prompt: string, 
     signal: withTimeout(options.signal, timeoutMs),
   });
   if (!response.ok) {
-    console.warn(`[ai] openai ${model} (search): HTTP ${response.status} ${(await response.text().catch(() => "")).slice(0, 300)}`);
+    const error = await response.text().catch(() => "");
+    console.warn(`[ai] openai ${model} (search): HTTP ${response.status} ${error.slice(0, 300)}`);
+    if (outOfCredits(error)) openaiBlockedUntil = Date.now() + OUT_OF_CREDITS_PAUSE_MS;
     return { status: response.status, text: null };
   }
   const payload = (await response.json()) as ResponsesPayload;
@@ -241,29 +250,51 @@ export async function callAI(prompt: string, options: CallOptions) {
   return null;
 }
 
-/** Gemini's attempt: one model (the chosen or the default), logged like OpenAI's. */
+/** Without a wait from Gemini, how long to pause before trying again after "too many requests". */
+const GEMINI_RETRY_MS = 4_000;
+const GEMINI_TRIES = 3;
+
+/** Waits, but stops early when the user interrupts. */
+const pause = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve) => {
+  const timer = setTimeout(resolve, ms);
+  signal?.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
+});
+
+/**
+ * Gemini's attempts: one model (the chosen or the default), logged like OpenAI's. On "too many
+ * requests" (the free tier allows a few a minute) it waits as long as Gemini asks and tries again,
+ * while the time allows.
+ */
 async function callGemini(prompt: string, options: CallOptions, deadline: number, gemini: { key: string; model: string | null }): Promise<{ text: string | null; final: boolean }> {
   const model = gemini.model || GEMINI_DEFAULT_MODEL;
-  const started = Date.now();
-  let streamedChars = 0;
-  const attemptOptions = options.onDelta ? { ...options, onDelta: (piece: string) => { streamedChars += piece.length; options.onDelta!(piece); } } : options;
-  try {
-    const attempt = await geminiCall(model, gemini.key, prompt, attemptOptions, withTimeout(options.signal, deadline - Date.now()));
-    logUsage({ userId: options.userId, feature: options.feature, model, httpStatus: attempt.status, latencyMs: Date.now() - started, usage: attempt.usage });
-    if (attempt.text) return { text: options.responseSchema ? repairLatexInJson(attempt.text) : attempt.text, final: true };
-    return { text: null, final: streamedChars > 0 };
-  } catch (error) {
-    if (options.signal?.aborted) {
-      const input = Math.ceil(prompt.length / 3);
-      const output = Math.ceil(streamedChars / 3);
-      logUsage({ userId: options.userId, feature: options.feature, model, httpStatus: 200, latencyMs: Date.now() - started, usage: { input, output, total: input + output } });
-      return { text: null, final: true };
+  for (let tries = 1; tries <= GEMINI_TRIES; tries++) {
+    const started = Date.now();
+    let streamedChars = 0;
+    const attemptOptions = options.onDelta ? { ...options, onDelta: (piece: string) => { streamedChars += piece.length; options.onDelta!(piece); } } : options;
+    try {
+      const attempt = await geminiCall(model, gemini.key, prompt, attemptOptions, withTimeout(options.signal, deadline - Date.now()));
+      logUsage({ userId: options.userId, feature: options.feature, model, httpStatus: attempt.status, latencyMs: Date.now() - started, usage: attempt.usage });
+      if (attempt.text) return { text: options.responseSchema ? repairLatexInJson(attempt.text) : attempt.text, final: true };
+      if (streamedChars > 0) return { text: null, final: true };
+      const wait = attempt.retryAfterMs ?? GEMINI_RETRY_MS;
+      // Try again only after "too many requests", and only when the wait leaves time to answer.
+      if (attempt.status !== 429 || tries === GEMINI_TRIES || Date.now() + wait > deadline - 8_000) return { text: null, final: false };
+      await pause(wait, options.signal);
+      if (options.signal?.aborted) return { text: null, final: true };
+    } catch (error) {
+      if (options.signal?.aborted) {
+        const input = Math.ceil(prompt.length / 3);
+        const output = Math.ceil(streamedChars / 3);
+        logUsage({ userId: options.userId, feature: options.feature, model, httpStatus: 200, latencyMs: Date.now() - started, usage: { input, output, total: input + output } });
+        return { text: null, final: true };
+      }
+      const timedOut = error instanceof Error && error.name === "TimeoutError";
+      logUsage({ userId: options.userId, feature: options.feature, model, httpStatus: null, timedOut, latencyMs: Date.now() - started });
+      console.warn(`[ai] ${model} failed: ${timedOut ? "timed out" : String(error)}`);
+      return { text: null, final: streamedChars > 0 };
     }
-    const timedOut = error instanceof Error && error.name === "TimeoutError";
-    logUsage({ userId: options.userId, feature: options.feature, model, httpStatus: null, timedOut, latencyMs: Date.now() - started });
-    console.warn(`[ai] ${model} failed: ${timedOut ? "timed out" : String(error)}`);
-    return { text: null, final: streamedChars > 0 };
   }
+  return { text: null, final: false };
 }
 
 /**
@@ -272,7 +303,7 @@ async function callGemini(prompt: string, options: CallOptions, deadline: number
  */
 async function callOpenAI(prompt: string, options: CallOptions, deadline: number): Promise<{ text: string | null; final: boolean }> {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) return { text: null, final: false };
+  if (!apiKey || Date.now() < openaiBlockedUntil) return { text: null, final: false };
   if (options.search && Date.now() < searchBlockedUntil) return { text: null, final: false };
   const models = [...new Set([OPENAI_MODEL, OPENAI_FALLBACK_MODEL].filter((model): model is string => Boolean(model)))];
 
@@ -310,6 +341,8 @@ async function callOpenAI(prompt: string, options: CallOptions, deadline: number
     if (attempt.text) return { text: options.responseSchema ? repairLatexInJson(attempt.text) : attempt.text, final: true };
     console.warn(`[ai] ${model}${options.search ? " (search)" : ""} failed: HTTP ${attempt.status}`);
     if (options.search && attempt.status === 429) { searchBlockedUntil = Date.now() + 30 * 60_000; return { text: null, final: false }; }
+    // Out of credits: the fallback model would fail the same way.
+    if (Date.now() < openaiBlockedUntil) break;
     // The fallback model only helps when the first was busy or rate-limited.
     if (attempt.status !== 503 && attempt.status !== 429) break;
   }
