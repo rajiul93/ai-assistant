@@ -57,6 +57,7 @@ export function AppShell({
   admin,
   permissions,
   pendingPayments,
+  quickItems,
 }: {
   children: React.ReactNode;
   userName: string;
@@ -66,6 +67,8 @@ export function AppShell({
   /** Staff permissions: which admin pages show in the menu. */
   permissions: StaffPermission[];
   pendingPayments: number;
+  /** The dock's shortcuts after AI chat (src/lib/quick-items.ts). */
+  quickItems: string[];
 }) {
   const pathname = usePathname();
   // Voice features are admin-only; switched on here, in the browser only (never shared on the server).
@@ -121,7 +124,7 @@ export function AppShell({
         </header>
         <StudyAssistant aiLock={aiLock} />
         {/* One tools button (calendar, calculator) above the assistant's; the sheets open from it. */}
-        <ToolDock />
+        <ToolDock quickItems={quickItems} />
         <Calculator />
         <CalendarSheet />
         <TimerAlarm />

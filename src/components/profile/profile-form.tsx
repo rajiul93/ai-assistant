@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CalendarDays, Check, ChevronRight, Crown, Gauge, Loader2, Lock, Mail, Phone, Share2, ShieldCheck, UserRound, type LucideIcon } from "lucide-react";
+import { CalendarDays, Check, ChevronRight, Crown, Gauge, Loader2, Lock, Mail, Phone, Settings, Share2, ShieldCheck, UserRound, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { initialOf } from "@/lib/collaboration";
 import { formatDate } from "@/lib/dayjs";
@@ -103,6 +103,7 @@ export function ProfileForm({ initial, plan, staff }: { initial: Profile; plan: 
         <AccountLink href="/billing" icon={Crown} tone="from-yellow-400 to-amber-500" title="আমার প্ল্যান" detail={plan.active && plan.endsAt ? `চলবে ${formatDate(plan.endsAt)} পর্যন্ত` : "Plan দেখো ও নাও"} />
         <AccountLink href="/usage" icon={Gauge} tone="from-orange-400 to-amber-600" title="AI ব্যবহার" detail="আজ আর মোট কতটা খরচ হলো" />
         <AccountLink href="/affiliate" icon={Share2} tone="from-emerald-400 to-teal-600" title="রেফার করে আয়" detail="বন্ধুদের link দাও, তারা plan কিনলে তুমি পাবে" />
+        <AccountLink href="/settings" icon={Settings} tone="from-zinc-400 to-slate-600" title="সেটিংস" detail="ভাসমান বোতামে কী কী থাকবে, সাজাও" />
       </section>
 
       <form onSubmit={save} className={cn(card, "space-y-5")}>

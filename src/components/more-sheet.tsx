@@ -66,7 +66,7 @@ export function MoreSheet({ links, adminLinks, userName, userImage, isActive, ba
       </span>
       <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/20"><ChevronRight className="size-5" /></span>
     </Link>
-    <div className="mt-3 grid grid-cols-2 gap-2">
+    <div className="mt-3 grid grid-cols-3 gap-2">
       {accountButtons.map((item) => <Link key={item.href} href={item.href} onClick={onClose} aria-current={isActive(item.href) ? "page" : undefined} className={cn("flex h-9 items-center justify-center rounded-xl text-[13px] font-semibold ring-1 transition active:scale-95", isActive(item.href) ? "bg-white text-blue-700 ring-white" : "bg-white/15 text-white ring-white/30 hover:bg-white/25")}>{item.label}</Link>)}
     </div>
     </div>

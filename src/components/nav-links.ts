@@ -19,6 +19,7 @@ import {
   MonitorPlay,
   NotebookPen,
   Receipt,
+  Settings,
   Share2,
   TrendingUp,
   UserRound,
@@ -50,6 +51,7 @@ export const links: NavLink[] = [
   { href: "/billing", label: "Plans", short: "Plans", icon: CreditCard },
   { href: "/affiliate", label: "রেফার করে আয়", short: "রেফার করে আয়", icon: Share2 },
   { href: "/profile", label: "Profile", short: "Profile", icon: UserRound },
+  { href: "/settings", label: "সেটিংস", short: "সেটিংস", icon: Settings },
 ];
 
 export const billingAdminLink: NavLink = { href: "/admin/billing", label: "Billing", short: "Billing", icon: Receipt };
@@ -87,6 +89,7 @@ export const searchWords: Record<string, string> = {
   "/billing": "plans billing প্ল্যান কেনা package প্যাকেজ",
   "/affiliate": "refer earn রেফার আয় affiliate অ্যাফিলিয়েট refer রেফার link লিংক commission কমিশন আয়",
   "/profile": "profile প্রোফাইল নাম phone ফোন",
+  "/settings": "settings সেটিংস shortcut শর্টকাট quick দ্রুত dock বোতাম",
 };
 
 /** Each page's own colour (a gradient), the same in the sidebar and the phone "More" sheet. */
@@ -110,6 +113,7 @@ const TONES: Record<string, string> = {
   "/billing": "from-yellow-400 to-amber-500",
   "/affiliate": "from-emerald-400 to-teal-600",
   "/profile": "from-slate-400 to-slate-600",
+  "/settings": "from-zinc-400 to-slate-600",
   "/admin/billing": "from-emerald-500 to-green-700",
   "/admin/customers": "from-pink-400 to-rose-600",
   "/admin/staff": "from-indigo-400 to-violet-600",
@@ -137,4 +141,5 @@ export const ACCOUNT_LINKS = [
   { href: "/billing", label: "আমার প্ল্যান" },
   { href: "/usage", label: "AI ব্যবহার" },
   { href: "/affiliate", label: "রেফার করে আয়" },
+  { href: "/settings", label: "সেটিংস" },
 ];

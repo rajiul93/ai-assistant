@@ -6,8 +6,8 @@ import { prisma } from "@/lib/prisma";
  * block, role change or pause applies on the next request. One query, shared by `requireUser`,
  * `roleOf` and the AI quota within a request (React cache) — each page used to read them one
  * after another. Name and phone ride along so a profile edit shows at once (shell, dashboard
- * reminder), not after the session cache expires.
+ * reminder), not after the session cache expires; so do the dock's shortcuts.
  */
 export const freshUserFlags = cache((userId: string) =>
-  prisma.user.findUnique({ where: { id: userId }, select: { status: true, role: true, staffPermissions: true, aiPaused: true, name: true, phone: true } }),
+  prisma.user.findUnique({ where: { id: userId }, select: { status: true, role: true, staffPermissions: true, aiPaused: true, name: true, phone: true, quickItems: true } }),
 );

@@ -73,8 +73,9 @@ alone. Record decisions and their reasons; don't restate code.
 - **Easy on the eyes** (owner, 2026-10-15): no pure white or near-black. `globals.css` overrides
   `--color-white` (soft paper `#fdfdfa`), the lightest and darkest zinc/slate shades, and the page
   background is `#f3f3ef`. Tune colours there, not per component.
-- Floating UI on phones: one draggable dock (`ToolDock`: AI chat, calendar, calculator; snaps to
-  the left or right edge, height remembered) and the running study session as a chip in the top
+- Floating UI on phones: one draggable dock (`ToolDock`: AI chat fixed first, then the user's own
+  shortcuts — up to 5 tools or pages, `User.quickItems`, picked and drag-ordered on `/settings`,
+  `src/lib/quick-items.ts`; owner, 2026-10-18; snaps to the left or right edge, height remembered) and the running study session as a chip in the top
   bar that opens a sheet (`SessionBar variant="chip"`; desktop keeps the bottom bar).
 - UI copy is **Bangla** (English for technical terms). Mobile first: no horizontal page scroll; wide
   tables scroll inside their own container.
