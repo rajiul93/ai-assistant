@@ -6,7 +6,8 @@ import type { Attempt, CallOptions, Usage } from "@/server/assistant/ai";
  * streaming. Returns the same Attempt shape as the OpenAI calls.
  */
 
-export const GEMINI_DEFAULT_MODEL = "gemini-2.5-flash";
+// Google closed 2.5 Flash to new keys and points them to 3.8 Flash (seen 2026-10-18).
+export const GEMINI_DEFAULT_MODEL = "gemini-3.8-flash";
 
 type Part = { text?: string; thought?: boolean };
 type GeminiPayload = {
@@ -19,11 +20,12 @@ const BUDGET = { low: 1024, medium: 4096, high: 12288 } as const;
 
 /**
  * Thinking: 2.5 Flash models think only when asked (fast by default, like OpenAI's "none"); Gemini 3
- * takes a level; other models keep their own default.
+ * models take a level, and only when a caller asks for reasoning (otherwise the model's own default,
+ * so a setting it doesn't know can't fail the call); other models a budget when asked.
  */
 function thinking(model: string, wanted: CallOptions["reasoning"]) {
   if (model.includes("2.5-flash")) return { thinkingBudget: wanted ? BUDGET[wanted] : 0 };
-  if (model.startsWith("gemini-3")) return { thinkingLevel: wanted === "medium" || wanted === "high" ? "high" : "low" };
+  if (model.startsWith("gemini-3")) return wanted ? { thinkingLevel: wanted === "low" ? "low" : "high" } : undefined;
   return wanted ? { thinkingBudget: BUDGET[wanted] } : undefined;
 }
 

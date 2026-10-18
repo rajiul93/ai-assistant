@@ -43,7 +43,7 @@ const saveSchema = z.object({
   provider: z.enum(["openai", "gemini"]),
   /** A new key; empty keeps the saved one. */
   geminiKey: z.string().trim().max(200).optional(),
-  geminiModel: z.string().trim().max(80).regex(/^[a-z0-9.\-]*$/i, "Model-এর নাম ঠিক নেই (যেমন gemini-2.5-flash)").optional(),
+  geminiModel: z.string().trim().max(80).regex(/^[a-z0-9.\-]*$/i, "Model-এর নাম ঠিক নেই (যেমন gemini-3.8-flash)").optional(),
   removeKey: z.boolean().optional(),
 });
 

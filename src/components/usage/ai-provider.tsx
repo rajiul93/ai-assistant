@@ -66,7 +66,7 @@ export function AiProviderSettings({ view }: { view: View }) {
       {view.geminiKeyUnreadable ? <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900">সেভ করা key আর পড়া যাচ্ছে না (server-এর secret বদলেছে) — আবার দিন।</p> : null}
       <label className="block space-y-1">
         <span className="text-xs text-zinc-600">{hasKey ? `নতুন key (খালি রাখলে ••••${view.geminiKeyEnding} থাকবে)` : "API key — Google AI Studio থেকে"}</span>
-        <input type="password" value={key} onChange={(event) => setKey(event.target.value)} autoComplete="off" spellCheck={false} placeholder="AIza…" className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 font-mono text-sm outline-none focus:border-zinc-400" />
+        <input type="password" value={key} onChange={(event) => setKey(event.target.value)} autoComplete="off" spellCheck={false} placeholder="Google AI Studio-র key" className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 font-mono text-sm outline-none focus:border-zinc-400" />
       </label>
       <label className="block space-y-1">
         <span className="text-xs text-zinc-600">Model (খালি রাখলে {view.defaultModel})</span>

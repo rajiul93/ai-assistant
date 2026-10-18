@@ -30,3 +30,17 @@ describe("gemini", () => {
     expect(body.generationConfig.thinkingConfig).toEqual({ thinkingBudget: 4096 });
   });
 });
+
+describe("gemini 3", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("leaves thinking to the model unless a caller asks for reasoning", async () => {
+    const fetchMock = vi.fn(async () => reply("ok"));
+    vi.stubGlobal("fetch", fetchMock);
+    await geminiCall("gemini-3.8-flash", "key", "hi", { userId: "u", feature: "answer" }, AbortSignal.timeout(1000));
+    await geminiCall("gemini-3.8-flash", "key", "hi", { userId: "u", feature: "answer", reasoning: "medium" }, AbortSignal.timeout(1000));
+    const bodies = fetchMock.mock.calls.map((call) => JSON.parse(String((call as unknown as [string, RequestInit])[1].body)));
+    expect(bodies[0].generationConfig.thinkingConfig).toBeUndefined();
+    expect(bodies[1].generationConfig.thinkingConfig).toEqual({ thinkingLevel: "high" });
+  });
+});
