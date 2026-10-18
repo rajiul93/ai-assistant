@@ -118,8 +118,16 @@ alone. Record decisions and their reasons; don't restate code.
   call marks fact questions `lookup` (empty reply); `answer(…, { careful })` then answers with
   `reasoning: "medium"` + web search (75 s; without search, medium and streamed) and an accuracy rule
   (check names/years/numbers, say when unsure, one-line source). Chat/advice stays on the fast path.
-  `callAI`'s `reasoning` option is also used by vocabulary explanations (medium), bank solutions and
-  note quizzes (low, batch jobs inside 60 s).
+  `callAI`'s `reasoning` option is also used by vocabulary explanations (medium) and note quizzes
+  (low, a batch job inside 60 s).
+- **Bank solutions are book pages** (owner, 2026-10-18): `/api/question-bank/solve` asks for Quill
+  HTML — the solution, and an explanation in `<h3>` parts (মূল কথা, সাল ও ইতিহাস as a table,
+  উদাহরণ, আরও জেনে রাখো, অন্য option, মনে রাখার কৌশল; only the parts that apply) — with web
+  search + medium reasoning (`callAI` passes `responseSchema` to search too), falling back to medium
+  without search. About 20 s a question: one per call, three at a time, `maxDuration` 120. Search's
+  inline sources are stripped (`stripCitations`). Solution columns hold plain text (older) or HTML:
+  `src/lib/solution-html.ts` shows both (`BookText`), `cleanSolution` sanitizes on save, staff edit
+  them in Quill, and the beautify route leaves HTML ones alone. Limit `SOLUTION_MAX` (20 000).
 - **No AI without a plan**: every OpenAI call goes through `checkAi` first (no plan, expired, out
   of tokens or paused → refused; admins always pass). Audited 2026-10-13: 14 entry points, all gated.
 - **Voice is admin-only** (mic, speech-to-text, read-aloud, voice chat, voice forms — including the

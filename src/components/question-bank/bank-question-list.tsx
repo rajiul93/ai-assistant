@@ -4,9 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRightLeft, Check, ListChecks, Loader2, Pencil, Plus, RotateCcw, Sparkles, Trash2, WandSparkles, X } from "lucide-react";
 import { toast } from "sonner";
-import { BookText, MathText } from "@/components/math-text";
+import { MathText } from "@/components/math-text";
+import { QuillEditor } from "@/components/notes/quill-editor";
 import { SolutionNotes } from "@/components/preliminary/question-set-views";
 import { BANK_OPTION_LETTERS } from "@/lib/question-bank";
+import { solutionToHtml } from "@/lib/solution-html";
 import { cn } from "@/lib/utils";
 import { updateBankQuestion } from "@/server/actions/question-bank";
 import { deleteBankItems, setBankItemsFree } from "@/server/actions/question-bank-general";
@@ -19,6 +21,9 @@ export type Draft = Omit<BankQuestion, "editedAt" | "hasSolution" | "hasExplanat
 type BeautifyResponse = { results: Draft[]; skipped: number; originals: Draft[]; error?: string };
 
 const PER_CALL = 4;
+// Solving looks each question up on the web (about 20 s each): one per call, a few at a time.
+const SOLVE_PER_CALL = 1;
+const SOLVE_AT_ONCE = 3;
 
 async function beautify(questionIds: string[], mode: "preview" | "save"): Promise<BeautifyResponse> {
   const response = await fetch("/api/question-bank/beautify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ questionIds, mode }) });
@@ -39,9 +44,14 @@ type Task = { kind: "tidy" } | { kind: "solve"; fill: "missing" | "all" };
 
 const field = "w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm leading-relaxed outline-none focus:border-zinc-400";
 
-/** Typing a question, its options (4 or 5), the right answer, solution and explanation — with a book-style preview. */
+/**
+ * Typing a question, its options (4 or 5) and the right answer, with a book-style preview; the
+ * solution and explanation are written in Quill, like a page of a book.
+ */
 export function QuestionEditor({ initial, aiFilled, onSave, onCancel }: { initial: Draft; aiFilled: boolean; onSave: (draft: Draft) => Promise<void>; onCancel: () => void }) {
   const [draft, setDraft] = useState(initial);
+  // The editors read these once (older plain-text solutions become paragraphs); the server cleans what is saved.
+  const [editorHtml] = useState(() => ({ solution: solutionToHtml(initial.solution ?? ""), explanation: solutionToHtml(initial.explanation ?? "") }));
   const [saving, setSaving] = useState(false);
   const set = (patch: Partial<Draft>) => setDraft((current) => ({ ...current, ...patch }));
   const setOption = (index: number, value: string) => set({ options: draft.options.map((option, at) => (at === index ? value : option)) });
@@ -77,20 +87,15 @@ export function QuestionEditor({ initial, aiFilled, onSave, onCancel }: { initia
       {draft.options.length < 5 ? <button type="button" onClick={() => set({ options: [...draft.options, ""] })} className="flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-sm font-medium text-zinc-600 ring-1 ring-zinc-200 hover:bg-zinc-50"><Plus className="size-4" /> Option ঙ যোগ করো</button> : null}
     </div>
 
-    <label className="block space-y-1">
-      <span className="text-xs font-medium text-zinc-600">সমাধান (প্রতিটা ধাপ নতুন লাইনে)</span>
-      <textarea value={draft.solution ?? ""} onChange={(event) => set({ solution: event.target.value })} rows={5} className={field} />
-    </label>
-    <label className="block space-y-1">
+    <div className="space-y-1">
+      <span className="text-xs font-medium text-zinc-600">সমাধান</span>
+      <div className="task-editor"><QuillEditor initialHtml={editorHtml.solution} placeholder="কেন এই উত্তর, ধাপে ধাপে" onChange={(html) => set({ solution: html })} /></div>
+    </div>
+    <div className="space-y-1">
       <span className="text-xs font-medium text-zinc-600">ব্যাখ্যা</span>
-      <textarea value={draft.explanation ?? ""} onChange={(event) => set({ explanation: event.target.value })} rows={3} className={field} />
-    </label>
-    {draft.solution?.trim() || draft.explanation?.trim() ? <div className="rounded-xl bg-zinc-50 px-3 py-2">
-      <p className="mb-1 text-xs font-medium text-zinc-500">দেখতে যেমন হবে</p>
-      {draft.solution?.trim() ? <BookText text={draft.solution} /> : null}
-      {draft.explanation?.trim() ? <div className="mt-2 text-sky-950"><BookText text={draft.explanation} /></div> : null}
-    </div> : null}
-    <p className="text-xs text-zinc-500">গণিত বইয়ের মতো দেখাতে $…$ দিয়ে লিখুন, যেমন $\frac{"{1}{2}"}$, $\sqrt{"{3}"}$, $x^{"{2}"}$। 1/2, √3, x² লিখলেও সাধারণত চিনে নেয়।</p>
+      <div className="task-editor"><QuillEditor initialHtml={editorHtml.explanation} placeholder="মূল কথা, সাল ও ইতিহাস, উদাহরণ, আরও জেনে রাখো…" onChange={(html) => set({ explanation: html })} /></div>
+    </div>
+    <p className="text-xs text-zinc-500">প্রশ্ন আর option-এ গণিত বইয়ের মতো দেখাতে $…$ দিয়ে লিখুন, যেমন $\frac{"{1}{2}"}$, $\sqrt{"{3}"}$, $x^{"{2}"}$ (1/2, √3, x² লিখলেও সাধারণত চিনে নেয়)। সমাধান আর ব্যাখ্যায় fx বোতাম, বা $…$।</p>
 
     <div className="flex gap-2">
       <button type="button" onClick={onCancel} disabled={saving} className="h-10 flex-1 rounded-xl text-sm font-medium text-zinc-700 ring-1 ring-zinc-200 hover:bg-zinc-50">বাতিল</button>
@@ -170,20 +175,30 @@ export function BankQuestionList({ questions: initial, canEdit, chapterItems = f
     setUndo(null);
     const before: Draft[] = [];
     let skipped = 0;
-    for (let start = 0; start < ids.length; start += PER_CALL) {
-      const batch = ids.slice(start, start + PER_CALL);
-      try {
-        const result = task.kind === "solve" ? await solve(batch, task.fill) : await beautify(batch, "save");
-        replace(result.results);
-        before.push(...result.originals);
-        skipped += result.skipped;
-      } catch (error) {
-        toast.error(`${errorMessage(error, "AI থেমে গেছে")} — যতটুকু হয়েছে, সেভ আছে।`);
-        break;
-      } finally {
-        setRun({ done: Math.min(start + batch.length, ids.length), total: ids.length });
+    const size = task.kind === "solve" ? SOLVE_PER_CALL : PER_CALL;
+    const batches = Array.from({ length: Math.ceil(ids.length / size) }, (_, at) => ids.slice(at * size, at * size + size));
+    let next = 0;
+    let done = 0;
+    let stopped = false;
+    // Each worker takes the next batch until none are left; the first failure stops the run.
+    const worker = async () => {
+      while (!stopped && next < batches.length) {
+        const batch = batches[next++];
+        try {
+          const result = task.kind === "solve" ? await solve(batch, task.fill) : await beautify(batch, "save");
+          replace(result.results);
+          before.push(...result.originals);
+          skipped += result.skipped;
+        } catch (error) {
+          if (!stopped) toast.error(`${errorMessage(error, "AI থেমে গেছে")} — যতটুকু হয়েছে, সেভ আছে।`);
+          stopped = true;
+        } finally {
+          done += batch.length;
+          setRun({ done, total: ids.length });
+        }
       }
-    }
+    };
+    await Promise.all(Array.from({ length: task.kind === "solve" ? SOLVE_AT_ONCE : 1 }, worker));
     setRun(null);
     setSelecting(false);
     setPicked(new Set());

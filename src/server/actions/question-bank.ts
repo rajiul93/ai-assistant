@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { now, startOfDay } from "@/lib/dayjs";
 import { prisma } from "@/lib/prisma";
+import { cleanSolution, SOLUTION_MAX } from "@/lib/solution-html";
 import { BANK_CHECK_BATCH, BANK_EDITED, BANK_IMPORT_BATCH, categorySlug, groupByYear, placementForSet, questionFingerprint, rowContentHash, rowSetKey, yearFromName } from "@/lib/question-bank";
 import { assertCanTakeFromBank, canOpenBankSet, categoryAccess, FREE_SET_UNLOCKS, LOCKED_SET_PREVIEW, unlocksUsed } from "@/server/bank-access";
 import { placeFor } from "@/server/collaboration/share-copy";
@@ -186,8 +187,8 @@ const editSchema = z.object({
   text: z.string().trim().min(1, "প্রশ্ন লেখো").max(2000),
   options: z.array(z.string().trim().min(1, "কোনো option ফাঁকা রাখা যাবে না").max(500)).min(4, "অন্তত ৪টা option লাগবে").max(5, "সর্বোচ্চ ৫টা option"),
   correctIndex: z.number().int().min(0).max(4),
-  solution: z.string().trim().max(5000).nullish().transform((value) => value || null),
-  explanation: z.string().trim().max(5000).nullish().transform((value) => value || null),
+  solution: z.string().trim().max(SOLUTION_MAX).nullish().transform(cleanSolution),
+  explanation: z.string().trim().max(SOLUTION_MAX).nullish().transform(cleanSolution),
 }).refine((question) => question.correctIndex < question.options.length, { message: "সঠিক উত্তর বেছে নাও" });
 
 /**

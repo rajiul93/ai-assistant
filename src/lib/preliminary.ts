@@ -12,6 +12,9 @@ export const statusInfo: Record<QuestionSetStatus, { label: string; hint: string
 
 export const statusOrder: QuestionSetStatus[] = ["TODO", "DOING", "TESTING", "DONE"];
 
+/** Room for a book-style solution or explanation in HTML (see lib/solution-html); plain text stays far below it. */
+export const SOLUTION_MAX = 20_000;
+
 /** Four options when made here; five for some Question Bank copies. Solution/explanation ride along through edits. */
 export type DraftQuestion = { text: string; options: string[]; correctIndex: number; solution?: string | null; explanation?: string | null };
 
