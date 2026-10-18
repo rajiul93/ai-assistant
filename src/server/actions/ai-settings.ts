@@ -8,7 +8,7 @@ import { userError } from "@/lib/user-error";
 import { forgetAiSettings } from "@/server/ai-settings";
 import { GEMINI_DEFAULT_MODEL, testGemini } from "@/server/assistant/gemini";
 import { isSuperAdminEmail } from "@/server/roles";
-import { open, seal } from "@/server/secret-box";
+import { hasSecret, open, seal } from "@/server/secret-box";
 
 /**
  * The AI switch on /usage (super admin only): OpenAI or Gemini, and the Gemini key and model. The
@@ -49,11 +49,22 @@ const saveSchema = z.object({
 
 export async function saveAiSettings(input: z.input<typeof saveSchema>) {
   await requireOwner();
-  const data = saveSchema.parse(input);
+  try {
+    await save(saveSchema.parse(input));
+  } catch (error) {
+    // Only the super admin gets here, so an unexpected failure says what went wrong instead of a bare 500.
+    if (error instanceof Error && (error as { digest?: string }).digest?.startsWith("prep-user:")) throw error;
+    console.error("[ai-settings] save failed:", error);
+    throw userError(`সেভ করা গেল না: ${error instanceof Error ? error.message.slice(0, 160) : "অজানা সমস্যা"}`);
+  }
+}
+
+async function save(data: z.output<typeof saveSchema>) {
   const row = await readRow();
   const model = data.geminiModel || null;
   let sealed = data.removeKey ? null : row?.geminiKey ?? null;
   if (data.geminiKey) {
+    if (!hasSecret()) throw userError("Key রাখার জন্য server-এ AI_SETTINGS_SECRET সেট করা নেই।");
     const tested = await testGemini(data.geminiKey, model || GEMINI_DEFAULT_MODEL);
     if (!tested.ok) throw userError(`Gemini key কাজ করছে না: ${tested.message}`);
     sealed = seal(data.geminiKey);

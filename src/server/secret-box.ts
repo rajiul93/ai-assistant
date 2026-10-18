@@ -2,11 +2,15 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 
 /**
  * Encrypts secrets kept in the database (the Gemini API key) with AES-256-GCM, so a copy of the
- * database alone doesn't reveal them. The key comes from AI_SETTINGS_SECRET, or else from the
- * server's own Firebase private key (always set, never sent to a browser). Server-only.
+ * database's rows alone doesn't reveal them. The key comes from AI_SETTINGS_SECRET, or else from the
+ * server's DATABASE_URL (always set on the server, never sent to a browser; production has no
+ * Firebase private key — saving there failed with it, 2026-10-18). Changing it makes a saved key
+ * unreadable: /usage then asks for the key again. Server-only.
  */
+export const hasSecret = () => Boolean(process.env.AI_SETTINGS_SECRET || process.env.DATABASE_URL);
+
 function key() {
-  const secret = process.env.AI_SETTINGS_SECRET || process.env.FIREBASE_PRIVATE_KEY;
+  const secret = process.env.AI_SETTINGS_SECRET || process.env.DATABASE_URL;
   if (!secret) throw new Error("No secret to encrypt with (AI_SETTINGS_SECRET).");
   return createHash("sha256").update(`prep-ai-settings:${secret}`).digest();
 }
