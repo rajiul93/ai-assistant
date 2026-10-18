@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, Lock, RotateCcw, Shuffle, Trophy, Undo2, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { VocabExam, type ExamPlan } from "@/components/vocabulary/vocab-exam";
@@ -23,36 +23,74 @@ export function planExam(type: ExamType, cards: readonly VocabCard[], revision: 
   return { type, revision, screens: screens.map((screen) => ({ items: screen, pool: shuffle(screen.map((item) => item.answer)) })) };
 }
 
-/** One learned word, front (the word) and back (its forms and meaning); tap to turn it over. */
-function Flashcard({ card, missed, onUnlearn }: { card: VocabCard; missed: boolean; onUnlearn: () => void }) {
+/** A finger drag further than this (px) sideways turns to the next or previous card. */
+const SWIPE = 60;
+
+/**
+ * One learned word on the primary blue, front (the word) and back (its forms, meaning and sentences).
+ * Tap to turn it over; swipe left for the next card, right for the previous one.
+ */
+function Flashcard({ card, missed, onUnlearn, onNext, onPrev }: { card: VocabCard; missed: boolean; onUnlearn: () => void; onNext?: () => void; onPrev?: () => void }) {
   const [back, setBack] = useState(false);
+  const [dx, setDx] = useState(0);
+  const drag = useRef<{ x: number; y: number; sideways: boolean | null } | null>(null);
+  // A swipe ends in a click on the card too; that click must not flip it.
+  const swiped = useRef(false);
+
+  function onPointerUp() {
+    const from = drag.current;
+    drag.current = null;
+    if (from?.sideways && Math.abs(dx) > SWIPE) {
+      swiped.current = true;
+      (dx < 0 ? onNext : onPrev)?.();
+    } else if (from?.sideways) swiped.current = true;
+    setDx(0);
+  }
+
   return <div className="space-y-2">
-    <button type="button" onClick={() => setBack(!back)} aria-label={back ? "সামনের দিক দেখো" : "উল্টে দেখো"}
-      className={cn("relative flex min-h-56 w-full flex-col items-center justify-center rounded-3xl p-5 text-center shadow-[0_14px_30px_-18px_rgba(15,23,42,0.45)] ring-1 transition active:scale-[0.99]", back ? "bg-emerald-50 ring-emerald-200" : "bg-white ring-slate-200")}>
+    <button type="button" aria-label={back ? "সামনের দিক দেখো" : "উল্টে দেখো"}
+      onClick={() => { if (swiped.current) { swiped.current = false; return; } setBack(!back); }}
+      onPointerDown={(event) => { drag.current = { x: event.clientX, y: event.clientY, sideways: null }; swiped.current = false; }}
+      onPointerMove={(event) => {
+        const from = drag.current;
+        if (!from) return;
+        const x = event.clientX - from.x;
+        const y = event.clientY - from.y;
+        // Decide once whether this is a sideways swipe or a scroll down the page.
+        if (from.sideways === null && Math.hypot(x, y) > 8) from.sideways = Math.abs(x) > Math.abs(y);
+        if (from.sideways) setDx(x);
+      }}
+      onPointerUp={onPointerUp}
+      onPointerCancel={() => { drag.current = null; setDx(0); }}
+      style={{ transform: dx ? `translateX(${dx}px) rotate(${dx / 30}deg)` : undefined, transition: dx ? "none" : "transform 0.25s cubic-bezier(0.2,0.8,0.2,1)" }}
+      className="relative flex min-h-56 w-full touch-pan-y select-none flex-col items-center justify-center overflow-hidden rounded-3xl bg-linear-to-br from-[#3f6ef3] via-[#5a87f8] to-[#8fa6fb] p-5 text-center text-white shadow-[0_14px_32px_-18px_rgba(37,99,235,0.8)]">
+      {/* Two soft circles, as on the profile card. */}
+      <span aria-hidden className="pointer-events-none absolute -right-10 -top-10 size-40 rounded-full bg-white/10" />
+      <span aria-hidden className="pointer-events-none absolute -bottom-16 left-10 size-36 rounded-full bg-white/10" />
       <span className="absolute left-3 top-3 flex gap-1.5">
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-600">{KIND_LABEL[card.kind]}</span>
-        {missed ? <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-700">ভুল হয়েছিল</span> : null}
+        <span className="rounded-full bg-white/20 px-2 py-0.5 text-[11px] font-bold text-white ring-1 ring-white/30">{KIND_LABEL[card.kind]}</span>
+        {missed ? <span className="rounded-full bg-rose-500/90 px-2 py-0.5 text-[11px] font-bold text-white">ভুল হয়েছিল</span> : null}
       </span>
-      {back ? <div className="w-full space-y-2">
-        <p className="text-[15px] font-semibold text-slate-700">{card.meaning}</p>
+      {back ? <div className="relative w-full space-y-2 pt-6">
+        <p className="text-[15px] font-semibold text-white">{card.meaning}</p>
         <div className="grid gap-1.5">
-          {card.forms.map((form) => <div key={form.label} className="flex items-center justify-between gap-2 rounded-2xl bg-white px-3 py-2 text-left">
-            <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{form.label}</span>
-            <span className="min-w-0 text-right"><span className="block text-[16px] font-bold text-slate-900 [overflow-wrap:anywhere]">{form.english}</span>{form.bangla ? <span className="block text-[12.5px] text-slate-500">{form.bangla}</span> : null}</span>
+          {card.forms.map((form) => <div key={form.label} className="flex items-center justify-between gap-2 rounded-2xl bg-white/15 px-3 py-2 text-left ring-1 ring-white/20">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-white/75">{form.label}</span>
+            <span className="min-w-0 text-right"><span className="block text-[16px] font-bold [overflow-wrap:anywhere]">{form.english}</span>{form.bangla ? <span className="block text-[12.5px] text-white/85">{form.bangla}</span> : null}</span>
           </div>)}
         </div>
         {/* Example sentences (paid users), each with its Bangla. */}
         {card.sentences?.length ? <div className="space-y-1.5 pt-1 text-left">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">উদাহরণ বাক্য</p>
-          {card.sentences.map((sentence, index) => <div key={index} className="rounded-2xl bg-white px-3 py-2">
-            <p className="text-[14px] font-medium leading-snug text-slate-900"><span className="mr-1.5 rounded-full bg-sky-100 px-1.5 text-[10.5px] font-bold text-sky-700">{sentence.form}</span>{sentence.en}</p>
-            <p className="mt-0.5 text-[13px] leading-snug text-slate-600">{sentence.bn}</p>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-white/75">উদাহরণ বাক্য</p>
+          {card.sentences.map((sentence, index) => <div key={index} className="rounded-2xl bg-white/15 px-3 py-2 ring-1 ring-white/20">
+            <p className="text-[14px] font-medium leading-snug"><span className="mr-1.5 rounded-full bg-white/25 px-1.5 text-[10.5px] font-bold">{sentence.form}</span>{sentence.en}</p>
+            <p className="mt-0.5 text-[13px] leading-snug text-white/85">{sentence.bn}</p>
           </div>)}
         </div> : null}
-      </div> : <>
-        <p className="text-[34px] font-bold tracking-tight text-slate-900 [overflow-wrap:anywhere]">{card.word}</p>
-        <p className="mt-2 text-xs text-slate-400">চাপ দিয়ে উল্টাও</p>
-      </>}
+      </div> : <span className="relative">
+        <span className="block text-[34px] font-bold tracking-tight [overflow-wrap:anywhere]">{card.word}</span>
+        <span className="mt-2 block text-xs text-white/80">চাপ দিয়ে উল্টাও · পাশে টেনে পরেরটা</span>
+      </span>}
     </button>
     <div className="flex items-center justify-center gap-2">
       <button type="button" onClick={() => (canPronounce() ? pronounce(card.word) : toast.error("এই browser-এ উচ্চারণ শোনা যায় না।"))} className="flex h-9 items-center gap-1.5 rounded-full bg-blue-50 px-3 text-[13px] font-semibold text-blue-700"><Volume2 className="size-4" /> শোনো</button>
@@ -157,7 +195,8 @@ export function VocabDone({ verbs, nouns, affixes, learned, status, onUnlearn }:
         <button type="button" onClick={() => { setOrder(shuffle(deckBase.map((item) => item.key))); setAt(0); }} className="ml-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-white px-3 text-[13px] font-semibold text-slate-600 shadow-[0_2px_8px_-4px_rgba(15,23,42,0.2)]"><Shuffle className="size-4" /> এলোমেলো</button>
       </div>
       {card ? <>
-        <Flashcard key={card.key} card={card} missed={missedKeys.has(card.key)} onUnlearn={() => onUnlearn(card.kind, card.entryId, card.word)} />
+        <Flashcard key={card.key} card={card} missed={missedKeys.has(card.key)} onUnlearn={() => onUnlearn(card.kind, card.entryId, card.word)}
+          onNext={() => setAt(index < deck.length - 1 ? index + 1 : 0)} onPrev={() => setAt(index > 0 ? index - 1 : deck.length - 1)} />
         <div className="flex items-center justify-between gap-2">
           <button type="button" onClick={() => setAt(Math.max(0, index - 1))} disabled={index === 0} className="flex h-11 items-center gap-1.5 rounded-2xl bg-white px-4 text-sm font-semibold text-slate-700 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.25)] disabled:opacity-40"><ArrowLeft className="size-4" /> আগের</button>
           <p className="text-sm font-semibold tabular-nums text-slate-500">{index + 1} / {deck.length}</p>
