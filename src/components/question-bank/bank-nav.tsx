@@ -26,9 +26,9 @@ export function BankBreadcrumb({ trail }: { trail: Array<{ label: string; href?:
  * lines at most), then what's inside. Staff controls sit top-right. A narrow card (two per row on
  * phones) puts the name under the icon: beside it, the staff controls left the name no width at all.
  */
-export function BankTile({ href, icon: Icon, title, description, detail, tone = "bg-indigo-50 text-indigo-700", actions }: { href: string; icon: LucideIcon; title: string; description?: string | null; detail: string; tone?: string; actions?: ReactNode }) {
+export function BankTile({ href, icon: Icon, title, description, detail, tone = "bg-indigo-50 text-indigo-700", surface = "border-zinc-200 bg-white hover:border-zinc-300", actions }: { href: string; icon: LucideIcon; title: string; description?: string | null; detail: string; tone?: string; /** The card's own background and border. */ surface?: string; actions?: ReactNode }) {
   return <div className="relative @container">
-    <Link href={href} className="group flex h-full min-h-28 flex-col rounded-2xl border border-zinc-200 bg-white p-4 transition hover:border-zinc-300 hover:shadow-sm">
+    <Link href={href} className={`group flex h-full min-h-28 flex-col rounded-2xl border p-4 transition hover:shadow-sm ${surface}`}>
       <span className={`flex flex-col items-start gap-2 @xs:flex-row @xs:gap-3 ${actions ? "@xs:pr-24" : ""}`}>
         <span className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${tone}`}><Icon className="size-5" /></span>
         <span className="min-w-0 max-w-full text-base font-semibold leading-snug group-hover:underline group-hover:underline-offset-2 line-clamp-2 break-words @xs:pt-2">{title}</span>

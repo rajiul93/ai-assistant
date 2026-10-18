@@ -214,9 +214,23 @@ html {
 .rich-view.ql-editor h3 { font-size: 0.9rem; font-weight: 600; margin: 0.75rem 0 0.25rem; color: var(--color-zinc-900); }
 .rich-view.ql-editor > :first-child { margin-top: 0; }
 .rich-view.ql-editor li { padding-left: 1.25em; }
+/* Lists written as plain <ul>/<ol> (AI-written HTML that never went through the editor) get the
+ * markers Quill gives its own lists (li[data-list] + .ql-ui). */
+.rich-view.ql-editor ul { padding-left: 0.25em; }
+.rich-view.ql-editor ol:has(> li:not([data-list])) { counter-reset: plain-list; }
+.rich-view.ql-editor ul > li:not([data-list])::before,
+.rich-view.ql-editor ol > li:not([data-list])::before { display: inline-block; width: 1.25em; margin-left: -1.25em; }
+.rich-view.ql-editor ul > li:not([data-list])::before { content: "\2022"; }
+.rich-view.ql-editor ol > li:not([data-list]) { counter-increment: plain-list; }
+.rich-view.ql-editor ol > li:not([data-list])::before { content: counter(plain-list) ". "; }
 /* Solutions and explanations (BookText), confusions: the box around them already pads, and they keep its colour. */
 .book-text .rich-view.ql-editor, .confusion-text .rich-view.ql-editor { padding: 0.125rem 0 0; color: inherit; font-size: inherit; }
 .book-text .rich-view.ql-editor p + p { margin-top: 0.375rem; }
+/* A book-style explanation: each part (history, examples, …) under its own small heading. */
+.book-text .rich-view.ql-editor h3 { font-size: 0.95em; font-weight: 700; margin: 0.875rem 0 0.25rem; color: inherit; }
+.book-text .rich-view.ql-editor > h3:first-child { margin-top: 0; }
+.book-text .rich-view.ql-editor ul, .book-text .rich-view.ql-editor ol { margin: 0.25rem 0; }
+.book-text .rich-view.ql-editor li + li { margin-top: 0.2rem; }
 
 /* Tables in notes (editor and read-only view): soft borders, a heading first row, and on phones a
  * wide table scrolls sideways inside itself instead of widening the page. */

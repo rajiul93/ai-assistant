@@ -198,6 +198,8 @@ async function webSearchResponse(model: string, apiKey: string, prompt: string, 
       input: [{ role: "user", content: [...fileParts, { type: "input_text", text: prompt }] }],
       tools: [{ type: "web_search" }],
       ...(reasoningEffort(model, true, options.reasoning) ? { reasoning: { effort: reasoningEffort(model, true, options.reasoning) } } : {}),
+      // A batch job that checks its facts on the web still needs its JSON back (bank solutions).
+      ...(options.responseSchema ? { text: { format: { type: "json_schema", name: "assistant_reply", strict: false, schema: toJsonSchema(options.responseSchema) } } } : {}),
     }),
     signal: withTimeout(options.signal, timeoutMs),
   });

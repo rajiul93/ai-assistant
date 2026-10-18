@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
+import { isRichHtml } from "@/lib/note-html";
 import { prisma } from "@/lib/prisma";
 import { checkAi } from "@/server/ai-access";
 import { callAI } from "@/server/assistant/ai";
@@ -79,7 +80,9 @@ export async function POST(request: Request) {
   });
   if (!originals.length) return Response.json({ error: "প্রশ্ন পাওয়া যায়নি।" }, { status: 404 });
 
-  const input = originals.map(({ id, text, options, correctIndex, solution, explanation }) => ({ id, text, options, correctOption: correctIndex + 1, solution, explanation }));
+  // A book-style (HTML) solution or explanation is already laid out: it is not sent, and is kept as it is.
+  const plain = (value: string | null) => (value && !isRichHtml(value) ? value : null);
+  const input = originals.map(({ id, text, options, correctIndex, solution, explanation }) => ({ id, text, options, correctOption: correctIndex + 1, solution: plain(solution), explanation: plain(explanation) }));
   const raw = await callAI(PROMPT + JSON.stringify(input), { responseSchema, userId: user.id, feature: "bank_beautify", timeoutMs: 55_000 });
   if (!raw) return Response.json({ error: "AI এই মুহূর্তে উত্তর দিতে পারল না। একটু পরে আবার চেষ্টা করো।" }, { status: 502 });
 
@@ -95,8 +98,9 @@ export async function POST(request: Request) {
   const results = cleaned.flatMap((question) => {
     const original = byId.get(question.id);
     if (!original || question.options.length !== original.options.length) return [];
-    // A solution or explanation the AI dropped is kept as it was, never lost.
-    return [{ id: original.id, text: question.text, options: question.options, correctIndex: original.correctIndex, solution: question.solution || original.solution, explanation: question.explanation || original.explanation }];
+    // A solution or explanation the AI dropped (or was never sent) is kept as it was, never lost.
+    const tidied = (current: string | null, next: string | null) => (next && (!current || plain(current)) ? next : current);
+    return [{ id: original.id, text: question.text, options: question.options, correctIndex: original.correctIndex, solution: tidied(original.solution, question.solution), explanation: tidied(original.explanation, question.explanation) }];
   });
   const skipped = originals.length - results.length;
 

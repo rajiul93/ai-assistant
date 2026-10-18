@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { APP_TIMEZONE, dayjs } from "@/lib/dayjs";
 import { questionKey, withoutDuplicates } from "@/lib/preliminary";
 import { prisma } from "@/lib/prisma";
+import { cleanSolution, SOLUTION_MAX } from "@/lib/solution-html";
 import { gateNotes, premiumForSet } from "@/server/premium";
 import { userError } from "@/lib/user-error";
 
@@ -21,8 +22,8 @@ const questionSchema = z.object({
   // Five only for Question Bank copies (an extra ঙ).
   options: z.array(z.string().trim().min(1, "৪টা option-ই লাগবে").max(500)).min(4).max(5),
   correctIndex: z.number().int().min(0).max(4),
-  solution: z.string().trim().max(5000).nullish().transform((value) => value || null),
-  explanation: z.string().trim().max(5000).nullish().transform((value) => value || null),
+  solution: z.string().trim().max(SOLUTION_MAX).nullish().transform(cleanSolution),
+  explanation: z.string().trim().max(SOLUTION_MAX).nullish().transform(cleanSolution),
 }).refine((question) => question.correctIndex < question.options.length, { message: "সঠিক উত্তর বেছে নাও" });
 
 const setSchema = z.object({

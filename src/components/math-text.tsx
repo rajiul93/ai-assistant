@@ -1,6 +1,7 @@
 import { Fragment } from "react";
-import { plainMathToLatex, renderFormulaHtml, renderLatex, splitMath, textToFormulaHtml } from "@/lib/math";
+import { plainMathToLatex, renderFormulaHtml, renderLatex, splitMath } from "@/lib/math";
 import { sanitizeNoteHtml } from "@/lib/note-html";
+import { solutionToHtml } from "@/lib/solution-html";
 import { cn } from "@/lib/utils";
 
 /** Text with `<u>…</u>` (an underlined word in a question, as printed in the book) drawn underlined. */
@@ -23,14 +24,12 @@ export function MathText({ text, book = false }: { text: string; book?: boolean 
 }
 
 /**
- * Plain text shown in the read-only Quill view (no toolbar, nothing to edit), one paragraph per
- * line, with plain-text math (`1/2`, `√3`, `x²`) drawn like a textbook. Used for solutions and
- * explanations from the Question Bank.
+ * A solution or explanation in the read-only Quill view (no toolbar, nothing to edit): Quill HTML
+ * as written, or older plain text one paragraph per line with plain-text math (`1/2`, `√3`, `x²`)
+ * drawn like a textbook.
  */
 export function BookText({ text, className }: { text: string; className?: string }) {
-  // AI answers often start a line with a markdown bullet ("* ", "- "); it shows as a real bullet.
-  const html = text.split(/\r?\n/).map((line) => (line.trim() ? `<p>${textToFormulaHtml(plainMathToLatex(line.replace(/^\s*[*-]\s+/, "• ")))}</p>` : "")).join("");
-  return <RichHtml html={html} className={cn("book-text", className)} />;
+  return <RichHtml html={solutionToHtml(text)} className={cn("book-text", className)} />;
 }
 
 /** Stored rich text (notes, task descriptions, application details), read-only, with its formulas drawn. */

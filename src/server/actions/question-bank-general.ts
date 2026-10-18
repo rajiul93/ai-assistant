@@ -8,6 +8,7 @@ import { now, startOfDay } from "@/lib/dayjs";
 import { sanitizeNoteHtml } from "@/lib/note-html";
 import { prisma } from "@/lib/prisma";
 import { BANK_IMPORT_BATCH, questionFingerprint } from "@/lib/question-bank";
+import { cleanSolution, SOLUTION_MAX } from "@/lib/solution-html";
 import { assertCanTakeFromBank } from "@/server/bank-access";
 import { placeFor } from "@/server/collaboration/share-copy";
 import { gateNotes, hasPremium } from "@/server/premium";
@@ -279,8 +280,8 @@ const mcqSchema = z.object({
   text: z.string().trim().min(1, "প্রশ্ন লেখো").max(2000),
   options: z.array(z.string().trim().min(1, "কোনো option ফাঁকা রাখা যাবে না").max(500)).min(4, "অন্তত ৪টা option লাগবে").max(5, "সর্বোচ্চ ৫টা option"),
   correctIndex: z.number().int().min(0).max(4),
-  solution: z.string().trim().max(5000).nullish().transform((value) => value || null),
-  explanation: z.string().trim().max(5000).nullish().transform((value) => value || null),
+  solution: z.string().trim().max(SOLUTION_MAX).nullish().transform(cleanSolution),
+  explanation: z.string().trim().max(SOLUTION_MAX).nullish().transform(cleanSolution),
   free: z.boolean(),
 }).refine((question) => question.correctIndex < question.options.length, { message: "সঠিক উত্তর বেছে নাও" });
 
