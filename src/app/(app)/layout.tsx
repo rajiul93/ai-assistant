@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { LiveProvider } from "@/components/collaboration/live-provider";
 import { requireUser } from "@/lib/auth";
+import { DEFAULT_QUICK_ITEMS } from "@/lib/quick-items";
 import { prisma } from "@/lib/prisma";
 import { getAiState } from "@/server/ai-access";
 import { permissionsOf, roleOf } from "@/server/roles";
@@ -18,5 +19,5 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     freshUserFlags(user.id),
   ]);
   // Live counts (bell, Messages badge) for every signed-in page: socket.io if configured, else polling.
-  return <LiveProvider><AppShell userName={flags?.name || user.name || user.email} userImage={user.image} aiLock={ai.lock} admin={admin} permissions={permissions} pendingPayments={pendingPayments}>{children}</AppShell></LiveProvider>;
+  return <LiveProvider><AppShell userName={flags?.name || user.name || user.email} userImage={user.image} aiLock={ai.lock} admin={admin} permissions={permissions} pendingPayments={pendingPayments} quickItems={flags?.quickItems ?? DEFAULT_QUICK_ITEMS}>{children}</AppShell></LiveProvider>;
 }

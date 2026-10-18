@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Calculator, CalendarDays, Sparkles, X } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { SlidersHorizontal, Sparkles, X } from "lucide-react";
+import { quickItemsFrom, type QuickItem } from "@/lib/quick-items";
 import { cn } from "@/lib/utils";
 import { useAssistantStore } from "@/store/assistant";
 
@@ -15,11 +18,8 @@ export function onOpenTool(tool: Tool, open: () => void) {
   return () => window.removeEventListener(OPEN_TOOL, listener);
 }
 
-const ITEMS: Array<{ id: Tool | "assistant"; label: string; icon: typeof Calculator; tone: string }> = [
-  { id: "assistant", label: "AI চ্যাট", icon: Sparkles, tone: "from-[#3f6ef3] via-[#8b5cf6] to-[#ec4899]" },
-  { id: "calendar", label: "ক্যালেন্ডার", icon: CalendarDays, tone: "from-emerald-400 to-teal-600" },
-  { id: "calculator", label: "ক্যালকুলেটর", icon: Calculator, tone: "from-[#3f6ef3] to-[#7f9cfa]" },
-];
+/** Always first; the rest are the user's own shortcuts (set on /settings). */
+const ASSISTANT: QuickItem = { id: "assistant", label: "AI চ্যাট", icon: Sparkles, tone: "from-[#3f6ef3] via-[#8b5cf6] to-[#ec4899]" };
 
 type Spot = { side: "left" | "right"; /** Top of the button as a share of the free height (0 top … 1 bottom). */ y: number };
 const SPOT_KEY = "prep:dock-spot";
@@ -44,11 +44,13 @@ function band() {
 }
 
 /**
- * One floating button for the AI chat, the calendar and the calculator: tap it to fan them out.
+ * One floating button for the AI chat and the user's shortcuts (tools or pages): tap it to fan them out.
  * Drag it to move it — it may sit anywhere up or down, but always snaps to the left or right edge
  * (never the middle), and keeps its place across visits.
  */
-export function ToolDock() {
+export function ToolDock({ quickItems }: { quickItems: string[] }) {
+  const router = useRouter();
+  const items = [ASSISTANT, ...quickItemsFrom(quickItems)];
   const [open, setOpen] = useState(false);
   const [spot, setSpot] = useState<Spot | null>(null);
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
@@ -85,10 +87,11 @@ export function ToolDock() {
   // The menu opens towards the free side: up when the button is low, down when it is high.
   const menuBelow = top < window.innerHeight / 2;
 
-  function choose(id: (typeof ITEMS)[number]["id"]) {
+  function choose(item: QuickItem) {
     setOpen(false);
-    if (id === "assistant") useAssistantStore.getState().setOpen(true);
-    else window.dispatchEvent(new CustomEvent(OPEN_TOOL, { detail: id }));
+    if (item.id === "assistant") useAssistantStore.getState().setOpen(true);
+    else if (item.href) router.push(item.href);
+    else window.dispatchEvent(new CustomEvent(OPEN_TOOL, { detail: item.id }));
   }
 
   function onPointerDown(event: React.PointerEvent<HTMLButtonElement>) {
@@ -120,13 +123,14 @@ export function ToolDock() {
 
   return <div data-tool-dock className={cn("fixed z-40", assistantOpen && "max-sm:hidden")} style={{ left, top, transition: drag ? "none" : "left 0.25s cubic-bezier(0.2,0.8,0.2,1), top 0.25s cubic-bezier(0.2,0.8,0.2,1)" }}>
     {open ? <div className={cn("assistant-in absolute flex w-max flex-col gap-2", menuBelow ? "top-full mt-2" : "bottom-full mb-2", spot.side === "left" ? "left-0 items-start" : "right-0 items-end")}>
-      {ITEMS.map((item) => {
+      {items.map((item) => {
         const Icon = item.icon;
-        return <button key={item.id} type="button" onClick={() => choose(item.id)} className="flex h-12 items-center gap-2.5 rounded-full bg-white/95 py-1 pl-1 pr-4 text-[14.5px] font-semibold text-slate-800 shadow-[0_12px_28px_-12px_rgba(15,23,42,0.5)] ring-1 ring-slate-200/80 backdrop-blur transition active:scale-95">
+        return <button key={item.id} type="button" onClick={() => choose(item)} className="flex h-12 items-center gap-2.5 rounded-full bg-white/95 py-1 pl-1 pr-4 text-[14.5px] font-semibold text-slate-800 shadow-[0_12px_28px_-12px_rgba(15,23,42,0.5)] ring-1 ring-slate-200/80 backdrop-blur transition active:scale-95">
           <span className={cn("flex size-10 items-center justify-center rounded-full bg-linear-to-br text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.4)]", item.tone)}><Icon className="size-5" /></span>
           {item.label}
         </button>;
       })}
+      <Link href="/settings" onClick={() => setOpen(false)} className="flex h-8 items-center gap-1.5 rounded-full bg-white/90 px-3 text-xs font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200/80 backdrop-blur hover:text-slate-900"><SlidersHorizontal className="size-3.5" /> সাজাও</Link>
     </div> : null}
     <button
       type="button"
@@ -136,7 +140,7 @@ export function ToolDock() {
       onPointerCancel={() => { start.current = null; setDrag(null); }}
       onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setOpen(!open); } }}
       aria-expanded={open}
-      aria-label={open ? "বন্ধ করো" : "AI চ্যাট, ক্যালেন্ডার, ক্যালকুলেটর — টেনে সরানো যায়"}
+      aria-label={open ? "বন্ধ করো" : "AI চ্যাট আর তোমার শর্টকাট — টেনে সরানো যায়"}
       title="টেনে বাঁ বা ডান পাশে সরাও"
       className={cn("relative flex touch-none select-none items-center justify-center rounded-full text-white shadow-[0_14px_32px_-10px_rgba(139,92,246,0.8)] transition-transform active:scale-95", drag ? "scale-110 cursor-grabbing" : "cursor-pointer hover:scale-105")}
       style={{ width: SIZE, height: SIZE }}

@@ -31,6 +31,9 @@ model User {
   aiRequestedAt    DateTime?
   /// Most AI tokens this user may use in total; null = no limit. Admins are never limited.
   aiTokenLimit     Int?          @default(1000000)
+  /// The floating dock's shortcuts after the fixed AI chat, in order (src/lib/quick-items.ts): a tool
+  /// ("calendar", "calculator") or a page path. Five at most; the user picks them on /settings.
+  quickItems       String[]      @default(["calendar", "calculator"])
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
