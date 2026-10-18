@@ -1,10 +1,8 @@
 import { AiUsageView, CustomerUsageView, usagePeriods } from "@/components/usage/ai-usage-view";
-import { AiProviderSettings } from "@/components/usage/ai-provider";
 import { OpenAiBalance, type CostsView } from "@/components/usage/openai-balance";
 import { requireUser } from "@/lib/auth";
 import { now, startOfDay } from "@/lib/dayjs";
 import { prisma } from "@/lib/prisma";
-import { getAiSettingsView } from "@/server/actions/ai-settings";
 import { getAiQuota } from "@/server/ai-access";
 import { getPlanStatus, getTodayUsageShare } from "@/server/billing";
 import { getAiUsage } from "@/server/queries";
@@ -59,9 +57,6 @@ export default async function UsagePage({ searchParams }: { searchParams: Promis
   const requested = (await searchParams).period;
   const period = usagePeriods.find((item) => item.key === requested)?.key ?? "30d";
   const from = period === "all" ? null : startOfDay(now().subtract(period === "7d" ? 6 : 29, "day")).toDate();
-  const owner = isSuperAdminEmail(user.email);
-  const [usage, quota, balance, aiSettings] = await Promise.all([getAiUsage({ from }), getAiQuota(user), owner ? ownerBalance() : null, owner ? getAiSettingsView().catch(() => null) : null]);
-  // The super admin also picks the AI here (ChatGPT or Gemini) and enters the Gemini key.
-  const ownerPanel = owner ? <div className="space-y-4">{aiSettings ? <AiProviderSettings view={aiSettings} /> : null}{balance}</div> : null;
-  return <AiUsageView usage={usage} period={period} admin quota={quota} balance={ownerPanel} />;
+  const [usage, quota, balance] = await Promise.all([getAiUsage({ from }), getAiQuota(user), isSuperAdminEmail(user.email) ? ownerBalance() : null]);
+  return <AiUsageView usage={usage} period={period} admin quota={quota} balance={balance} />;
 }

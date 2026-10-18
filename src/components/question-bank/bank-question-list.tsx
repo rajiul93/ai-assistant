@@ -21,9 +21,9 @@ export type Draft = Omit<BankQuestion, "editedAt" | "hasSolution" | "hasExplanat
 type BeautifyResponse = { results: Draft[]; skipped: number; originals: Draft[]; error?: string };
 
 const PER_CALL = 4;
-// Solving looks each question up on the web (about 20 s each): one per call, a few at a time.
-const SOLVE_PER_CALL = 1;
-const SOLVE_AT_ONCE = 3;
+// Solving sends four questions a call (the instructions are paid once per call), two calls at a time.
+const SOLVE_PER_CALL = 4;
+const SOLVE_AT_ONCE = 2;
 
 async function beautify(questionIds: string[], mode: "preview" | "save"): Promise<BeautifyResponse> {
   const response = await fetch("/api/question-bank/beautify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ questionIds, mode }) });

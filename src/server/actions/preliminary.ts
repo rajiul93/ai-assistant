@@ -224,6 +224,28 @@ export async function getQuestionSet(id: string) {
   };
 }
 
+const restoreSchema = z.array(z.object({
+  id: z.string().min(1).max(64),
+  solution: z.string().max(SOLUTION_MAX).nullable(),
+  explanation: z.string().max(SOLUTION_MAX).nullable(),
+})).max(300);
+
+/**
+ * Undo for AI-written solutions (/api/preliminary/solve): puts back what each question had before.
+ * Only questions of the user's own set change.
+ */
+export async function restoreSolutions(setId: string, items: z.input<typeof restoreSchema>) {
+  const user = await requireUser();
+  const set = await ownedSet(user.id, setId);
+  const parsed = restoreSchema.parse(items);
+  const ids = new Set((await prisma.question.findMany({ where: { setId: set.id, id: { in: parsed.map((item) => item.id) } }, select: { id: true } })).map((question) => question.id));
+  await prisma.$transaction(parsed.filter((item) => ids.has(item.id)).map((item) => prisma.question.update({
+    where: { id: item.id },
+    data: { solution: cleanSolution(item.solution), explanation: cleanSolution(item.explanation) },
+  })));
+  revalidate(set.id);
+}
+
 /** Marks a test on the server and keeps a copy of it; the set stays in Testing until moved to Done. */
 export async function submitTest(id: string, answers: Record<string, number>) {
   const user = await requireUser();
