@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { SlidersHorizontal, Sparkles, X } from "lucide-react";
 import { quickItemsFrom, type QuickItem } from "@/lib/quick-items";
 import { cn } from "@/lib/utils";
@@ -35,11 +35,17 @@ const readSpot = (): Spot => {
   return DEFAULT_SPOT;
 };
 
-/** The band the button may sit in: below the phone header, above the tab bar (desktop: the whole height). */
+/**
+ * The band the button may sit in: below the phone header, above the tab bar (desktop: the whole
+ * height) — and above a page's own bottom bar (`data-dock-avoid`, e.g. a form's save bar), so the
+ * button never covers its Save.
+ */
 function band() {
   const desktop = window.matchMedia("(min-width: 1024px)").matches;
   const top = desktop ? 24 : 76;
-  const bottom = window.innerHeight - (desktop ? 24 : 80) - SIZE;
+  const bar = document.querySelector("[data-dock-avoid]")?.getBoundingClientRect();
+  const floor = bar && bar.height ? Math.min(bar.top - 8, window.innerHeight - (desktop ? 24 : 80)) : window.innerHeight - (desktop ? 24 : 80);
+  const bottom = floor - SIZE;
   return { top, bottom: Math.max(top, bottom), left: desktop ? 240 + EDGE : EDGE, right: window.innerWidth - EDGE - SIZE };
 }
 
@@ -55,6 +61,10 @@ export function ToolDock({ quickItems }: { quickItems: string[] }) {
   const [spot, setSpot] = useState<Spot | null>(null);
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
   const [, setViewport] = useState(0);
+  // A new page may bring (or take away) a bottom bar: measure again once it is on screen.
+  const pathname = usePathname();
+  const [, remeasure] = useReducer((count: number) => count + 1, 0);
+  useEffect(() => { const timer = window.setTimeout(remeasure, 50); return () => window.clearTimeout(timer); }, [pathname]);
   const start = useRef<{ x: number; y: number; left: number; top: number; moved: boolean } | null>(null);
   const busy = useAssistantStore((state) => state.busy);
   const assistantOpen = useAssistantStore((state) => state.open);

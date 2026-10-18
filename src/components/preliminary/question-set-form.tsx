@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Check, ClipboardPaste, ImageIcon, Loader2, Mic, Plus, ScanText, Square, Trash2, Underline } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CalendarDays, Check, ClipboardPaste, FolderTree, ImageIcon, Loader2, Mic, Plus, ScanText, Square, Tag, Trash2, Underline } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { ImageViewer } from "@/components/image-viewer";
@@ -249,43 +249,51 @@ export function QuestionSetForm({ subjects, topics = [], initial }: {
     toast.success(`${parsed.length}টি প্রশ্ন যোগ হলো${skipped ? ` · ${skipped}টি বোঝা যায়নি (উত্তর বা ৪টা option নেই)` : ""}`);
   }
 
-  return <div className="space-y-4 pb-24">
-    <Link href="/preliminary" className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900"><ArrowLeft className="size-4" /> Preliminary</Link>
-    <h1 className="text-2xl font-semibold tracking-tight">{initial ? "Set edit করো" : "নতুন question set"}</h1>
+  const label = "flex items-center gap-1.5 text-xs font-semibold text-zinc-600";
+  return <div className="mx-auto max-w-3xl space-y-4 pb-28">
+    <div className="space-y-1">
+      <Link href="/preliminary" className="inline-flex items-center gap-1 text-sm text-zinc-500 hover:text-zinc-900"><ArrowLeft className="size-4" /> Preliminary</Link>
+      <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{initial ? "Set edit করো" : "নতুন question set"}</h1>
+    </div>
 
-    <section className="grid gap-3 rounded-2xl border border-zinc-200 bg-white p-4 sm:grid-cols-2">
-      <label className="space-y-1.5">
-        <span className="text-xs font-medium text-zinc-600">Subject</span>
-        <select value={subjectId} onChange={(event) => { setSubjectId(event.target.value); setTopicId(""); }} className={cn(field, "h-11", showErrors && !subjectId && "border-red-400")}>
-          <option value="">বেছে নাও…</option>
-          {subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
-        </select>
-        {!subjects.length ? <p className="text-xs text-amber-700">আগে <Link href="/subjects" className="underline">Subjects</Link> পাতায় একটা subject যোগ করো।</p> : null}
-      </label>
-      <label className="space-y-1.5">
-        <span className="text-xs font-medium text-zinc-600">Topic <span className="font-normal text-zinc-400">(subject-এর ভেতরে কোথায় থাকবে)</span></span>
-        <TopicSelect subjectId={subjectId} topics={topics} value={topicId} onChange={setTopicId} className={cn(field, "h-11 disabled:bg-zinc-50 disabled:text-zinc-400")} />
-      </label>
-      <label className="space-y-1.5">
-        <span className="text-xs font-medium text-zinc-600">তারিখ</span>
-        <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className={cn(field, "h-11", showErrors && !date && "border-red-400")} />
-      </label>
-      <label className="space-y-1.5">
-        <span className="text-xs font-medium text-zinc-600">Set-এর নাম</span>
+    {/* The set's details: its name first (what people look for), then where it is filed. */}
+    <section className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-4">
+      <label className="block space-y-1.5">
+        <span className={label}><Tag className="size-3.5" /> Set-এর নাম</span>
         <div className="relative">
-          <input value={topicName} onChange={(event) => setTopicName(event.target.value)} maxLength={160} placeholder="যেমন: সন্ধি বিচ্ছেদ" className={cn(field, "h-11", mic.supported && "pr-11", showErrors && !topicName.trim() && "border-red-400")} />
+          <input value={topicName} onChange={(event) => setTopicName(event.target.value)} maxLength={160} placeholder="যেমন: সন্ধি বিচ্ছেদ" className={cn(field, "h-11 text-[15px]", mic.supported && "pr-11", showErrors && !topicName.trim() && "border-red-400")} />
           {mic.supported ? <DictateButton active={dictating === "topic"} onClick={() => dictate("topic")} label="Topic" className="absolute right-1.5 top-1.5" /> : null}
         </div>
       </label>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <label className="block min-w-0 space-y-1.5">
+          <span className={label}>Subject</span>
+          <select value={subjectId} onChange={(event) => { setSubjectId(event.target.value); setTopicId(""); }} className={cn(field, "h-11", showErrors && !subjectId && "border-red-400")}>
+            <option value="">বেছে নাও…</option>
+            {subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
+          </select>
+          {!subjects.length ? <p className="text-xs text-amber-700">আগে <Link href="/subjects" className="underline">Subjects</Link> পাতায় একটা subject যোগ করো।</p> : null}
+        </label>
+        <label className="block min-w-0 space-y-1.5">
+          <span className={label}><FolderTree className="size-3.5" /> Topic <span className="font-normal text-zinc-400">(ঐচ্ছিক)</span></span>
+          <TopicSelect subjectId={subjectId} topics={topics} value={topicId} onChange={setTopicId} className={cn(field, "h-11 disabled:bg-zinc-50 disabled:text-zinc-400")} />
+        </label>
+        <label className="block min-w-0 space-y-1.5">
+          <span className={label}><CalendarDays className="size-3.5" /> তারিখ</span>
+          {/* iOS draws a date field wider than its box unless its own look is turned off. */}
+          <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className={cn(field, "h-11 min-w-0 appearance-none", showErrors && !date && "border-red-400")} />
+        </label>
+      </div>
     </section>
 
-    <div className="flex items-center justify-between gap-2">
-      <h2 className="font-semibold">প্রশ্ন ({questions.length})</h2>
-      <div className="flex flex-wrap justify-end gap-2">
-        <button type="button" onClick={() => fileRef.current?.click()} disabled={Boolean(reading)} className="flex h-9 items-center gap-1.5 rounded-xl bg-zinc-950 px-3 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"><ScanText className="size-4" /> ছবি থেকে (AI)</button>
-        <button type="button" onClick={() => setPasteOpen(true)} className="flex h-9 items-center gap-1.5 rounded-xl px-3 text-sm font-medium text-zinc-700 ring-1 ring-zinc-200 hover:bg-zinc-50"><ClipboardPaste className="size-4" /> একসাথে paste করো</button>
+    {/* Two quick ways to add many questions at once; on phones they share a row. */}
+    <section className="space-y-2">
+      <h2 className="font-semibold">প্রশ্ন <span className="text-zinc-400">({questions.length})</span></h2>
+      <div className="grid grid-cols-2 gap-2 sm:flex">
+        <button type="button" onClick={() => fileRef.current?.click()} disabled={Boolean(reading)} className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-zinc-950 px-3 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"><ScanText className="size-4 shrink-0" /> ছবি থেকে (AI)</button>
+        <button type="button" onClick={() => setPasteOpen(true)} className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-white px-3 text-sm font-medium text-zinc-700 ring-1 ring-zinc-200 hover:bg-zinc-50"><ClipboardPaste className="size-4 shrink-0" /> Paste করো</button>
       </div>
-    </div>
+    </section>
     <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple className="hidden" onChange={(event) => { void readImages(event.target.files); event.target.value = ""; }} />
 
     {reading ? <div className="flex items-center gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900" role="status">
@@ -300,55 +308,59 @@ export function QuestionSetForm({ subjects, topics = [], initial }: {
     </div> : pages.length ? <div className="flex justify-end"><button type="button" onClick={() => setViewing(0)} className="flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-zinc-600 ring-1 ring-zinc-200"><ImageIcon className="size-3.5" /> পাতার ছবি দেখো</button></div> : null}
 
     <ol className="space-y-3">
-      {questions.map((question, index) => <li key={index} className={cn("rounded-2xl border bg-white p-4", showErrors && problems[index] ? "border-red-300" : question.review ? "border-amber-300" : "border-zinc-200")}>
+      {questions.map((question, index) => <li key={index} className={cn("rounded-2xl border bg-white p-3 sm:p-4", showErrors && problems[index] ? "border-red-300" : question.review ? "border-amber-300" : "border-zinc-200")}>
         {question.review?.onlyOnce ? <div className="mb-2 flex items-center gap-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900"><AlertTriangle className="size-3.5 shrink-0" /><span className="flex-1">এই প্রশ্নটা AI একবারই পেয়েছে — পুরোটা ছবির সাথে মিলিয়ে নাও।</span><button type="button" onClick={() => accept(index, "onlyOnce")} className="flex items-center gap-1 rounded-md px-2 py-1 font-medium hover:bg-white"><Check className="size-3.5" /> মিলিয়েছি</button></div> : null}
-        <div className="flex items-start gap-2">
-          <span className="mt-2.5 w-6 shrink-0 text-sm font-semibold text-zinc-400 tabular-nums">{index + 1}.</span>
-          <div className="relative min-w-0 flex-1">
-            <textarea ref={(box) => { questionBoxes.current[index] = box; }} value={question.text} onChange={(event) => setText(index, event.target.value)} rows={3} placeholder={mic.supported ? "প্রশ্ন লেখো বা 🎤 চেপে বলো" : "প্রশ্ন লেখো"} aria-label={`প্রশ্ন ${index + 1}`} className={cn(field, "min-h-20 resize-y py-2.5 pr-11 leading-relaxed", question.review?.text && "border-amber-400 ring-2 ring-amber-100")} />
-            {mic.supported ? <DictateButton active={dictating === `q${index}`} onClick={() => dictate(`q${index}`)} label={`প্রশ্ন ${index + 1}`} className="absolute right-1.5 top-1.5" /> : null}
-            {/* mousedown, not click: keeps the text selection the button acts on. */}
-            <button type="button" onMouseDown={(event) => { event.preventDefault(); toggleUnderline(index); }} aria-label="Select করা শব্দে নিচে দাগ দাও" title="Select করা শব্দে নিচে দাগ (underline)" className={cn("absolute right-1.5 flex size-8 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700", mic.supported ? "top-10" : "top-1.5")}><Underline className="size-4" /></button>
-            {question.text.includes("<u>") ? <p className="mt-1 px-1 text-xs leading-relaxed text-zinc-500">দেখতে: <span className="text-sm text-zinc-800"><MathText text={question.text} /></span></p> : null}
-            {question.review?.text ? <ReviewChips label="প্রশ্ন:" readings={question.review.text} current={question.text} word={question.review.words?.[0]} onPick={(value) => setText(index, value)} onAccept={() => accept(index, "text")} /> : null}
-          </div>
-          {questions.length > 1 ? <button type="button" onClick={() => setQuestions((list) => list.filter((_, position) => position !== index))} aria-label={`প্রশ্ন ${index + 1} মুছে ফেলো`} className="mt-1 flex size-9 shrink-0 items-center justify-center rounded-lg text-zinc-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="size-4" /></button> : null}
+        {/* The number and the card's tools on top, so the question and options get the full width on phones. */}
+        <div className="mb-2 flex items-center gap-1">
+          <span className="mr-auto rounded-lg bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-600 tabular-nums">প্রশ্ন {index + 1}</span>
+          {/* mousedown, not click: keeps the text selection the button acts on. */}
+          <button type="button" onMouseDown={(event) => { event.preventDefault(); toggleUnderline(index); }} aria-label="Select করা শব্দে নিচে দাগ দাও" title="Select করা শব্দে নিচে দাগ (underline)" className="flex size-9 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-700"><Underline className="size-4" /></button>
+          {mic.supported ? <DictateButton active={dictating === `q${index}`} onClick={() => dictate(`q${index}`)} label={`প্রশ্ন ${index + 1}`} className="size-9" /> : null}
+          {questions.length > 1 ? <button type="button" onClick={() => setQuestions((list) => list.filter((_, position) => position !== index))} aria-label={`প্রশ্ন ${index + 1} মুছে ফেলো`} title="মুছে ফেলো" className="flex size-9 items-center justify-center rounded-lg text-zinc-400 hover:bg-red-50 hover:text-red-600"><Trash2 className="size-4" /></button> : null}
         </div>
-        <div className="mt-2 grid gap-2 pl-8 sm:grid-cols-2">
+        <textarea ref={(box) => { questionBoxes.current[index] = box; }} value={question.text} onChange={(event) => setText(index, event.target.value)} rows={2} placeholder={mic.supported ? "প্রশ্ন লেখো বা 🎤 চেপে বলো" : "প্রশ্ন লেখো"} aria-label={`প্রশ্ন ${index + 1}`} className={cn(field, "min-h-16 resize-y py-2.5 text-[15px] leading-relaxed", question.review?.text && "border-amber-400 ring-2 ring-amber-100")} />
+        {question.text.includes("<u>") ? <p className="mt-1 px-1 text-xs leading-relaxed text-zinc-500">দেখতে: <span className="text-sm text-zinc-800"><MathText text={question.text} /></span></p> : null}
+        {question.review?.text ? <ReviewChips label="প্রশ্ন:" readings={question.review.text} current={question.text} word={question.review.words?.[0]} onPick={(value) => setText(index, value)} onAccept={() => accept(index, "text")} /> : null}
+        <p className="mt-3 mb-1.5 text-xs text-zinc-500">Option — সঠিকটার অক্ষরে চাপো</p>
+        <div className="grid gap-2 sm:grid-cols-2">
           {question.options.map((option, optionIndex) => {
             const correct = question.correctIndex === optionIndex;
-            return <div key={optionIndex} className={cn("flex items-center gap-2 rounded-xl border px-2 transition", correct ? "border-emerald-400 bg-emerald-50" : "border-zinc-200", question.review?.options?.[optionIndex] && "border-amber-400 ring-2 ring-amber-100")}>
-              <button type="button" onClick={() => update(index, { correctIndex: optionIndex })} aria-label={`${OPTION_LETTERS[optionIndex]} সঠিক উত্তর`} aria-pressed={correct} title="সঠিক উত্তর হিসেবে চিহ্নিত করো" className={cn("flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition", correct ? "bg-emerald-600 text-white" : "bg-zinc-100 text-zinc-600 hover:bg-emerald-100")}>
+            return <div key={optionIndex} className={cn("flex min-w-0 items-center gap-2 rounded-xl border px-2 transition", correct ? "border-emerald-400 bg-emerald-50" : "border-zinc-200", question.review?.options?.[optionIndex] && "border-amber-400 ring-2 ring-amber-100")}>
+              <button type="button" onClick={() => update(index, { correctIndex: optionIndex })} aria-label={`${OPTION_LETTERS[optionIndex]} সঠিক উত্তর`} aria-pressed={correct} title="সঠিক উত্তর হিসেবে চিহ্নিত করো" className={cn("flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition", correct ? "bg-emerald-600 text-white" : "bg-zinc-100 text-zinc-600 hover:bg-emerald-100")}>
                 {correct ? <Check className="size-3.5" strokeWidth={3} /> : OPTION_LETTERS[optionIndex]}
               </button>
-              <input value={option} onChange={(event) => setOption(index, optionIndex, event.target.value)} placeholder={`Option ${OPTION_LETTERS[optionIndex]}`} aria-label={`প্রশ্ন ${index + 1}, option ${OPTION_LETTERS[optionIndex]}`} className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-none" />
+              <input value={option} onChange={(event) => setOption(index, optionIndex, event.target.value)} placeholder={`Option ${OPTION_LETTERS[optionIndex]}`} aria-label={`প্রশ্ন ${index + 1}, option ${OPTION_LETTERS[optionIndex]}`} className="h-11 min-w-0 flex-1 bg-transparent text-[15px] outline-none" />
               {mic.supported ? <DictateButton active={dictating === `q${index}o${optionIndex}`} onClick={() => dictate(`q${index}o${optionIndex}`)} label={`প্রশ্ন ${index + 1}, option ${OPTION_LETTERS[optionIndex]}`} /> : null}
             </div>;
           })}
         </div>
-        {question.review?.options?.map((readings, optionIndex) => (readings ? <div key={optionIndex} className="pl-8"><ReviewChips label={`Option ${OPTION_LETTERS[optionIndex]}:`} readings={readings} current={question.options[optionIndex]} word={question.review?.words?.[optionIndex + 1]} onPick={(value) => setOption(index, optionIndex, value)} onAccept={() => accept(index, optionIndex)} /></div> : null))}
+        {question.review?.options?.map((readings, optionIndex) => (readings ? <ReviewChips key={optionIndex} label={`Option ${OPTION_LETTERS[optionIndex]}:`} readings={readings} current={question.options[optionIndex]} word={question.review?.words?.[optionIndex + 1]} onPick={(value) => setOption(index, optionIndex, value)} onAccept={() => accept(index, optionIndex)} /> : null))}
         {/* The right answer, picked explicitly (tapping an option's letter above does the same). */}
-        <div role="radiogroup" aria-label={`প্রশ্ন ${index + 1}-এর সঠিক উত্তর`} className={cn("mt-3 ml-8 flex flex-wrap items-center gap-2 rounded-xl px-3 py-2", question.correctIndex >= 0 ? "bg-emerald-50" : showErrors ? "bg-red-50" : "bg-zinc-50")}>
-          <span className={cn("text-sm font-semibold", question.correctIndex >= 0 ? "text-emerald-800" : showErrors ? "text-red-700" : "text-zinc-700")}>সঠিক উত্তর:</span>
-          {OPTION_LETTERS.slice(0, question.options.length).map((letter, optionIndex) => {
-            const on = question.correctIndex === optionIndex;
-            return <button key={letter} type="button" role="radio" aria-checked={on} onClick={() => update(index, { correctIndex: optionIndex })} className={cn("flex h-9 min-w-11 items-center justify-center gap-1 rounded-lg px-2.5 text-sm font-semibold ring-1 transition", on ? "bg-emerald-600 text-white ring-emerald-600" : "bg-white text-zinc-700 ring-zinc-200 hover:ring-emerald-400")}>
-              {on ? <Check className="size-3.5" strokeWidth={3} /> : null}{letter}
-            </button>;
-          })}
-          {question.correctIndex >= 0 && question.options[question.correctIndex]?.trim() ? <span className="min-w-0 truncate text-xs text-emerald-800">= {question.options[question.correctIndex]}</span> : null}
+        <div role="radiogroup" aria-label={`প্রশ্ন ${index + 1}-এর সঠিক উত্তর`} className={cn("mt-3 rounded-xl px-3 py-2.5", question.correctIndex >= 0 ? "bg-emerald-50" : showErrors ? "bg-red-50" : "bg-zinc-50")}>
+          <div className="flex items-center gap-2">
+            <span className={cn("shrink-0 text-sm font-semibold", question.correctIndex >= 0 ? "text-emerald-800" : showErrors ? "text-red-700" : "text-zinc-700")}>সঠিক উত্তর</span>
+            {question.correctIndex >= 0 && question.options[question.correctIndex]?.trim() ? <span className="min-w-0 truncate text-xs text-emerald-800">= {question.options[question.correctIndex]}</span> : null}
+          </div>
+          <div className="mt-2 grid grid-cols-4 gap-2 sm:flex">
+            {OPTION_LETTERS.slice(0, question.options.length).map((letter, optionIndex) => {
+              const on = question.correctIndex === optionIndex;
+              return <button key={letter} type="button" role="radio" aria-checked={on} onClick={() => update(index, { correctIndex: optionIndex })} className={cn("flex h-10 items-center justify-center gap-1 rounded-lg px-3 text-sm font-semibold ring-1 transition sm:min-w-12", on ? "bg-emerald-600 text-white ring-emerald-600" : "bg-white text-zinc-700 ring-zinc-200 hover:ring-emerald-400")}>
+                {on ? <Check className="size-3.5" strokeWidth={3} /> : null}{letter}
+              </button>;
+            })}
+          </div>
         </div>
-        {showErrors && problems[index] ? <p className="mt-2 pl-8 text-xs text-red-600">{problems[index]}</p> : null}
+        {showErrors && problems[index] ? <p className="mt-2 text-xs text-red-600">{problems[index]}</p> : null}
       </li>)}
     </ol>
 
     <button type="button" onClick={() => setQuestions((list) => [...list, emptyQuestion()])} className="flex h-11 w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-zinc-300 text-sm font-medium text-zinc-600 hover:border-zinc-400 hover:bg-white"><Plus className="size-4" /> প্রশ্ন যোগ করো</button>
 
     {/* Save stays in reach while scrolling through many questions. */}
-    <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 border-t border-zinc-200 bg-white/90 px-4 py-3 backdrop-blur-xl lg:bottom-0 lg:pl-64">
+    <div data-dock-avoid className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 border-t border-zinc-200 bg-white/90 px-4 py-3 backdrop-blur-xl lg:bottom-0 lg:pl-64">
       <div className="container mx-auto flex items-center justify-between gap-3">
-        {dictating ? <p role="status" className="flex min-w-0 items-center gap-2 text-xs font-medium text-red-600"><Mic className="size-4 shrink-0 animate-pulse" /><span className="truncate">{heard && heard !== "…" ? heard : "শুনছি… বলো"}</span></p> : <p className="text-xs text-zinc-500">{questions.length}টি প্রশ্ন · {problems.filter((problem) => !problem).length}টি সম্পূর্ণ{unchecked ? <span className="font-medium text-amber-700"> · {unchecked} যাচাই বাকি</span> : null}</p>}
-        <button type="button" onClick={() => void save()} disabled={saving} className="h-11 rounded-xl bg-zinc-950 px-5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50">{saving ? "Saving…" : initial ? "সেভ করো" : "Set বানাও"}</button>
+        {dictating ? <p role="status" className="flex min-w-0 items-center gap-2 text-xs font-medium text-red-600"><Mic className="size-4 shrink-0 animate-pulse" /><span className="truncate">{heard && heard !== "…" ? heard : "শুনছি… বলো"}</span></p> : <p className="min-w-0 text-xs text-zinc-500">{questions.length}টি প্রশ্ন · {problems.filter((problem) => !problem).length}টি সম্পূর্ণ{unchecked ? <span className="font-medium text-amber-700"> · {unchecked} যাচাই বাকি</span> : null}</p>}
+        <button type="button" onClick={() => void save()} disabled={saving} className="h-11 shrink-0 rounded-xl bg-zinc-950 px-5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50">{saving ? "সেভ হচ্ছে…" : initial ? "সেভ করো" : "Set বানাও"}</button>
       </div>
     </div>
 
