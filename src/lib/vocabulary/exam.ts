@@ -1,5 +1,6 @@
 import { banglaVerbForms } from "@/lib/vocabulary/bangla-verb";
 import { banglaPlural } from "@/lib/vocabulary/nouns";
+import type { Sentence } from "@/lib/vocabulary/sentences";
 
 /**
  * Learned words, flashcards and exams (owner, 2026-10-18). A word the user ticks leaves the lists
@@ -26,14 +27,15 @@ export const EXAM_TYPES: Array<{ type: ExamType; title: string; hint: string }> 
 
 export type CardForm = { label: string; english: string; bangla: string };
 /** A learned word as a flashcard: the word, its meaning and its other forms. */
-export type VocabCard = { key: string; kind: WordKind; entryId: string; word: string; meaning: string; forms: CardForm[] };
+/** `sentences`: the word's example sentences, when the user may read them (paid). */
+export type VocabCard = { key: string; kind: WordKind; entryId: string; word: string; meaning: string; forms: CardForm[]; sentences?: Sentence[] | null };
 
 const present = (value: string) => value.trim() && value.trim() !== "-";
 
-export function verbCard(verb: { id: string; present: string; past: string; pastParticiple: string; meaning: string }): VocabCard {
+export function verbCard(verb: { id: string; present: string; past: string; pastParticiple: string; meaning: string; sentences?: Sentence[] | null }): VocabCard {
   const bangla = banglaVerbForms(verb.meaning, verb.present);
   return {
-    key: `VERB:${verb.id}`, kind: "VERB", entryId: verb.id, word: verb.present, meaning: verb.meaning,
+    key: `VERB:${verb.id}`, kind: "VERB", entryId: verb.id, word: verb.present, meaning: verb.meaning, sentences: verb.sentences,
     forms: [
       { label: "Present", english: verb.present, bangla: verb.meaning },
       { label: "Past", english: verb.past, bangla: bangla.past },
@@ -42,11 +44,11 @@ export function verbCard(verb: { id: string; present: string; past: string; past
   };
 }
 
-export function nounCard(noun: { id: string; singular: string; plural: string; meaning: string; person: boolean }): VocabCard {
+export function nounCard(noun: { id: string; singular: string; plural: string; meaning: string; person: boolean; sentences?: Sentence[] | null }): VocabCard {
   const forms: CardForm[] = [];
   if (present(noun.singular)) forms.push({ label: "Singular", english: noun.singular, bangla: noun.meaning });
   if (present(noun.plural)) forms.push({ label: "Plural", english: noun.plural, bangla: present(noun.singular) ? banglaPlural(noun.meaning, noun.person) : noun.meaning });
-  return { key: `NOUN:${noun.id}`, kind: "NOUN", entryId: noun.id, word: present(noun.singular) ? noun.singular : noun.plural, meaning: noun.meaning, forms };
+  return { key: `NOUN:${noun.id}`, kind: "NOUN", entryId: noun.id, word: present(noun.singular) ? noun.singular : noun.plural, meaning: noun.meaning, forms, sentences: noun.sentences };
 }
 
 /** "unhappy — অসুখী" → ["unhappy", "অসুখী"]. */
@@ -55,11 +57,11 @@ export function splitExample(example: string): [english: string, bangla: string]
   return [english.trim(), rest.join(" ").trim()];
 }
 
-export function affixCard(affix: { id: string; kind: "PREFIX" | "SUFFIX"; affix: string; meaning: string; example: string }): VocabCard {
+export function affixCard(affix: { id: string; kind: "PREFIX" | "SUFFIX"; affix: string; meaning: string; example: string; sentences?: Sentence[] | null }): VocabCard {
   const [english, bangla] = splitExample(affix.example);
   const forms: CardForm[] = [{ label: affix.kind === "PREFIX" ? "Prefix" : "Suffix", english: affix.affix, bangla: affix.meaning }];
   if (/^[A-Za-z][A-Za-z' -]*$/.test(english)) forms.push({ label: "উদাহরণ", english, bangla });
-  return { key: `AFFIX:${affix.id}`, kind: "AFFIX", entryId: affix.id, word: affix.affix, meaning: affix.meaning, forms };
+  return { key: `AFFIX:${affix.id}`, kind: "AFFIX", entryId: affix.id, word: affix.affix, meaning: affix.meaning, forms, sentences: affix.sentences };
 }
 
 /** A drag-and-drop pair: the prompt stays, the answer is dragged onto it. */

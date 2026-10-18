@@ -768,6 +768,9 @@ model VerbEntry {
   meaning        String
   /// The word explained in Bangla (meaning, use, examples), written with AI by staff; everyone reads it.
   explanation    String?
+  /// Six example sentences with their Bangla, `[{ form, en, bn }]` (src/lib/vocabulary/sentences.ts),
+  /// written with AI by staff; paid users read them.
+  sentences      Json?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -791,6 +794,9 @@ model AffixEntry {
   example     String    @default("")
   /// Explained in Bangla with AI by staff (see VerbEntry.explanation).
   explanation String?
+  /// Six example sentences with their Bangla, `[{ form, en, bn }]` (src/lib/vocabulary/sentences.ts),
+  /// written with AI by staff; paid users read them.
+  sentences   Json?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -810,6 +816,9 @@ model NounEntry {
   person      Boolean  @default(false)
   /// Explained in Bangla with AI by staff (see VerbEntry.explanation).
   explanation String?
+  /// Six example sentences with their Bangla, `[{ form, en, bn }]` (src/lib/vocabulary/sentences.ts),
+  /// written with AI by staff; paid users read them.
+  sentences   Json?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

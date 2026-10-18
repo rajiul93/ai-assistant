@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { BookOpenText, Check, ChevronDown, Eye, EyeOff, Loader2, Lock, Pencil, Plus, Search, Sparkles, Trash2, Volume2, X } from "lucide-react";
+import { BookOpenText, Check, ChevronDown, Eye, EyeOff, Loader2, Lock, MessageSquareQuote, Pencil, Plus, Search, Sparkles, Trash2, Volume2, X } from "lucide-react";
 import { toast } from "sonner";
 import { canPronounce, pronounce, useSpeaking } from "@/lib/pronounce";
 import { cn } from "@/lib/utils";
 import { bareAffix } from "@/lib/vocabulary/affixes";
 import { banglaVerbForms } from "@/lib/vocabulary/bangla-verb";
 import { banglaPlural, nounKey, pluralRule } from "@/lib/vocabulary/nouns";
+import type { Sentence } from "@/lib/vocabulary/sentences";
 import { createAffix, createNoun, createVerb, deleteAffix, deleteNoun, deleteVerb, setLearned, updateAffix, updateNoun, updateVerb, type getVocabState, type listAffixes, type listNouns, type listVerbs } from "@/server/actions/vocabulary";
 import { VocabDone } from "@/components/vocabulary/vocab-done";
 import { BATCH_SIZE, PASS_PERCENT } from "@/lib/vocabulary/exam";
@@ -131,45 +132,71 @@ function ProgressBar({ done, total, status, onStatus }: { done: number; total: n
 const matches = (query: string, ...fields: string[]) => !query.trim() || fields.some((field) => field.toLowerCase().includes(query.trim().toLowerCase()));
 const inStatus = (status: Status, learned: boolean) => status === "all" || (status === "done") === learned;
 
-/**
- * The word explained in Bangla: closed until tapped. Paid users (and staff) read it; others see a
- * lock that leads to Plans (the text never reached their page). Staff can write it with AI.
- */
-function Explain({ kind, id, explanation, hasExplanation, canEdit }: { kind: ExplainKind; id: string; explanation: string | null; hasExplanation: boolean; canEdit: boolean }) {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [text, setText] = useState(explanation);
-  const [busy, setBusy] = useState(false);
-  const locked = hasExplanation && text === null;
+/** Six example sentences, each with its Bangla, grouped under the form they use. */
+function SentenceList({ sentences }: { sentences: Sentence[] }) {
+  return <ol className="mt-2 space-y-1.5 rounded-2xl bg-sky-50/70 p-2.5 ring-1 ring-sky-100">
+    {sentences.map((sentence, index) => <li key={index} className="rounded-xl bg-white px-3 py-2">
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5 shrink-0 rounded-full bg-sky-100 px-1.5 text-[10.5px] font-bold text-sky-700">{sentence.form}</span>
+        <p className="min-w-0 flex-1 text-[14.5px] font-medium leading-snug text-slate-900">{sentence.en}</p>
+        <Speak text={sentence.en} className="size-7" />
+      </div>
+      <p className="mt-0.5 text-[13.5px] leading-snug text-slate-600">{sentence.bn}</p>
+    </li>)}
+  </ol>;
+}
 
-  async function write() {
-    setBusy(true);
+/**
+ * The word explained in Bangla and six example sentences: each closed until tapped. Paid users (and
+ * staff) read them; others see a lock that leads to Plans (the text never reached their page).
+ * Staff can write either with AI.
+ */
+function Explain({ kind, id, explanation, hasExplanation, sentences: initialSentences, hasSentences, canEdit }: { kind: ExplainKind; id: string; explanation: string | null; hasExplanation: boolean; sentences: Sentence[] | null; hasSentences: boolean; canEdit: boolean }) {
+  const router = useRouter();
+  const [open, setOpen] = useState<"explanation" | "sentences" | null>(null);
+  const [text, setText] = useState(explanation);
+  const [sentences, setSentences] = useState(initialSentences);
+  const [busy, setBusy] = useState<"explanation" | "sentences" | null>(null);
+  const lockedText = hasExplanation && text === null;
+  const lockedSentences = hasSentences && sentences === null;
+
+  async function write(what: "explanation" | "sentences") {
+    setBusy(what);
     try {
-      const response = await fetch("/api/vocabulary/explain", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, id }) });
-      const payload = (await response.json().catch(() => ({}))) as { explanation?: string; error?: string };
-      if (!response.ok || !payload.explanation) { toast.error(payload.error ?? "AI লিখতে পারল না।"); return; }
-      setText(payload.explanation);
-      setOpen(true);
-      toast.success("ব্যাখ্যা লেখা হলো — সবাই (paid) দেখতে পাবে");
+      const response = await fetch(what === "explanation" ? "/api/vocabulary/explain" : "/api/vocabulary/sentences", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, id }) });
+      const payload = (await response.json().catch(() => ({}))) as { explanation?: string; sentences?: Sentence[]; error?: string };
+      if (!response.ok || !(what === "explanation" ? payload.explanation : payload.sentences)) { toast.error(payload.error ?? "AI লিখতে পারল না।"); return; }
+      if (what === "explanation") setText(payload.explanation ?? null);
+      else setSentences(payload.sentences ?? null);
+      setOpen(what);
+      toast.success(what === "explanation" ? "ব্যাখ্যা লেখা হলো — সবাই (paid) দেখতে পাবে" : "৬টা বাক্য লেখা হলো — সবাই (paid) দেখতে পাবে");
       router.refresh();
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
-  if (!hasExplanation && !text && !canEdit) return null;
+  const toggle = (what: "explanation" | "sentences") => setOpen(open === what ? null : what);
+  const pill = (active: boolean) => cn("inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold transition", active ? "bg-violet-600 text-white" : "bg-violet-50 text-violet-700 hover:bg-violet-100");
+  const aiPill = "inline-flex h-8 items-center gap-1.5 rounded-full bg-linear-to-r from-violet-500 to-fuchsia-500 px-3 text-[12.5px] font-semibold text-white shadow-[0_6px_14px_-8px_rgba(139,92,246,0.9)] disabled:opacity-60";
+  const lock = (label: string) => <Link href="/billing" className="inline-flex h-8 items-center gap-1.5 rounded-full bg-amber-50 px-3 text-[12.5px] font-semibold text-amber-800 ring-1 ring-amber-200"><Lock className="size-3.5" /> {label} · Plan নিলে দেখবে</Link>;
+
+  if (!hasExplanation && !text && !hasSentences && !sentences && !canEdit) return null;
   return <div className="mt-2.5">
     <div className="flex flex-wrap items-center gap-1.5">
-      {locked
-        ? <Link href="/billing" className="inline-flex h-8 items-center gap-1.5 rounded-full bg-amber-50 px-3 text-[12.5px] font-semibold text-amber-800 ring-1 ring-amber-200"><Lock className="size-3.5" /> বাংলায় ব্যাখ্যা · Plan নিলে দেখবে</Link>
-        : text ? <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className={cn("inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-semibold transition", open ? "bg-violet-600 text-white" : "bg-violet-50 text-violet-700 hover:bg-violet-100")}>
-          <BookOpenText className="size-3.5" /> বাংলায় ব্যাখ্যা <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
-        </button> : null}
-      {canEdit ? <button type="button" onClick={() => void write()} disabled={busy} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-linear-to-r from-violet-500 to-fuchsia-500 px-3 text-[12.5px] font-semibold text-white shadow-[0_6px_14px_-8px_rgba(139,92,246,0.9)] disabled:opacity-60">
-        {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />} {text || hasExplanation ? "AI দিয়ে আবার লেখো" : "AI দিয়ে বোঝাও"}
+      {lockedText ? lock("বাংলায় ব্যাখ্যা") : text ? <button type="button" onClick={() => toggle("explanation")} aria-expanded={open === "explanation"} className={pill(open === "explanation")}>
+        <BookOpenText className="size-3.5" /> বাংলায় ব্যাখ্যা <ChevronDown className={cn("size-3.5 transition-transform", open === "explanation" && "rotate-180")} />
       </button> : null}
+      {lockedSentences ? lock("উদাহরণ বাক্য") : sentences ? <button type="button" onClick={() => toggle("sentences")} aria-expanded={open === "sentences"} className={pill(open === "sentences")}>
+        <MessageSquareQuote className="size-3.5" /> উদাহরণ বাক্য {sentences.length} <ChevronDown className={cn("size-3.5 transition-transform", open === "sentences" && "rotate-180")} />
+      </button> : null}
+      {canEdit ? <>
+        <button type="button" onClick={() => void write("explanation")} disabled={Boolean(busy)} className={aiPill}>{busy === "explanation" ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />} {text || hasExplanation ? "ব্যাখ্যা আবার লেখো" : "AI দিয়ে বোঝাও"}</button>
+        <button type="button" onClick={() => void write("sentences")} disabled={Boolean(busy)} className={aiPill}>{busy === "sentences" ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />} {sentences || hasSentences ? "বাক্য আবার লেখো" : "AI দিয়ে বাক্য লেখো"}</button>
+      </> : null}
     </div>
-    {open && text ? <div className="mt-2 whitespace-pre-line rounded-2xl bg-violet-50/70 px-3.5 py-3 text-[14.5px] leading-relaxed text-slate-800 ring-1 ring-violet-100">{text}</div> : null}
+    {open === "explanation" && text ? <div className="mt-2 whitespace-pre-line rounded-2xl bg-violet-50/70 px-3.5 py-3 text-[14.5px] leading-relaxed text-slate-800 ring-1 ring-violet-100">{text}</div> : null}
+    {open === "sentences" && sentences ? <SentenceList sentences={sentences} /> : null}
   </div>;
 }
 
@@ -187,13 +214,14 @@ function EditButtons({ label, pending, onEdit, onDelete }: { label: string; pend
 
 /** A form of a word in a small tile: label, the English with 🔊, and its Bangla (both can be hidden). */
 function FormTile({ label, english, bangla, hideEnglish, hideBangla, tone }: { label: string; english: string; bangla: string; hideEnglish: boolean; hideBangla: boolean; tone: string }) {
+  // 🔊 sits on the label's row, so the word itself gets the whole width and stays on one line.
   return <div className={cn("min-w-0 rounded-2xl px-3 py-2", tone)}>
-    <p className="text-[10.5px] font-bold uppercase tracking-wide opacity-70">{label}</p>
+    <div className="flex items-center justify-between gap-1.5">
+      <p className="text-[10.5px] font-bold uppercase tracking-wide opacity-70">{label}</p>
+      {hideEnglish ? null : <Speak text={english} className="-mr-1 size-7" />}
+    </div>
     <QuizCell hidden={hideEnglish}>
-      <div className="mt-0.5 flex items-center gap-1.5">
-        <p className="min-w-0 flex-1 text-[16px] font-bold leading-snug text-slate-900 [overflow-wrap:anywhere]">{english}</p>
-        <Speak text={english} className="size-7" />
-      </div>
+      <p className="mt-0.5 text-[16px] font-bold leading-snug text-slate-900 [overflow-wrap:anywhere]">{english}</p>
       {bangla ? <p className="text-[13.5px] text-slate-600"><QuizCell hidden={hideBangla}>{bangla}</QuizCell></p> : null}
     </QuizCell>
   </div>;
@@ -321,7 +349,7 @@ function VerbTable({ verbs, canEdit, learned, onDone }: { verbs: Verb[]; canEdit
             <FormTile label="Past" english={verb.past} bangla={verb.bangla.past} hideEnglish={hidden.past} hideBangla={hidden.bangla} tone="bg-sky-50 text-sky-800" />
             <FormTile label="Past participle" english={verb.pastParticiple} bangla={verb.bangla.pastParticiple} hideEnglish={hidden.pastParticiple} hideBangla={hidden.bangla} tone="bg-violet-50 text-violet-800" />
           </div>
-          <Explain kind="VERB" id={verb.id} explanation={verb.explanation} hasExplanation={verb.hasExplanation} canEdit={canEdit} />
+          <Explain kind="VERB" id={verb.id} explanation={verb.explanation} hasExplanation={verb.hasExplanation} sentences={verb.sentences} hasSentences={verb.hasSentences} canEdit={canEdit} />
         </li>)}
     </ul>
     {!shown.length ? <p className="rounded-3xl bg-white px-4 py-10 text-center text-sm text-slate-500">{!rows.length ? "এখনো কোনো verb নেই।" : done === rows.length ? "সব verb শেখা হয়ে গেছে — Done-এ দেখো।" : "কিছু মিলল না।"}</p> : null}
@@ -552,7 +580,7 @@ function NounTable({ nouns, canEdit, learned, onDone }: { nouns: Noun[]; canEdit
               ? <div className="rounded-2xl bg-slate-50 px-3 py-2 text-sm text-slate-400">Plural হয় না</div>
               : <FormTile label="Plural" english={row.plural} bangla={row.singular === "-" ? row.meaning : banglaPlural(row.meaning, row.person)} hideEnglish={hidden.plural} hideBangla={hidden.bangla} tone="bg-emerald-50 text-emerald-800" />}
           </div>
-          <Explain kind="NOUN" id={row.id} explanation={row.explanation} hasExplanation={row.hasExplanation} canEdit={canEdit} />
+          <Explain kind="NOUN" id={row.id} explanation={row.explanation} hasExplanation={row.hasExplanation} sentences={row.sentences} hasSentences={row.hasSentences} canEdit={canEdit} />
         </li>)}
     </ul>
     {!shown.length ? <p className="rounded-3xl bg-white px-4 py-10 text-center text-sm text-slate-500">{!rows.length ? "এখনো কোনো noun নেই।" : done === rows.length ? "সব noun শেখা হয়ে গেছে — Done-এ দেখো।" : "কিছু মিলল না।"}</p> : null}
@@ -660,12 +688,54 @@ function AffixTable({ affixes, canEdit, learned, onDone }: { affixes: Affix[]; c
             <p className="min-w-0 flex-1 text-[14px] text-amber-950 [overflow-wrap:anywhere]">{entry.example}</p>
             <Speak text={exampleWord(entry.example)} className="size-7" />
           </div> : null}
-          <Explain kind="AFFIX" id={entry.id} explanation={entry.explanation} hasExplanation={entry.hasExplanation} canEdit={canEdit} />
+          <Explain kind="AFFIX" id={entry.id} explanation={entry.explanation} hasExplanation={entry.hasExplanation} sentences={entry.sentences} hasSentences={entry.hasSentences} canEdit={canEdit} />
         </li>)}
     </ul>
     {!shown.length ? <p className="rounded-3xl bg-white px-4 py-10 text-center text-sm text-slate-500">{rows.length ? "কিছু মিলল না।" : "এখনো কিছু নেই।"}</p> : null}
     <p className="text-xs text-slate-500">{shown.length}টি দেখানো হচ্ছে</p>
   </section>;
+}
+
+/**
+ * Staff only: writes the six example sentences for every word that has none yet, three at a time,
+ * with a progress bar and a stop button. Each word is one AI call (the same as its own button).
+ */
+function BulkSentences({ missing }: { missing: Array<{ kind: ExplainKind; id: string }> }) {
+  const router = useRouter();
+  const [run, setRun] = useState<{ done: number; total: number; failed: number } | null>(null);
+  const stop = useRef(false);
+  if (!missing.length && !run) return null;
+
+  async function start() {
+    stop.current = false;
+    const queue = [...missing];
+    let done = 0;
+    let failed = 0;
+    setRun({ done, total: queue.length, failed });
+    const worker = async () => {
+      while (!stop.current && queue.length) {
+        const word = queue.shift()!;
+        const response = await fetch("/api/vocabulary/sentences", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(word) }).catch(() => null);
+        if (!response?.ok) failed++;
+        // A refused call (no AI access, out of tokens) would fail every word: stop instead.
+        if (response?.status === 403) stop.current = true;
+        done++;
+        setRun({ done, total: missing.length, failed });
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    toast.success(`${done - failed}টা শব্দের বাক্য লেখা হলো${failed ? ` · ${failed}টা পারেনি` : ""}`);
+    setRun(null);
+    router.refresh();
+  }
+
+  return <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-violet-200 bg-violet-50/80 p-3">
+    <p className="mr-auto text-[13px] text-violet-900"><span className="font-semibold">Staff:</span> {run ? `বাক্য লেখা হচ্ছে ${run.done}/${run.total}…` : `${missing.length}টা শব্দে এখনো উদাহরণ বাক্য নেই।`}</p>
+    {run
+      ? <button type="button" onClick={() => { stop.current = true; }} className="h-9 rounded-xl bg-white px-3 text-sm font-semibold text-violet-800 ring-1 ring-violet-200">থামাও</button>
+      : <button type="button" onClick={() => void start()} className="flex h-9 items-center gap-1.5 rounded-xl bg-violet-700 px-3 text-sm font-semibold text-white"><Sparkles className="size-4" /> AI দিয়ে সবগুলোর বাক্য লেখো</button>}
+    {run ? <div className="h-1.5 w-full overflow-hidden rounded-full bg-violet-100"><div className="h-full rounded-full bg-violet-600 transition-all" style={{ width: `${Math.round((run.done / run.total) * 100)}%` }} /></div> : null}
+  </div>;
 }
 
 /**
@@ -704,6 +774,7 @@ export function VocabularyView({ verbs, affixes, nouns, state, canEdit }: { verb
         .then(() => {
           router.refresh();
           if (next && kind !== "PERSON") toast.success(`“${label ?? "শব্দটা"}” Done-এ গেল`, { action: { label: "ফেরাও", onClick: () => learned.toggle(kind, id, label) } });
+          else if (kind !== "PERSON") toast.success(`“${label ?? "শব্দটা"}” আবার তালিকায় ফিরে গেল`);
         })
         .catch((error) => { flip(!next); toast.error(errorMessage(error, "সেভ করা গেল না — আবার চেষ্টা করো।")); });
     },
@@ -735,6 +806,12 @@ export function VocabularyView({ verbs, affixes, nouns, state, canEdit }: { verb
       </div>
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/25"><div className="h-full rounded-full bg-white transition-all" style={{ width: `${allTotal ? Math.round((allDone / allTotal) * 100) : 0}%` }} /></div>
     </section>
+
+    {canEdit && active !== "persons" && active !== "done" ? <BulkSentences missing={[
+      ...verbs.filter((verb) => !verb.hasSentences).map((verb) => ({ kind: "VERB" as const, id: verb.id })),
+      ...nouns.filter((noun) => !noun.hasSentences).map((noun) => ({ kind: "NOUN" as const, id: noun.id })),
+      ...affixes.filter((affix) => !affix.hasSentences).map((affix) => ({ kind: "AFFIX" as const, id: affix.id })),
+    ]} /> : null}
 
     <div role="tablist" aria-label="Vocabulary" className={chipRow}>
       {tabs.map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={active === tab.id} onClick={() => openTab(tab.id)} className={cn(chip(active === tab.id), tab.id === "done" && active !== tab.id && "text-emerald-700")}>

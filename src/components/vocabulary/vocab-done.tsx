@@ -41,6 +41,14 @@ function Flashcard({ card, missed, onUnlearn }: { card: VocabCard; missed: boole
             <span className="min-w-0 text-right"><span className="block text-[16px] font-bold text-slate-900 [overflow-wrap:anywhere]">{form.english}</span>{form.bangla ? <span className="block text-[12.5px] text-slate-500">{form.bangla}</span> : null}</span>
           </div>)}
         </div>
+        {/* Example sentences (paid users), each with its Bangla. */}
+        {card.sentences?.length ? <div className="space-y-1.5 pt-1 text-left">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">উদাহরণ বাক্য</p>
+          {card.sentences.map((sentence, index) => <div key={index} className="rounded-2xl bg-white px-3 py-2">
+            <p className="text-[14px] font-medium leading-snug text-slate-900"><span className="mr-1.5 rounded-full bg-sky-100 px-1.5 text-[10.5px] font-bold text-sky-700">{sentence.form}</span>{sentence.en}</p>
+            <p className="mt-0.5 text-[13px] leading-snug text-slate-600">{sentence.bn}</p>
+          </div>)}
+        </div> : null}
       </div> : <>
         <p className="text-[34px] font-bold tracking-tight text-slate-900 [overflow-wrap:anywhere]">{card.word}</p>
         <p className="mt-2 text-xs text-slate-400">চাপ দিয়ে উল্টাও</p>
@@ -48,7 +56,7 @@ function Flashcard({ card, missed, onUnlearn }: { card: VocabCard; missed: boole
     </button>
     <div className="flex items-center justify-center gap-2">
       <button type="button" onClick={() => (canPronounce() ? pronounce(card.word) : toast.error("এই browser-এ উচ্চারণ শোনা যায় না।"))} className="flex h-9 items-center gap-1.5 rounded-full bg-blue-50 px-3 text-[13px] font-semibold text-blue-700"><Volume2 className="size-4" /> শোনো</button>
-      <button type="button" onClick={onUnlearn} className="flex h-9 items-center gap-1.5 rounded-full bg-white px-3 text-[13px] font-semibold text-slate-600 ring-1 ring-slate-200"><Undo2 className="size-4" /> আবার শিখব</button>
+      <button type="button" onClick={onUnlearn} title="ভুল করে টিক দিয়েছ বা আবার শিখতে চাও — শব্দটা তালিকায় ফিরে যাবে" className="flex h-9 items-center gap-1.5 rounded-full bg-amber-50 px-3 text-[13px] font-semibold text-amber-800 ring-1 ring-amber-200"><Undo2 className="size-4" /> তালিকায় ফেরত পাঠাও</button>
     </div>
   </div>;
 }
