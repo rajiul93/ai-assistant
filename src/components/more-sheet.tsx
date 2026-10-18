@@ -38,10 +38,13 @@ export function MoreSheet({ links, adminLinks, userName, userImage, isActive, ba
 }) {
   const grouped = new Set(GROUPS.flatMap((group) => group.hrefs));
   const skip = new Set(["/profile", ...ACCOUNT.map((item) => item.href)]);
+  // "রেফার করে আয়" is a tile under "আরো" here (owner, 2026-10-18), not a button on the profile card.
+  const accountButtons = ACCOUNT.filter((item) => item.href !== "/affiliate");
+  const refer = links.filter((link) => link.href === "/affiliate");
   // A page added later shows up under "আরো" until it is given a group.
   const others = links.filter((link) => !grouped.has(link.href) && !skip.has(link.href));
   const sections = [
-    ...GROUPS.map((group) => ({ title: group.title, items: [...group.hrefs.map((href) => links.find((link) => link.href === href)).filter((link): link is NavLink => Boolean(link)), ...(group.title === "আরো" ? others : [])] })),
+    ...GROUPS.map((group) => ({ title: group.title, items: [...group.hrefs.map((href) => links.find((link) => link.href === href)).filter((link): link is NavLink => Boolean(link)), ...(group.title === "আরো" ? [...refer, ...others] : [])] })),
     { title: "Admin", items: adminLinks },
   ].filter((section) => section.items.length);
 
@@ -64,7 +67,7 @@ export function MoreSheet({ links, adminLinks, userName, userImage, isActive, ba
       <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/20"><ChevronRight className="size-5" /></span>
     </Link>
     <div className="mt-3 grid grid-cols-2 gap-2">
-      {ACCOUNT.map((item) => <Link key={item.href} href={item.href} onClick={onClose} aria-current={isActive(item.href) ? "page" : undefined} className={cn("flex h-9 items-center justify-center rounded-xl text-[13px] font-semibold ring-1 transition active:scale-95", isActive(item.href) ? "bg-white text-blue-700 ring-white" : "bg-white/15 text-white ring-white/30 hover:bg-white/25")}>{item.label}</Link>)}
+      {accountButtons.map((item) => <Link key={item.href} href={item.href} onClick={onClose} aria-current={isActive(item.href) ? "page" : undefined} className={cn("flex h-9 items-center justify-center rounded-xl text-[13px] font-semibold ring-1 transition active:scale-95", isActive(item.href) ? "bg-white text-blue-700 ring-white" : "bg-white/15 text-white ring-white/30 hover:bg-white/25")}>{item.label}</Link>)}
     </div>
     </div>
 

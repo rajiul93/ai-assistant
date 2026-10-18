@@ -48,7 +48,7 @@ export const links: NavLink[] = [
   { href: "/jobs", label: "Jobs", short: "Jobs", icon: BriefcaseBusiness },
   { href: "/usage", label: "AI Usage", short: "AI Usage", icon: Gauge },
   { href: "/billing", label: "Plans", short: "Plans", icon: CreditCard },
-  { href: "/affiliate", label: "রেফার করে আয়", short: "রেফার", icon: Share2 },
+  { href: "/affiliate", label: "রেফার করে আয়", short: "রেফার করে আয়", icon: Share2 },
   { href: "/profile", label: "Profile", short: "Profile", icon: UserRound },
 ];
 
@@ -129,7 +129,10 @@ export const NAV_GROUPS: Array<{ title: string; hrefs: string[] }> = [
   { title: "আরো", hrefs: ["/videos", "/vocabulary", "/messages"] },
 ];
 
-/** Account pages: on the phone they ride on the profile card, in the sidebar they are a group. */
+/**
+ * Account pages: on the phone they ride on the profile card (except "রেফার করে আয়", a tile under
+ * "আরো"), in the sidebar they are a group.
+ */
 export const ACCOUNT_LINKS = [
   { href: "/billing", label: "আমার প্ল্যান" },
   { href: "/usage", label: "AI ব্যবহার" },
