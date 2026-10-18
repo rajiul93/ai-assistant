@@ -125,7 +125,7 @@ export const toneOf = (href: string) => TONES[href] ?? "from-blue-400 to-blue-60
 
 /**
  * Pages in groups, four to a group where possible so the phone sheet's rows fill. The phone tab
- * bar holds Home, Tasks, Notes and Jobs; the sidebar lists them first as "মূল".
+ * bar holds Home, Tasks and Notes (Jobs is under More there); the sidebar lists them and Jobs first as "মূল".
  */
 export const NAV_GROUPS: Array<{ title: string; hrefs: string[] }> = [
   { title: "পড়াশোনা", hrefs: ["/subjects", "/plan", "/progress", "/typing"] },
