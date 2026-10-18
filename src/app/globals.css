@@ -163,8 +163,21 @@ html {
   .sheet-content[data-state="open"] { animation: sheet-up 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
 }
 
+/* Vocabulary flashcards: the next card slides in from the side the last one did not leave by. */
+@keyframes card-in-right {
+  from { transform: translateX(70%) rotate(5deg); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes card-in-left {
+  from { transform: translateX(-70%) rotate(-5deg); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.card-in-right { animation: card-in-right 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.card-in-left { animation: card-in-left 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); }
+
 @media (prefers-reduced-motion: reduce) {
   .sheet-content[data-state="open"] { animation: none; }
+  .card-in-right, .card-in-left { animation: none; }
 }
 
 /* Light only: the owner chose no dark mode. `color-scheme: light` also keeps the browser's own

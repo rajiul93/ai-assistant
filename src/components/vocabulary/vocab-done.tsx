@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, Check, Lock, RotateCcw, Shuffle, Trophy, Undo2, 
 import { toast } from "sonner";
 import { VocabExam, type ExamPlan } from "@/components/vocabulary/vocab-exam";
 import { canPronounce, pronounce } from "@/lib/pronounce";
+import { playSwipeSound } from "@/lib/swipe-sound";
 import { cn } from "@/lib/utils";
 import { affixCard, BATCH_SIZE, buildExam, EXAM_TYPES, nounCard, PASS_PERCENT, rounds, shuffle, verbCard, type BatchStatus, type ExamType, type MatchItem, type VocabCard, type WordKind } from "@/lib/vocabulary/exam";
 import type { listAffixes, listNouns, listVerbs } from "@/server/actions/vocabulary";
@@ -26,31 +27,44 @@ export function planExam(type: ExamType, cards: readonly VocabCard[], revision: 
 /** A finger drag further than this (px) sideways turns to the next or previous card. */
 const SWIPE = 60;
 
+/** How long a swiped card takes to fly off before the next one comes in. */
+const FLY_MS = 200;
+
 /**
  * One learned word on the primary blue, front (the word) and back (its forms, meaning and sentences).
- * Tap to turn it over; swipe left for the next card, right for the previous one.
+ * Tap to turn it over; swipe left for the next card, right for the previous one: the card flies
+ * off with a soft whoosh and the next slides in from the other side (`enter`).
  */
-function Flashcard({ card, missed, onUnlearn, onNext, onPrev }: { card: VocabCard; missed: boolean; onUnlearn: () => void; onNext?: () => void; onPrev?: () => void }) {
+function Flashcard({ card, missed, enter, onUnlearn, onNext, onPrev }: { card: VocabCard; missed: boolean; enter: "left" | "right" | null; onUnlearn: () => void; onNext?: () => void; onPrev?: () => void }) {
   const [back, setBack] = useState(false);
   const [dx, setDx] = useState(0);
-  const drag = useRef<{ x: number; y: number; sideways: boolean | null } | null>(null);
+  const [flying, setFlying] = useState(false);
+  // The drag itself (with its latest distance) lives here: state may lag behind the last move.
+  const drag = useRef<{ x: number; y: number; dx: number; sideways: boolean | null } | null>(null);
   // A swipe ends in a click on the card too; that click must not flip it.
   const swiped = useRef(false);
 
   function onPointerUp() {
     const from = drag.current;
     drag.current = null;
-    if (from?.sideways && Math.abs(dx) > SWIPE) {
+    if (from?.sideways && Math.abs(from.dx) > SWIPE) {
       swiped.current = true;
-      (dx < 0 ? onNext : onPrev)?.();
-    } else if (from?.sideways) swiped.current = true;
+      // Off the screen the way it was going, then the next card.
+      const next = from.dx < 0;
+      setFlying(true);
+      setDx(next ? -window.innerWidth : window.innerWidth);
+      playSwipeSound();
+      window.setTimeout(() => (next ? onNext : onPrev)?.(), FLY_MS);
+      return;
+    }
+    if (from?.sideways) swiped.current = true;
     setDx(0);
   }
 
   return <div className="space-y-2">
     <button type="button" aria-label={back ? "সামনের দিক দেখো" : "উল্টে দেখো"}
       onClick={() => { if (swiped.current) { swiped.current = false; return; } setBack(!back); }}
-      onPointerDown={(event) => { drag.current = { x: event.clientX, y: event.clientY, sideways: null }; swiped.current = false; }}
+      onPointerDown={(event) => { drag.current = { x: event.clientX, y: event.clientY, dx: 0, sideways: null }; swiped.current = false; }}
       onPointerMove={(event) => {
         const from = drag.current;
         if (!from) return;
@@ -58,12 +72,12 @@ function Flashcard({ card, missed, onUnlearn, onNext, onPrev }: { card: VocabCar
         const y = event.clientY - from.y;
         // Decide once whether this is a sideways swipe or a scroll down the page.
         if (from.sideways === null && Math.hypot(x, y) > 8) from.sideways = Math.abs(x) > Math.abs(y);
-        if (from.sideways) setDx(x);
+        if (from.sideways) { from.dx = x; setDx(x); }
       }}
       onPointerUp={onPointerUp}
       onPointerCancel={() => { drag.current = null; setDx(0); }}
-      style={{ transform: dx ? `translateX(${dx}px) rotate(${dx / 30}deg)` : undefined, transition: dx ? "none" : "transform 0.25s cubic-bezier(0.2,0.8,0.2,1)" }}
-      className="relative flex min-h-56 w-full touch-pan-y select-none flex-col items-center justify-center overflow-hidden rounded-3xl bg-linear-to-br from-[#3f6ef3] via-[#5a87f8] to-[#8fa6fb] p-5 text-center text-white shadow-[0_14px_32px_-18px_rgba(37,99,235,0.8)]">
+      style={{ transform: dx ? `translateX(${dx}px) rotate(${dx / 30}deg)` : undefined, transition: flying ? `transform ${FLY_MS}ms ease-in, opacity ${FLY_MS}ms ease-in` : dx ? "none" : "transform 0.25s cubic-bezier(0.2,0.8,0.2,1)", opacity: flying ? 0 : 1 }}
+      className={cn(enter === "right" ? "card-in-right" : enter === "left" ? "card-in-left" : "", "relative flex min-h-56 w-full touch-pan-y select-none flex-col items-center justify-center overflow-hidden rounded-3xl bg-linear-to-br from-[#3f6ef3] via-[#5a87f8] to-[#8fa6fb] p-5 text-center text-white shadow-[0_14px_32px_-18px_rgba(37,99,235,0.8)]")}>
       {/* Two soft circles, as on the profile card. */}
       <span aria-hidden className="pointer-events-none absolute -right-10 -top-10 size-40 rounded-full bg-white/10" />
       <span aria-hidden className="pointer-events-none absolute -bottom-16 left-10 size-36 rounded-full bg-white/10" />
@@ -121,6 +135,10 @@ export function VocabDone({ verbs, nouns, affixes, learned, status, onUnlearn }:
   const [filter, setFilter] = useState<"all" | "set" | "missed">("all");
   const [order, setOrder] = useState<string[] | null>(null);
   const [at, setAt] = useState(0);
+  // The side the next card slides in from (none for the first card or a new filter).
+  const [enter, setEnter] = useState<"left" | "right" | null>(null);
+  // Every turn mounts a fresh card, even when the deck has one word and "next" is the same one.
+  const [turn, setTurn] = useState(0);
   const [exam, setExam] = useState<ExamPlan | null>(null);
   const [examCards, setExamCards] = useState<VocabCard[]>([]);
 
@@ -129,6 +147,14 @@ export function VocabDone({ verbs, nouns, affixes, learned, status, onUnlearn }:
   const deck = order ? order.map((key) => deckBase.find((card) => card.key === key)).filter((card): card is VocabCard => Boolean(card)) : deckBase;
   const index = Math.min(at, Math.max(0, deck.length - 1));
   const card = deck[index];
+
+  /** To the next or previous card (wrapping at the ends), sliding in from the matching side; a swipe already made its sound. */
+  const go = (direction: "next" | "prev", sound = true) => {
+    if (sound) playSwipeSound();
+    setEnter(direction === "next" ? "right" : "left");
+    setTurn((value) => value + 1);
+    setAt(direction === "next" ? (index < deck.length - 1 ? index + 1 : 0) : (index > 0 ? index - 1 : deck.length - 1));
+  };
 
   const start = (type: ExamType, cards: VocabCard[], revision: boolean) => {
     if (cards.length < MIN_WORDS) { toast.error(`Exam-এর জন্য অন্তত ${MIN_WORDS}টা শব্দ লাগবে।`); return; }
@@ -178,7 +204,7 @@ export function VocabDone({ verbs, nouns, affixes, learned, status, onUnlearn }:
     <section className={cn(panel, missed.length ? "ring-1 ring-rose-100" : "")}>
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-base font-bold text-slate-900">ভুলগুলো <span className="text-rose-600">{missed.length}</span></h2>
-        {missed.length ? <button type="button" onClick={() => { setFilter("missed"); setOrder(null); setAt(0); }} className="text-[13px] font-semibold text-rose-700">Flashcard-এ দেখো</button> : null}
+        {missed.length ? <button type="button" onClick={() => { setFilter("missed"); setOrder(null); setAt(0); setEnter(null); }} className="text-[13px] font-semibold text-rose-700">Flashcard-এ দেখো</button> : null}
       </div>
       {missed.length ? <>
         <p className="mt-1 text-[12.5px] text-slate-500">Exam-এ যেগুলো ভুল হয়েছে — ঠিক হলে এখান থেকে সরে যাবে।</p>
@@ -191,17 +217,17 @@ export function VocabDone({ verbs, nouns, affixes, learned, status, onUnlearn }:
     {/* Every learned word as a flashcard. */}
     <section className="space-y-2.5">
       <div className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none]">
-        {([["all", `সব ${rows.length}`], ["set", `এই সেট ${inSet.length}`], ["missed", `ভুল ${missed.length}`]] as const).map(([id, label]) => <button key={id} type="button" onClick={() => { setFilter(id); setOrder(null); setAt(0); }} aria-pressed={filter === id} className={cn("h-9 shrink-0 rounded-full px-3.5 text-[13px] font-semibold transition", filter === id ? "bg-slate-900 text-white" : "bg-white text-slate-600 shadow-[0_2px_8px_-4px_rgba(15,23,42,0.2)]")}>{label}</button>)}
+        {([["all", `সব ${rows.length}`], ["set", `এই সেট ${inSet.length}`], ["missed", `ভুল ${missed.length}`]] as const).map(([id, label]) => <button key={id} type="button" onClick={() => { setFilter(id); setOrder(null); setAt(0); setEnter(null); }} aria-pressed={filter === id} className={cn("h-9 shrink-0 rounded-full px-3.5 text-[13px] font-semibold transition", filter === id ? "bg-slate-900 text-white" : "bg-white text-slate-600 shadow-[0_2px_8px_-4px_rgba(15,23,42,0.2)]")}>{label}</button>)}
         <button type="button" onClick={() => { setOrder(shuffle(deckBase.map((item) => item.key))); setAt(0); }} className="ml-auto flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-white px-3 text-[13px] font-semibold text-slate-600 shadow-[0_2px_8px_-4px_rgba(15,23,42,0.2)]"><Shuffle className="size-4" /> এলোমেলো</button>
       </div>
       {card ? <>
-        <Flashcard key={card.key} card={card} missed={missedKeys.has(card.key)} onUnlearn={() => onUnlearn(card.kind, card.entryId, card.word)}
-          onNext={() => setAt(index < deck.length - 1 ? index + 1 : 0)} onPrev={() => setAt(index > 0 ? index - 1 : deck.length - 1)} />
+        <Flashcard key={`${card.key}:${turn}`} card={card} missed={missedKeys.has(card.key)} onUnlearn={() => onUnlearn(card.kind, card.entryId, card.word)}
+          enter={enter} onNext={() => go("next", false)} onPrev={() => go("prev", false)} />
         <div className="flex items-center justify-between gap-2">
-          <button type="button" onClick={() => setAt(Math.max(0, index - 1))} disabled={index === 0} className="flex h-11 items-center gap-1.5 rounded-2xl bg-white px-4 text-sm font-semibold text-slate-700 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.25)] disabled:opacity-40"><ArrowLeft className="size-4" /> আগের</button>
+          <button type="button" onClick={() => go("prev")} disabled={index === 0} className="flex h-11 items-center gap-1.5 rounded-2xl bg-white px-4 text-sm font-semibold text-slate-700 shadow-[0_2px_10px_-4px_rgba(15,23,42,0.25)] disabled:opacity-40"><ArrowLeft className="size-4" /> আগের</button>
           <p className="text-sm font-semibold tabular-nums text-slate-500">{index + 1} / {deck.length}</p>
           {index < deck.length - 1
-            ? <button type="button" onClick={() => setAt(index + 1)} className="flex h-11 items-center gap-1.5 rounded-2xl bg-slate-900 px-4 text-sm font-semibold text-white">পরের <ArrowRight className="size-4" /></button>
+            ? <button type="button" onClick={() => go("next")} className="flex h-11 items-center gap-1.5 rounded-2xl bg-slate-900 px-4 text-sm font-semibold text-white">পরের <ArrowRight className="size-4" /></button>
             : <button type="button" onClick={() => setAt(0)} className="flex h-11 items-center gap-1.5 rounded-2xl bg-slate-900 px-4 text-sm font-semibold text-white"><RotateCcw className="size-4" /> আবার</button>}
         </div>
       </> : <p className={cn(panel, "py-8 text-center text-sm text-slate-500")}>এখানে কোনো শব্দ নেই।</p>}
