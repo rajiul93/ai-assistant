@@ -44,8 +44,8 @@ function AccountLink({ href, icon: Icon, tone, title, detail }: { href: string; 
 const input = "h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-[15px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-50 disabled:text-slate-500";
 
 /**
- * /profile: who you are at a glance (photo, name, plan, member since), the name friends and groups
- * see and the private phone number, and the other account pages.
+ * /profile: who you are at a glance (photo, name, plan, member since), the other account pages,
+ * and the name friends and groups see and the private phone number.
  */
 export function ProfileForm({ initial, plan, staff }: { initial: Profile; plan: Plan; staff: boolean }) {
   const router = useRouter();
@@ -97,7 +97,14 @@ export function ProfileForm({ initial, plan, staff }: { initial: Profile; plan: 
       <p className="relative mt-4 flex items-center gap-1.5 text-xs text-white/80"><CalendarDays className="size-3.5" /> Prep-এ আছ {formatDate(initial.createdAt)} থেকে</p>
     </section>
 
-    <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
+    <div className="grid gap-4 lg:grid-cols-[20rem_1fr]">
+      <section className={cn(card, "h-fit space-y-1")}>
+        <h2 className="px-2 pb-1 text-base font-bold text-slate-900">অ্যাকাউন্ট</h2>
+        <AccountLink href="/billing" icon={Crown} tone="from-yellow-400 to-amber-500" title="আমার প্ল্যান" detail={plan.active && plan.endsAt ? `চলবে ${formatDate(plan.endsAt)} পর্যন্ত` : "Plan দেখো ও নাও"} />
+        <AccountLink href="/usage" icon={Gauge} tone="from-orange-400 to-amber-600" title="AI ব্যবহার" detail="আজ আর মোট কতটা খরচ হলো" />
+        <AccountLink href="/affiliate" icon={Share2} tone="from-emerald-400 to-teal-600" title="রেফার করে আয়" detail="বন্ধুদের link দাও, তারা plan কিনলে তুমি পাবে" />
+      </section>
+
       <form onSubmit={save} className={cn(card, "space-y-5")}>
         <h2 className="text-base font-bold text-slate-900">তোমার তথ্য</h2>
         <Field icon={UserRound} tone="bg-blue-50 text-blue-600" label="নাম" htmlFor="profile-name" hint="Friend-রা আর গ্রুপের সদস্যরা এই নাম দেখবে।">
@@ -117,13 +124,6 @@ export function ProfileForm({ initial, plan, staff }: { initial: Profile; plan: 
           {pending ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />} {pending ? "সেভ হচ্ছে…" : changed ? "সেভ করো" : "সব সেভ করা আছে"}
         </button>
       </form>
-
-      <section className={cn(card, "h-fit space-y-1")}>
-        <h2 className="px-2 pb-1 text-base font-bold text-slate-900">অ্যাকাউন্ট</h2>
-        <AccountLink href="/billing" icon={Crown} tone="from-yellow-400 to-amber-500" title="আমার প্ল্যান" detail={plan.active && plan.endsAt ? `চলবে ${formatDate(plan.endsAt)} পর্যন্ত` : "Plan দেখো ও নাও"} />
-        <AccountLink href="/usage" icon={Gauge} tone="from-orange-400 to-amber-600" title="AI ব্যবহার" detail="আজ আর মোট কতটা খরচ হলো" />
-        <AccountLink href="/affiliate" icon={Share2} tone="from-emerald-400 to-teal-600" title="রেফার করে আয়" detail="বন্ধুদের link দাও, তারা plan কিনলে তুমি পাবে" />
-      </section>
     </div>
   </div>;
 }
