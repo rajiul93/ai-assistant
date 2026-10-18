@@ -44,3 +44,12 @@ describe("gemini 3", () => {
     expect(bodies[1].generationConfig.thinkingConfig).toEqual({ thinkingLevel: "high" });
   });
 });
+
+describe("gemini rate limits", () => {
+  it("reads how long Gemini asks to wait", async () => {
+    const { retryDelayMs } = await import("./gemini");
+    expect(retryDelayMs(JSON.stringify({ error: { code: 429, details: [{ "@type": "type.googleapis.com/google.rpc.QuotaFailure" }, { "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "17s" }] } }))).toBe(17_000);
+    expect(retryDelayMs(JSON.stringify({ error: { details: [{ retryDelay: "1.5s" }] } }))).toBe(1_500);
+    expect(retryDelayMs("not json")).toBeNull();
+  });
+});

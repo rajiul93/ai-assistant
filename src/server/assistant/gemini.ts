@@ -13,8 +13,22 @@ type Part = { text?: string; thought?: boolean };
 type GeminiPayload = {
   candidates?: Array<{ content?: { parts?: Part[] } }>;
   usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number; totalTokenCount?: number };
-  error?: { message?: string };
+  error?: { message?: string; details?: Array<{ retryDelay?: string }> };
 };
+
+/**
+ * How long Gemini asks to wait after "too many requests" (its RetryInfo, e.g. "17s"); the free tier
+ * allows only a few requests a minute, so a short wait usually lets the call through.
+ */
+export function retryDelayMs(body: string): number | null {
+  try {
+    const delay = (JSON.parse(body) as GeminiPayload).error?.details?.find((detail) => detail.retryDelay)?.retryDelay;
+    const seconds = delay ? Number.parseFloat(delay) : Number.NaN;
+    return Number.isFinite(seconds) ? Math.ceil(seconds * 1000) : null;
+  } catch {
+    return null;
+  }
+}
 
 const BUDGET = { low: 1024, medium: 4096, high: 12288 } as const;
 
@@ -63,8 +77,9 @@ export async function geminiCall(model: string, apiKey: string, prompt: string, 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:${stream ? "streamGenerateContent?alt=sse" : "generateContent"}`;
   const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey }, body: JSON.stringify(body), signal });
   if (!response.ok) {
-    console.warn(`[ai] gemini ${model}: HTTP ${response.status} ${(await response.text().catch(() => "")).slice(0, 300)}`);
-    return { status: response.status, text: null };
+    const error = await response.text().catch(() => "");
+    console.warn(`[ai] gemini ${model}: HTTP ${response.status} ${error.slice(0, 300)}`);
+    return { status: response.status, text: null, retryAfterMs: response.status === 429 ? retryDelayMs(error) ?? undefined : undefined };
   }
   if (stream && response.body) return readStream(response.body, options.onDelta!);
   const payload = (await response.json()) as GeminiPayload;
