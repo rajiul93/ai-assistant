@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode, RefObject, UIEventHandler } from "react";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, CheckCheck, Clock3, Loader2, MoreVertical, RotateCcw, Send, UsersRound } from "lucide-react";
 import { bubbleTime, chatDayKey, chatDayLabel } from "@/lib/chat-time";
 import { cn } from "@/lib/utils";
@@ -22,12 +22,33 @@ export function ChatAvatar({ name, image, group, className }: { name: string; im
   </span>;
 }
 
+/** Space kept under the chat card on a desktop, so the composer never sits at the very edge. */
+const FRAME_GAP = 20;
+
 /**
- * The open chat. On a phone it covers the whole screen (above the tab bar), like WhatsApp; on a
- * desktop it is a card next to the chat list.
+ * The open chat. On a phone or tablet it covers the whole screen (above the tab bar), like
+ * WhatsApp; on a desktop it is a card next to the chat list that ends at the bottom of the window,
+ * so the composer is always in view. Its height is measured from where the card starts — the
+ * header and chips above it change height — instead of a fixed guess, which pushed the composer
+ * below the fold.
  */
 export function ChatFrame({ children }: { children: ReactNode }) {
-  return <section className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#eef1fb] lg:static lg:z-auto lg:h-[calc(100dvh-10rem)] lg:min-h-96 lg:rounded-3xl lg:shadow-[0_6px_24px_-12px_rgba(15,23,42,0.15)]">
+  const frame = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const element = frame.current;
+    if (!element) return;
+    const desktop = window.matchMedia("(min-width: 1024px)");
+    const fit = () => {
+      if (!desktop.matches) { element.style.height = ""; return; }
+      const top = element.getBoundingClientRect().top + window.scrollY;
+      element.style.height = `${Math.max(384, window.innerHeight - top - FRAME_GAP)}px`;
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    desktop.addEventListener("change", fit);
+    return () => { window.removeEventListener("resize", fit); desktop.removeEventListener("change", fit); };
+  }, []);
+  return <section ref={frame} className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-[#eef1fb] lg:static lg:z-auto lg:h-[calc(100dvh-14rem)] lg:min-h-96 lg:rounded-3xl lg:shadow-[0_6px_24px_-12px_rgba(15,23,42,0.15)]">
     {children}
   </section>;
 }
