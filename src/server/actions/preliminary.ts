@@ -178,6 +178,71 @@ export async function mergeQuestionSets(input: unknown) {
   return { id: created.id, questionCount: questions.length, duplicates: all.length - questions.length };
 }
 
+/**
+ * One of the user's sets, questions and options only, for picking questions into a paper. No
+ * answers, so a set in Testing can be listed too; the new set takes the answers on the server.
+ */
+export async function getPickableQuestions(setId: string) {
+  const user = await requireUser();
+  const set = await ownedSet(user.id, setId);
+  return prisma.question.findMany({ where: { setId: set.id }, orderBy: { position: "asc" }, select: { id: true, text: true, options: true } });
+}
+
+const paperSchema = z.object({
+  questionIds: z.array(z.string().min(1).max(64)).min(1, "অন্তত একটা প্রশ্ন বেছে নাও").max(300, "একটা set-এ সর্বোচ্চ ৩০০ প্রশ্ন রাখা যায়"),
+  title: z.string().trim().min(1, "Title দাও").max(160),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "তারিখ দাও"),
+  description: z.string().trim().max(1000).optional(),
+});
+
+/**
+ * Picked questions from any of the user's sets → a new Todo set (a question paper) in the order
+ * given, with its own title, date and short description. Answers, solutions and explanations are
+ * copied here, as when merging sets. Filed under the subject most of the questions came from.
+ */
+export async function createPaperSet(input: unknown) {
+  const user = await requireUser();
+  const data = paperSchema.parse(input);
+  const ids = [...new Set(data.questionIds)];
+  const found = await prisma.question.findMany({
+    where: { id: { in: ids }, set: { userId: user.id } },
+    select: { id: true, text: true, options: true, correctIndex: true, solution: true, explanation: true, set: { select: { subjectId: true } } },
+  });
+  if (found.length !== ids.length) throw userError("কিছু প্রশ্ন আর পাওয়া যাচ্ছে না — পাতা reload করে আবার বাছো।");
+  const byId = new Map(found.map((question) => [question.id, question]));
+  const picked = ids.map((id) => byId.get(id)!);
+  const tally = new Map<string, number>();
+  for (const { set } of picked) if (set.subjectId) tally.set(set.subjectId, (tally.get(set.subjectId) ?? 0) + 1);
+  const subjectId = [...tally].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+  const created = await prisma.questionSet.create({
+    data: {
+      userId: user.id,
+      subjectId,
+      topicName: data.title,
+      date: toDate(data.date),
+      description: data.description || null,
+      questions: { create: picked.map(({ text, options, correctIndex, solution, explanation }, position) => ({ position, text, options, correctIndex, solution, explanation })) },
+    },
+  });
+  revalidate();
+  return created.id;
+}
+
+/**
+ * A set as a question paper: questions with options, and the answer key — the key only outside
+ * Testing, like every other view of a set.
+ */
+export async function getQuestionPaper(id: string) {
+  const user = await requireUser();
+  const set = await prisma.questionSet.findFirst({
+    where: { id, userId: user.id },
+    select: { id: true, topicName: true, date: true, description: true, status: true, questions: { orderBy: { position: "asc" }, select: { id: true, text: true, options: true, correctIndex: true } } },
+  });
+  if (!set) return null;
+  const testing = set.status === "TESTING";
+  return { ...set, questions: set.questions.map((question) => ({ ...question, correctIndex: testing ? null : question.correctIndex })) };
+}
+
 export async function deleteQuestionSet(id: string) {
   const user = await requireUser();
   const set = await ownedSet(user.id, id);

@@ -602,28 +602,30 @@ enum QuestionSetStatus {
 
 /// Preliminary: MCQs on one topic of a subject, studied (DOING, answers shown) then tested (TESTING, answers hidden).
 model QuestionSet {
-  id        String            @id @default(cuid())
-  userId    String
-  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  subjectId String?
-  subject   Subject?          @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  id          String            @id @default(cuid())
+  userId      String
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subjectId   String?
+  subject     Subject?          @relation(fields: [subjectId], references: [id], onDelete: SetNull)
   /// Optional place in the owner's subject → topic tree (used to file and filter it).
-  topicId   String?
-  topic     Topic?            @relation(fields: [topicId], references: [id], onDelete: SetNull)
-  topicName String
+  topicId     String?
+  topic       Topic?            @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  topicName   String
   /// The day this set is planned for (a date; stored at midnight Asia/Dhaka).
-  date      DateTime
-  status    QuestionSetStatus @default(TODO)
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
-  questions Question[]
-  attempts  TestAttempt[]
+  date        DateTime
+  /// Short note shown on its question paper (`/preliminary/[id]/paper`); set when built from picked questions.
+  description String?
+  status      QuestionSetStatus @default(TODO)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  questions   Question[]
+  attempts    TestAttempt[]
   /// Set when this set was sent from the Question Bank; one copy per user per bank set.
-  bankSetId String?
-  bankSet   BankSet?          @relation(fields: [bankSetId], references: [id], onDelete: SetNull)
+  bankSetId   String?
+  bankSet     BankSet?          @relation(fields: [bankSetId], references: [id], onDelete: SetNull)
   /// Sent from the Question Bank (a past-year set or a chapter's MCQs). Counts toward the "two at a
   /// time until 60%" limit (src/server/bank-slots.ts) — kept even if the bank set is later removed.
-  fromBank  Boolean           @default(false)
+  fromBank    Boolean           @default(false)
 
   @@unique([userId, bankSetId])
   @@index([userId, status])
