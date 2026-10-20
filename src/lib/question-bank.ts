@@ -370,10 +370,13 @@ export type PastedMcq = Omit<ChapterMcqRow, "serial">;
  *   সমাধান: … (optional, may run over several lines)
  *   ব্যাখ্যা: … (optional, may run over several lines)
  *
- * 4 or 5 options (ক–ঙ), one per line or on one line. `failed` lists the questions (1-based, in
- * paste order) that don't fit; the dialog sends the text to AI then rather than guessing.
+ * 4 or 5 options (ক–ঙ), one per line or on one line. `failed` lists the questions that don't fit
+ * (position, the number written on them or else the position, their first line) so the dialog can
+ * name them before offering AI, rather than guessing.
  */
-export function parsePastedMcqs(input: string): { items: PastedMcq[]; failed: number[] } {
+export type PasteMiss = { at: number; label: string; line: string };
+
+export function parsePastedMcqs(input: string): { items: PastedMcq[]; failed: PasteMiss[] } {
   const lines = input.replace(/\r\n?/g, "\n").split("\n").map((line) => line.trim());
   // A numbered line is a new question only when options follow it before the next answer or
   // numbered line, so numbered steps inside a solution stay in that solution.
@@ -403,11 +406,11 @@ export function parsePastedMcqs(input: string): { items: PastedMcq[]; failed: nu
   if (current.some(Boolean)) blocks.push(current);
 
   const items: PastedMcq[] = [];
-  const failed: number[] = [];
+  const failed: PasteMiss[] = [];
   for (const [index, block] of blocks.entries()) {
     const item = readPastedBlock(block);
     if (item) items.push(item);
-    else failed.push(index + 1);
+    else failed.push(pasteMiss(block, index));
   }
   return { items, failed };
 }
@@ -448,4 +451,60 @@ function readPastedBlock(block: string[]): PastedMcq | null {
   if (answer < 0 || !text || text.length > 2000 || options.some((option) => !option || option.length > 500) || answer >= options.length) return null;
   if ((solution?.length ?? 0) > 5000 || (explanation?.length ?? 0) > 5000) return null;
   return { text, options, correctIndex: answer, solution, explanation };
+}
+
+export type PastedShort = Omit<ChapterShortRow, "serial">;
+
+/**
+ * Short questions pasted in the dialog's pattern, read without AI:
+ *
+ *   ১. বাংলা ভাষার আদি নিদর্শন কী?
+ *   উত্তর: চর্যাপদ          (may run over several lines)
+ *
+ * A numbered line (or, unnumbered, a line after a blank one) is the next question only when an
+ * উত্তর: line follows it before the next numbered or blank line, so lists and paragraphs inside
+ * an answer stay in it. `failed` is as in `parsePastedMcqs`.
+ */
+export function parsePastedShorts(input: string): { items: PastedShort[]; failed: PasteMiss[] } {
+  const lines = input.replace(/\r\n?/g, "\n").split("\n").map((line) => line.trim());
+  const answerFollows = (at: number) => {
+    for (let next = at; next < lines.length; next++) {
+      if (PASTE_ANSWER.test(lines[next])) return true;
+      if (next > at && (!lines[next] || PASTE_NUMBER.test(lines[next]))) return false;
+    }
+    return false;
+  };
+
+  const blocks: string[][] = [];
+  let current: string[] = [];
+  let answered = false, blankSince = false;
+  for (const [at, line] of lines.entries()) {
+    if (!line) { blankSince = true; if (current.length) current.push(""); continue; }
+    if (answered && !PASTE_ANSWER.test(line) && (PASTE_NUMBER.test(line) || blankSince) && answerFollows(at)) {
+      blocks.push(current); current = []; answered = false;
+    }
+    if (PASTE_ANSWER.test(line)) answered = true;
+    current.push(line);
+    blankSince = false;
+  }
+  if (current.some(Boolean)) blocks.push(current);
+
+  const items: PastedShort[] = [];
+  const failed: PasteMiss[] = [];
+  for (const [index, block] of blocks.entries()) {
+    const answerAt = block.findIndex((line) => PASTE_ANSWER.test(line));
+    const question = block.slice(0, Math.max(answerAt, 0)).filter(Boolean).join(" ").replace(PASTE_NUMBER, "").replace(/\s+/g, " ").trim();
+    const answer = answerAt < 0 ? "" : [block[answerAt].replace(PASTE_ANSWER, ""), ...block.slice(answerAt + 1)].join("\n").replace(/\n{3,}/g, "\n\n").trim();
+    // A second উত্তর: means two questions ran together.
+    const twice = block.filter((line) => PASTE_ANSWER.test(line)).length > 1;
+    if (question && answer && !twice && question.length <= 2000 && answer.length <= 4000) { items.push({ question, answer }); continue; }
+    failed.push(pasteMiss(block, index));
+  }
+  return { items, failed };
+}
+
+function pasteMiss(block: string[], index: number): PasteMiss {
+  const first = block.find(Boolean) ?? "";
+  const number = /^(?:(?:প্রশ্ন|question|q)\s*)?[(（]?([\d০-৯]+)/i.exec(first)?.[1];
+  return { at: index + 1, label: number ?? String(index + 1), line: first.replace(PASTE_NUMBER, "").slice(0, 80) };
 }

@@ -6,7 +6,7 @@ import { AlertTriangle, ArrowLeft, Check, ClipboardPaste, Loader2, Sparkles, X }
 import { toast } from "sonner";
 import { MathText } from "@/components/math-text";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { BANK_IMPORT_BATCH, BANK_OPTION_LETTERS, chunkPastedText, parsePastedMcqs, type ChapterMcqRow, type ChapterShortRow } from "@/lib/question-bank";
+import { BANK_IMPORT_BATCH, BANK_OPTION_LETTERS, chunkPastedText, parsePastedMcqs, parsePastedShorts, type ChapterMcqRow, type PasteMiss, type ChapterShortRow } from "@/lib/question-bank";
 import { cn } from "@/lib/utils";
 import { importChapterRows } from "@/server/actions/question-bank-general";
 import { adminButton } from "./bank-admin";
@@ -26,8 +26,9 @@ async function sortPiece(kind: "mcq" | "short", text: string, batch: string) {
 }
 
 /**
- * Staff on a chapter: paste MCQs or short questions copied from anywhere. MCQs in the exact pattern
- * (`parsePastedMcqs`) are sorted without AI; anything else goes to AI, which sorts it into
+ * Staff on a chapter: paste MCQs or short questions copied from anywhere. Text in the exact pattern
+ * (`parsePastedMcqs` / `parsePastedShorts`) is sorted without AI; otherwise the dialog names the
+ * questions that don't fit and, only if the admin agrees, AI sorts it into
  * question / options / answer (word for word), the admin checks them here — picks a missing answer,
  * drops a wrong one — and only then they are saved. Duplicates already in the chapter are skipped.
  */
@@ -37,6 +38,8 @@ export function ChapterPaste({ chapterId, kind }: { chapterId: string; kind: "mc
   const [text, setText] = useState("");
   const [sorted, setSorted] = useState<Sorted | null>(null);
   const [free, setFree] = useState(false);
+  // Questions outside the pattern, shown before AI is used so the admin can fix them or agree.
+  const [misses, setMisses] = useState<PasteMiss[] | null>(null);
   const [progress, setProgress] = useState<{ label: string; done: number; total: number } | null>(null);
   const noun = kind === "mcq" ? "MCQ" : "Short Question";
 
@@ -46,19 +49,23 @@ export function ChapterPaste({ chapterId, kind }: { chapterId: string; kind: "mc
     setText("");
     setSorted(null);
     setFree(false);
+    setMisses(null);
   }
 
-  async function sort() {
-    // Text in the exact pattern is sorted here, no AI needed; otherwise all of it goes to AI.
-    if (kind === "mcq") {
-      const local = parsePastedMcqs(text);
-      if (local.items.length && !local.failed.length) {
-        setSorted({ kind, items: local.items });
-        toast.success(`ঠিক pattern — AI ছাড়াই ${local.items.length}টি সাজানো হলো`);
-        return;
-      }
-      if (local.items.length) toast.info(`${local.failed.map((at) => at.toLocaleString("bn-BD")).join(", ")} নং প্রশ্ন pattern-এ মেলেনি — AI দিয়ে সাজানো হচ্ছে`);
+  function sort() {
+    // Text in the exact pattern is sorted here, no AI needed. Otherwise the admin is told which
+    // questions don't fit and decides: fix the text, or let AI sort all of it.
+    const local = kind === "mcq" ? parsePastedMcqs(text) : parsePastedShorts(text);
+    if (local.items.length && !local.failed.length) {
+      setSorted(kind === "mcq" ? { kind, items: local.items as Mcq[] } : { kind, items: local.items as Short[] });
+      toast.success(`ঠিক pattern — AI ছাড়াই ${local.items.length}টি সাজানো হলো`);
+      return;
     }
+    setMisses(local.failed.length ? local.failed : [{ at: 1, label: "", line: "" }]);
+  }
+
+  async function sortWithAi() {
+    setMisses(null);
     const pieces = chunkPastedText(text);
     const batch = crypto.randomUUID();
     const items: Array<Mcq | Short> = [];
@@ -123,16 +130,17 @@ export function ChapterPaste({ chapterId, kind }: { chapterId: string; kind: "mc
           <p className="rounded-xl bg-violet-50 px-3 py-2 text-sm text-violet-950">
             {kind === "mcq"
               ? <>নিচের নমুনার মতো লিখলে (প্রশ্ন, ক–ঘ/ঙ option, <b>উত্তর:</b>, চাইলে <b>সমাধান:</b> আর <b>ব্যাখ্যা:</b> — একাধিক লাইনও চলবে) AI ছাড়াই সাজানো হবে। অন্যভাবে কপি করা লেখা AI সাজিয়ে দেবে। সেভের আগে দেখে নিতে পারবে।</>
-              : "বই, PDF বা ওয়েবসাইট থেকে যেভাবে কপি হয় সেভাবেই paste করো — AI প্রশ্ন আর উত্তর আলাদা করে সাজিয়ে দেবে। সেভের আগে দেখে নিতে পারবে।"}
+              : <>নিচের নমুনার মতো লিখলে (নম্বরসহ প্রশ্ন, তারপর <b>উত্তর:</b> — উত্তর একাধিক লাইনেও চলবে) AI ছাড়াই সাজানো হবে। অন্যভাবে কপি করা লেখা AI সাজিয়ে দেবে। সেভের আগে দেখে নিতে পারবে।</>}
           </p>
-          <textarea value={text} onChange={(event) => setText(event.target.value.slice(0, MAX_TEXT))} rows={12} autoFocus aria-label="Paste করা লেখা"
-            placeholder={kind === "mcq" ? "১. ‘পরমেশ’ শব্দের সন্ধি বিচ্ছেদ কোনটি?\nক) পরম + এশ  খ) পরম + ঈশ  গ) পরম + ইশ  ঘ) পরম + ঈশা\nউত্তর: খ\nসমাধান: পরম + ঈশ = পরমেশ (অ + ঈ = এ)\nব্যাখ্যা: এটি স্বরসন্ধির উদাহরণ।\n\n২. …" : "১. বাংলা ভাষার আদি নিদর্শন কী?\nউত্তর: চর্যাপদ\n\n২. …"}
+          <textarea value={text} onChange={(event) => { setText(event.target.value.slice(0, MAX_TEXT)); setMisses(null); }} rows={12} autoFocus aria-label="Paste করা লেখা"
+            placeholder={kind === "mcq" ? "১. ‘পরমেশ’ শব্দের সন্ধি বিচ্ছেদ কোনটি?\nক) পরম + এশ  খ) পরম + ঈশ  গ) পরম + ইশ  ঘ) পরম + ঈশা\nউত্তর: খ\nসমাধান: পরম + ঈশ = পরমেশ (অ + ঈ = এ)\nব্যাখ্যা: এটি স্বরসন্ধির উদাহরণ।\n\n২. …" : "১. বাংলা ভাষার আদি নিদর্শন কী?\nউত্তর: চর্যাপদ\n\n২. সন্ধি কত প্রকার?\nউত্তর: তিন প্রকার—\nস্বরসন্ধি, ব্যঞ্জনসন্ধি ও বিসর্গসন্ধি।\n\n৩. …"}
             className={cn(field, "font-mono text-[13px]")} />
           <p className="text-right text-xs text-zinc-400 tabular-nums">{text.length.toLocaleString("bn-BD")} / {MAX_TEXT.toLocaleString("bn-BD")}</p>
+          {misses ? <NeedsAi kind={kind} misses={misses} busy={Boolean(progress)} onAi={() => void sortWithAi()} /> : null}
           {progress ? <Progress {...progress} /> : null}
-          <button type="button" disabled={!text.trim() || Boolean(progress)} onClick={() => void sort()} className="flex h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-violet-700 text-sm font-semibold text-white hover:bg-violet-800 disabled:opacity-50">
-            {progress ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} {kind === "mcq" ? "সাজাও" : "AI দিয়ে সাজাও"}
-          </button>
+          {misses ? null : <button type="button" disabled={!text.trim() || Boolean(progress)} onClick={sort} className="flex h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-violet-700 text-sm font-semibold text-white hover:bg-violet-800 disabled:opacity-50">
+            {progress ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} সাজাও
+          </button>}
         </div> : <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <button type="button" disabled={Boolean(progress)} onClick={() => setSorted(null)} className="flex h-9 items-center gap-1 rounded-lg px-2.5 font-medium text-zinc-700 ring-1 ring-zinc-200 hover:bg-zinc-50"><ArrowLeft className="size-4" /> লেখায় ফেরো</button>
@@ -179,6 +187,27 @@ export function ChapterPaste({ chapterId, kind }: { chapterId: string; kind: "mc
       </DialogContent>
     </Dialog>
   </>;
+}
+
+/** Which questions are outside the pattern, so AI would be needed — shown before any AI call. */
+function NeedsAi({ kind, misses, busy, onAi }: { kind: "mcq" | "short"; misses: PasteMiss[]; busy: boolean; onAi: () => void }) {
+  const named = misses.filter((miss) => miss.line);
+  return <div className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-3 text-sm text-amber-950">
+    <p className="flex items-start gap-2 font-medium"><AlertTriangle className="mt-0.5 size-4 shrink-0" />
+      {named.length
+        ? `${named.map((miss) => `${miss.label} নং`).join(", ")} প্রশ্ন pattern-এ মেলেনি — তাই AI ছাড়া (free) সাজানো যাবে না, AI লাগবে।`
+        : "লেখাটা pattern-এ নেই — তাই AI ছাড়া (free) সাজানো যাবে না, AI লাগবে।"}
+    </p>
+    {named.length ? <ul className="max-h-32 space-y-0.5 overflow-y-auto pl-6 text-xs text-amber-900">
+      {named.map((miss) => <li key={miss.at}><span className="font-semibold tabular-nums">{miss.label}.</span> {miss.line}</li>)}
+    </ul> : null}
+    <p className="text-xs text-amber-900">{kind === "mcq"
+      ? <>প্রতিটা প্রশ্নে ক–ঘ option আর <b>উত্তর:</b> লাইনে একটা option (অক্ষর বা হুবহু লেখা) থাকতে হবে।</>
+      : <>প্রতিটা প্রশ্নের পরে <b>উত্তর:</b> লাইন থাকতে হবে, আর উত্তর খালি রাখা যাবে না।</>} লেখা ঠিক করলে আবার AI ছাড়াই চেষ্টা হবে।</p>
+    <button type="button" disabled={busy} onClick={onAi} className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-violet-700 text-sm font-semibold text-white hover:bg-violet-800 disabled:opacity-50">
+      {busy ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} তবুও AI দিয়ে সাজাও
+    </button>
+  </div>;
 }
 
 function Progress({ label, done, total }: { label: string; done: number; total: number }) {

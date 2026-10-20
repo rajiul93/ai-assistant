@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parsePastedMcqs } from "./question-bank";
+import { parsePastedMcqs, parsePastedShorts } from "./question-bank";
 
 describe("parsePastedMcqs", () => {
   it("reads questions with solution and explanation, options on one line or many", () => {
@@ -33,9 +33,35 @@ describe("parsePastedMcqs", () => {
     expect(items.map((item) => item.correctIndex)).toEqual([3, 2]);
   });
 
+  it("names a question whose answer isn't one of its options", () => {
+    const { items, failed } = parsePastedMcqs("1। এক?\nক) a খ) b গ) c ঘ) d\nউত্তর: ক\n\n20। √(x²) = কত?\nক) x   খ) −x   গ) ±x   ঘ) x²\nউত্তর: সঠিক বিকল্প নেই\nসমাধান: |x|");
+    expect(items).toHaveLength(1);
+    expect(failed).toEqual([{ at: 2, label: "20", line: "√(x²) = কত?" }]);
+  });
+
   it("reports questions that don't fit instead of guessing", () => {
     const { items, failed } = parsePastedMcqs("১. কোনটি?\nক) a খ) b গ) c\nউত্তর: ক\n\n২. কোনটি?\nক) a খ) b গ) c ঘ) d\nউত্তর: চ\n\n৩. ঠিক?\nক) a খ) b গ) c ঘ) d\nউত্তর: ক\nএলোমেলো লাইন");
     expect(items).toEqual([]);
-    expect(failed).toEqual([1, 2, 3]);
+    expect(failed.map((miss) => miss.label)).toEqual(["১", "২", "৩"]);
+    expect(failed[0]).toEqual({ at: 1, label: "১", line: "কোনটি?" });
+  });
+});
+
+describe("parsePastedShorts", () => {
+  it("reads numbered questions with multi-line answers, keeping lists inside an answer", () => {
+    const { items, failed } = parsePastedShorts("১. বাংলা ভাষার আদি নিদর্শন কী?\nউত্তর: চর্যাপদ\n\n২. সন্ধি কত প্রকার?\nউত্তর: তিন প্রকার—\n১. স্বরসন্ধি\n২. ব্যঞ্জনসন্ধি\n৩. বিসর্গসন্ধি\n৩. রাজধানী?\nউত্তর: ঢাকা");
+    expect(failed).toEqual([]);
+    expect(items).toEqual([
+      { question: "বাংলা ভাষার আদি নিদর্শন কী?", answer: "চর্যাপদ" },
+      { question: "সন্ধি কত প্রকার?", answer: "তিন প্রকার—\n১. স্বরসন্ধি\n২. ব্যঞ্জনসন্ধি\n৩. বিসর্গসন্ধি" },
+      { question: "রাজধানী?", answer: "ঢাকা" },
+    ]);
+  });
+
+  it("splits unnumbered questions at a blank line and names ones without an answer", () => {
+    expect(parsePastedShorts("এক?\nউত্তর: ১\n\nদুই?\nউত্তর: ২").items).toHaveLength(2);
+    const { items, failed } = parsePastedShorts("১. এক?\nউত্তর: ১\n২. দুই?\nউত্তর:");
+    expect(items).toHaveLength(1);
+    expect(failed).toEqual([{ at: 2, label: "২", line: "দুই?" }]);
   });
 });
