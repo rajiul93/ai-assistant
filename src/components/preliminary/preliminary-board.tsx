@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { QuestionSetStatus } from "@prisma/client";
-import { BookOpenCheck, CalendarDays, Check, ClipboardCheck, Combine, ListChecks, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
+import { BookOpenCheck, CalendarDays, Check, ClipboardCheck, Combine, FilePlus2, ListChecks, Pencil, Plus, RotateCcw, ScrollText, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { MathText } from "@/components/math-text";
 import {
@@ -20,6 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { formatDate } from "@/lib/dayjs";
 import { statusInfo, statusOrder } from "@/lib/preliminary";
 import { ShareButton } from "@/components/collaboration/share-button";
+import { PaperBuilder } from "@/components/preliminary/paper-builder";
 import { SubjectTopicFilter, useSubjectTopicFilter } from "@/components/subject-topic-filter";
 import { topicPath, type TopicNode } from "@/lib/subject-filter";
 import { cn } from "@/lib/utils";
@@ -117,7 +118,7 @@ function MergeDialog({ kind, picked, subjects, onClose, onDone }: { kind: BoardK
   </Dialog>;
 }
 
-function SetCard({ kind, set, place, onDelete }: { kind: BoardKind; set: SetRow; place: string; onDelete: () => void }) {
+function SetCard({ kind, set, place, onDelete, onPaper }: { kind: BoardKind; set: SetRow; place: string; onDelete: () => void; onPaper?: () => void }) {
   const base = kinds[kind].base;
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -141,6 +142,8 @@ function SetCard({ kind, set, place, onDelete }: { kind: BoardKind; set: SetRow;
         </p>
       </div>
       <div className="-mr-1.5 -mt-1 flex shrink-0 items-center">
+        {onPaper ? <button type="button" onClick={onPaper} aria-label="প্রশ্নপত্র বানাও" title="প্রশ্নপত্র বানাও" className="flex size-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"><FilePlus2 className="size-4" /></button> : null}
+        {kind === "mcq" && set.status !== "TESTING" ? <Link href={`${base}/${set.id}/paper`} aria-label="প্রশ্নপত্র ও answer key" title="প্রশ্নপত্র ও answer key" className="flex size-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"><ScrollText className="size-4" /></Link> : null}
         <ShareButton type={kind === "short" ? "SHORT_QUESTION_SET" : "PRELIMINARY_SET"} itemId={set.id} title={set.topicName} label={false} className="size-9 justify-center text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900" />
         {set.status !== "TESTING" ? <Link href={`${base}/${set.id}/edit`} aria-label="Edit" className="flex size-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"><Pencil className="size-4" /></Link> : null}
         <button type="button" onClick={onDelete} aria-label="Delete" className="flex size-9 items-center justify-center rounded-lg text-zinc-500 hover:bg-red-50 hover:text-red-700"><Trash2 className="size-4" /></button>
@@ -184,6 +187,8 @@ export function PreliminaryBoard({ kind = "mcq", sets, subjects, topics = [] }: 
   const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
   const [merging, setMerging] = useState(false);
+  // "প্রশ্নপত্র বানাও" (MCQ only): undefined = closed; a set id opens the dialog on that set.
+  const [paperFrom, setPaperFrom] = useState<string | null | undefined>(undefined);
   const pickedSets = picked.map((id) => sets.find((set) => set.id === id)).filter((set) => set !== undefined);
   const togglePick = (id: string) => setPicked((list) => (list.includes(id) ? list.filter((item) => item !== id) : [...list, id]));
   const stopSelecting = () => { setSelecting(false); setPicked([]); setMerging(false); };
@@ -216,6 +221,7 @@ export function PreliminaryBoard({ kind = "mcq", sets, subjects, topics = [] }: 
           <p className="truncate text-[12px] text-white/80">{blurb}</p>
         </div>
         {sets.length > 1 ? <button type="button" onClick={() => (selecting ? stopSelecting() : setSelecting(true))} aria-pressed={selecting} aria-label={selecting ? "বাতিল" : "Set মেলাও"} title={selecting ? "বাতিল" : "Set মেলাও"} className={cn("flex size-10 shrink-0 items-center justify-center rounded-full ring-1 transition active:scale-95", selecting ? "bg-white text-blue-700 ring-white" : "bg-white/20 ring-white/30 hover:bg-white/30")}>{selecting ? <X className="size-4" /> : <Combine className="size-4" />}</button> : null}
+        {kind === "mcq" && sets.length && !selecting ? <button type="button" onClick={() => setPaperFrom(null)} aria-label="প্রশ্নপত্র বানাও" title="প্রশ্নপত্র বানাও" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/20 ring-1 ring-white/30 transition hover:bg-white/30 active:scale-95"><FilePlus2 className="size-4" /></button> : null}
         <Link href={`${base}/new`} className="flex h-10 shrink-0 items-center gap-1 rounded-full bg-white px-3.5 text-[13.5px] font-semibold text-blue-700 shadow-sm transition active:scale-95"><Plus className="size-4" /> নতুন</Link>
       </div>
       <div role="tablist" aria-label="Status" className="mt-2.5 grid grid-cols-4 gap-1 rounded-full bg-white/15 p-1 ring-1 ring-white/20">
@@ -243,7 +249,7 @@ export function PreliminaryBoard({ kind = "mcq", sets, subjects, topics = [] }: 
 
     {visible.length ? <div className={cn("grid grid-cols-[minmax(0,1fr)] gap-2.5 lg:grid-cols-[repeat(2,minmax(0,1fr))] lg:gap-3", selecting && "pb-20")}>{visible.map((set) => selecting
       ? <SelectableCard key={set.id} set={set} place={placeOf(set)} order={picked.indexOf(set.id) + 1} onToggle={() => togglePick(set.id)} />
-      : <SetCard key={set.id} kind={kind} set={set} place={placeOf(set)} onDelete={() => setDeleting(set)} />)}</div>
+      : <SetCard key={set.id} kind={kind} set={set} place={placeOf(set)} onDelete={() => setDeleting(set)} onPaper={kind === "mcq" ? () => setPaperFrom(set.id) : undefined} />)}</div>
       : <div className="rounded-3xl bg-white px-6 py-10 text-center shadow-[0_6px_24px_-12px_rgba(15,23,42,0.15)]">
         <span className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-rose-50"><ListChecks className="size-6 text-rose-500" /></span>
         <p className="font-semibold text-slate-800">{active === "TODO" ? "কোনো set নেই" : `${statusInfo[active].label}-এ এখন কিছু নেই`}</p>
@@ -256,6 +262,8 @@ export function PreliminaryBoard({ kind = "mcq", sets, subjects, topics = [] }: 
         <button type="button" onClick={() => setMerging(true)} disabled={pickedSets.length < 2} className="flex h-11 items-center gap-1.5 rounded-full bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"><Combine className="size-4" /> এক করো</button>
       </div>
     </div> : null}
+
+    {paperFrom !== undefined ? <PaperBuilder sets={sets.map((set) => ({ id: set.id, topicName: set.topicName, questionCount: set.questionCount, place: placeOf(set) }))} startSetId={paperFrom ?? undefined} onClose={() => setPaperFrom(undefined)} /> : null}
 
     {merging && pickedSets.length > 1 ? <MergeDialog kind={kind} picked={pickedSets} subjects={subjects} onClose={() => setMerging(false)} onDone={stopSelecting} /> : null}
 
