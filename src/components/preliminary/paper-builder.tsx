@@ -2,12 +2,15 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, FileText, Loader2, Search } from "lucide-react";
+import { ChevronDown, FileDown, FileText, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { MathText } from "@/components/math-text";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { formatDate } from "@/lib/dayjs";
 import { cn } from "@/lib/utils";
-import { createPaperSet, getPickableQuestions } from "@/server/actions/preliminary";
+import { createPaperSet, getPickableQuestions, previewPaperQuestions } from "@/server/actions/preliminary";
+import type { PaperData } from "./paper-sheet";
+import { PrintPaper } from "./print-paper";
 import { errorMessage } from "@/lib/user-error";
 
 type PickSet = { id: string; topicName: string; questionCount: number; place: string };
@@ -20,7 +23,8 @@ const field = "w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm ou
 /**
  * "প্রশ্নপত্র বানাও": every Preliminary set, opened one at a time to tick questions (a set's own
  * checkbox ticks all of it), then a title, date and short description → a new set whose paper
- * page shows the questions beside an answer key. The picked order is set order, then position.
+ * page shows the questions beside an answer key — or straight to a PDF (browser print), saving
+ * nothing. The picked order is set order, then position.
  */
 export function PaperBuilder({ sets, startSetId, onClose }: { sets: PickSet[]; startSetId?: string; onClose: () => void }) {
   const router = useRouter();
@@ -33,6 +37,8 @@ export function PaperBuilder({ sets, startSetId, onClose }: { sets: PickSet[]; s
   const [date, setDate] = useState(today);
   const [description, setDescription] = useState("");
   const [pending, start] = useTransition();
+  // The PDF is printed from here without saving anything; the answers are fetched just for it.
+  const [printing, setPrinting] = useState<PaperData | null>(null);
 
   async function load(setId: string) {
     if (loaded[setId]) return loaded[setId];
@@ -99,7 +105,17 @@ export function PaperBuilder({ sets, startSetId, onClose }: { sets: PickSet[]; s
     }
   });
 
-  return <Dialog open onOpenChange={(next) => !next && !pending && onClose()}>
+  const pdf = () => start(async () => {
+    try {
+      const questions = await previewPaperQuestions(ordered);
+      setPrinting({ title: title.trim(), date: formatDate(new Date(`${date}T00:00:00+06:00`)), description: description.trim() || null, questions });
+    } catch (error) {
+      toast.error(errorMessage(error, "PDF বানানো গেল না।"));
+    }
+  });
+  const ready = !pending && ordered.length > 0 && ordered.length <= MAX && Boolean(title.trim()) && Boolean(date);
+
+  return <>{printing ? <PrintPaper paper={printing} onDone={() => setPrinting(null)} /> : null}<Dialog open onOpenChange={(next) => !next && !pending && onClose()}>
     <DialogContent className="flex max-h-[92dvh] flex-col gap-3 sm:max-w-2xl">
       <DialogHeader><DialogTitle>প্রশ্নপত্র বানাও</DialogTitle></DialogHeader>
       <p className="text-[12.5px] text-zinc-600">যেকোনো set খুলে প্রশ্ন বাছো (set-এর পাশের ঘরে চাপলে পুরো set)। নতুন set-এ প্রশ্নগুলো এখানকার ক্রমে বসবে, পাশে থাকবে answer key।</p>
@@ -150,10 +166,16 @@ export function PaperBuilder({ sets, startSetId, onClose }: { sets: PickSet[]; s
           <textarea value={description} onChange={(event) => setDescription(event.target.value)} maxLength={1000} rows={2} placeholder="যেমন: সময় ৩০ মিনিট · প্রতিটি প্রশ্নে ১ নম্বর" className={cn(field, "py-2 leading-relaxed")} />
         </label>
         {ordered.length > MAX ? <p className="text-xs font-medium text-red-600">একটা set-এ সর্বোচ্চ {MAX}টি প্রশ্ন রাখা যায় — এখন {ordered.length}টি বাছা।</p> : null}
-        <button type="button" onClick={submit} disabled={pending || !ordered.length || ordered.length > MAX || !title.trim() || !date} className="flex h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-zinc-950 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50">
-          {pending ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />} {ordered.length ? `${ordered.length}টি প্রশ্নে প্রশ্নপত্র বানাও` : "প্রশ্ন বাছো"}
-        </button>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <button type="button" onClick={pdf} disabled={!ready} className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-blue-600 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+            {pending ? <Loader2 className="size-4 animate-spin" /> : <FileDown className="size-4" />} PDF download
+          </button>
+          <button type="button" onClick={submit} disabled={!ready} className="flex h-11 items-center justify-center gap-1.5 rounded-xl bg-zinc-950 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50">
+            {pending ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />} {ordered.length ? `${ordered.length}টি প্রশ্নে set বানাও` : "প্রশ্ন বাছো"}
+          </button>
+        </div>
+        <p className="text-[11.5px] text-zinc-500"><b>PDF download</b> কিছু save করে না — print dialog-এ “Save as PDF” বেছে নাও। <b>Set বানাও</b> নতুন set হিসেবে রেখে দেয়।</p>
       </div>
     </DialogContent>
-  </Dialog>;
+  </Dialog></>;
 }

@@ -2,12 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, CalendarDays, KeyRound, ListChecks } from "lucide-react";
 import { MathText } from "@/components/math-text";
+import { PAPER_LETTERS as LETTERS } from "@/components/preliminary/paper-sheet";
+import { PaperPdfButton } from "@/components/preliminary/print-paper";
 import { requireUser } from "@/lib/auth";
 import { formatDate } from "@/lib/dayjs";
 import { getQuestionPaper } from "@/server/actions/preliminary";
-
-/** The paper's own letters, as the answer key reads them ("1:A, 2:C"). */
-const LETTERS = ["A", "B", "C", "D", "E"];
 
 /**
  * A set as a question paper: questions on one side, the answer key in a column beside them (under
@@ -21,7 +20,10 @@ export default async function QuestionPaperPage(props: PageProps<"/preliminary/[
   const keyed = paper.status !== "TESTING";
 
   return <div className="space-y-3">
-    <Link href="/preliminary" className="inline-flex h-9 items-center gap-1 rounded-full px-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100"><ArrowLeft className="size-4" /> Preliminary</Link>
+    <div className="flex items-center justify-between gap-2">
+      <Link href="/preliminary" className="inline-flex h-9 items-center gap-1 rounded-full px-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100"><ArrowLeft className="size-4" /> Preliminary</Link>
+      <PaperPdfButton paper={{ title: paper.topicName, date: formatDate(paper.date), description: paper.description, questions: paper.questions }} />
+    </div>
 
     <header className="rounded-3xl bg-white p-4 shadow-[0_6px_24px_-12px_rgba(15,23,42,0.15)] sm:p-5">
       <h1 className="text-xl font-bold leading-snug text-slate-900 [overflow-wrap:anywhere]"><MathText text={paper.topicName} /></h1>
