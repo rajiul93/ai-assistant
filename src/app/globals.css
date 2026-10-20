@@ -268,3 +268,23 @@ html {
   background: var(--color-slate-100);
   font-weight: 600;
 }
+
+/* Question paper printing (components/preliminary/print-paper.tsx): only the sheet is printed. */
+#paper-print {
+  display: none;
+}
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm 12mm;
+  }
+  body > *:not(#paper-print) {
+    display: none !important;
+  }
+  body {
+    background: #fff !important;
+  }
+  #paper-print {
+    display: block;
+  }
+}

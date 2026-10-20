@@ -195,6 +195,28 @@ const paperSchema = z.object({
   description: z.string().trim().max(1000).optional(),
 });
 
+/** The user's own questions by id, in the order given; throws if any is gone or not theirs. */
+async function pickedQuestions(userId: string, questionIds: string[]) {
+  const ids = [...new Set(questionIds)];
+  const found = await prisma.question.findMany({
+    where: { id: { in: ids }, set: { userId } },
+    select: { id: true, text: true, options: true, correctIndex: true, solution: true, explanation: true, set: { select: { subjectId: true } } },
+  });
+  if (found.length !== ids.length) throw userError("কিছু প্রশ্ন আর পাওয়া যাচ্ছে না — পাতা reload করে আবার বাছো।");
+  const byId = new Map(found.map((question) => [question.id, question]));
+  return ids.map((id) => byId.get(id)!);
+}
+
+/**
+ * Picked questions with their answers for a PDF printed straight from the dialog — read only,
+ * nothing is saved. Answers come along as they do when the same questions become a new set.
+ */
+export async function previewPaperQuestions(questionIds: unknown) {
+  const user = await requireUser();
+  const ids = paperSchema.shape.questionIds.parse(questionIds);
+  return (await pickedQuestions(user.id, ids)).map(({ id, text, options, correctIndex }) => ({ id, text, options, correctIndex }));
+}
+
 /**
  * Picked questions from any of the user's sets → a new Todo set (a question paper) in the order
  * given, with its own title, date and short description. Answers, solutions and explanations are
@@ -203,14 +225,7 @@ const paperSchema = z.object({
 export async function createPaperSet(input: unknown) {
   const user = await requireUser();
   const data = paperSchema.parse(input);
-  const ids = [...new Set(data.questionIds)];
-  const found = await prisma.question.findMany({
-    where: { id: { in: ids }, set: { userId: user.id } },
-    select: { id: true, text: true, options: true, correctIndex: true, solution: true, explanation: true, set: { select: { subjectId: true } } },
-  });
-  if (found.length !== ids.length) throw userError("কিছু প্রশ্ন আর পাওয়া যাচ্ছে না — পাতা reload করে আবার বাছো।");
-  const byId = new Map(found.map((question) => [question.id, question]));
-  const picked = ids.map((id) => byId.get(id)!);
+  const picked = await pickedQuestions(user.id, data.questionIds);
   const tally = new Map<string, number>();
   for (const { set } of picked) if (set.subjectId) tally.set(set.subjectId, (tally.get(set.subjectId) ?? 0) + 1);
   const subjectId = [...tally].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
