@@ -963,6 +963,9 @@ model ShareRequest {
   createdItemId String?
   createdAt     DateTime      @default(now())
   respondedAt   DateTime?
+  /// Sent to a whole group: the recipient may accept while both are still in it, friends or not.
+  groupId       String?
+  group         ChatGroup?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
 
   notifications Notification[]
 
@@ -1051,6 +1054,7 @@ model ChatGroup {
   members       ChatGroupMember[]
   messages      GroupMessage[]
   notifications Notification[]
+  shares        ShareRequest[]
 }
 
 model ChatGroupMember {
