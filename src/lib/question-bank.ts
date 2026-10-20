@@ -347,3 +347,105 @@ export function chunkPastedText(text: string, max = 6000) {
   push();
   return chunks;
 }
+
+/* ---------- Pasted MCQs in the exact pattern: sorted here, without AI ---------- */
+
+const PASTE_NUMBER = /^(?:(?:প্রশ্ন|question|q)\s*)?[(（]?[\d০-৯]+\s*[.)）।:：]\s*/i;
+const PASTE_ANSWER = /^(?:সঠিক\s*উত্তর|উত্তর|correct\s*answer|answer|ans)\s*[:：\-–—]\s*/i;
+/** "খ", "(খ)", "খ) পরম + ঈশ" — a letter not followed by more of a word. */
+const ANSWER_LETTER = /^[(（]?([কখগঘঙ]|[a-eA-E]|[1-5১-৫])(?![\p{L}\p{M}\p{N}])/u;
+const PASTE_SECTION = /^(সমাধান|solution|ব্যাখ্যা|explanation)\s*[:：\-–—]\s*/i;
+/** "ক)", "(খ)", "গ.", "ঘ:", "a)" … at a line start or after a space (several options may share a line). */
+const PASTE_OPTION = /(?:^|\s)[(（]?([কখগঘঙ]|[a-eA-E])[)）.:।]\s*/g;
+const OPTION_START = /(?:^|\s)[(（]?(?:ক|a|A)[)）.:।]/;
+
+export type PastedMcq = Omit<ChapterMcqRow, "serial">;
+
+/**
+ * MCQs pasted in the form the dialog shows are read here, so no AI call is needed:
+ *
+ *   ১. ‘পরমেশ’ শব্দের সন্ধি বিচ্ছেদ কোনটি?
+ *   ক) পরম + এশ  খ) পরম + ঈশ  গ) পরম + ইশ  ঘ) পরম + ঈশা
+ *   উত্তর: খ            (or the option's text)
+ *   সমাধান: … (optional, may run over several lines)
+ *   ব্যাখ্যা: … (optional, may run over several lines)
+ *
+ * 4 or 5 options (ক–ঙ), one per line or on one line. `failed` lists the questions (1-based, in
+ * paste order) that don't fit; the dialog sends the text to AI then rather than guessing.
+ */
+export function parsePastedMcqs(input: string): { items: PastedMcq[]; failed: number[] } {
+  const lines = input.replace(/\r\n?/g, "\n").split("\n").map((line) => line.trim());
+  // A numbered line is a new question only when options follow it before the next answer or
+  // numbered line, so numbered steps inside a solution stay in that solution.
+  const opensQuestion = (at: number) => {
+    if (!PASTE_NUMBER.test(lines[at])) return false;
+    for (let next = at; next < lines.length; next++) {
+      if (next > at && (PASTE_ANSWER.test(lines[next]) || PASTE_NUMBER.test(lines[next]))) return false;
+      if (OPTION_START.test(lines[next].replace(PASTE_NUMBER, ""))) return true;
+    }
+    return false;
+  };
+
+  const blocks: string[][] = [];
+  let current: string[] = [];
+  let answered = false, inSection = false, blankSince = false;
+  for (const [at, line] of lines.entries()) {
+    if (!line) { blankSince = true; if (current.length) current.push(""); continue; }
+    // After the answer, a new question starts at a numbered line, or (unnumbered) at a plain line
+    // after a blank line when no solution/explanation is still running.
+    const next = answered && (opensQuestion(at) || (blankSince && !inSection && !PASTE_SECTION.test(line)));
+    if (next) { blocks.push(current); current = []; answered = false; inSection = false; }
+    if (PASTE_ANSWER.test(line)) answered = true;
+    else if (answered && PASTE_SECTION.test(line)) inSection = true;
+    current.push(line);
+    blankSince = false;
+  }
+  if (current.some(Boolean)) blocks.push(current);
+
+  const items: PastedMcq[] = [];
+  const failed: number[] = [];
+  for (const [index, block] of blocks.entries()) {
+    const item = readPastedBlock(block);
+    if (item) items.push(item);
+    else failed.push(index + 1);
+  }
+  return { items, failed };
+}
+
+function readPastedBlock(block: string[]): PastedMcq | null {
+  const answerAt = block.findIndex((line) => PASTE_ANSWER.test(line));
+  if (answerAt < 0) return null;
+  const given = block[answerAt].replace(PASTE_ANSWER, "");
+
+  // Everything after the answer belongs to সমাধান / ব্যাখ্যা; any other line there doesn't fit.
+  const parts: Record<"solution" | "explanation", string[]> = { solution: [], explanation: [] };
+  let section: keyof typeof parts | null = null;
+  for (const line of block.slice(answerAt + 1)) {
+    const label = PASTE_SECTION.exec(line);
+    if (label) {
+      section = /^(সমাধান|solution)$/i.test(label[1]) ? "solution" : "explanation";
+      if (parts[section].length) return null;
+      parts[section].push(line.slice(label[0].length));
+    } else if (section) parts[section].push(line);
+    else if (line) return null;
+  }
+  const part = (key: keyof typeof parts) => parts[key].join("\n").replace(/\n{3,}/g, "\n\n").trim() || null;
+
+  const body = block.slice(0, answerAt).filter(Boolean).join("\n");
+  const marks = [...body.matchAll(PASTE_OPTION)];
+  const first = marks.findIndex((mark) => LETTERS[mark[1].toLowerCase()] === 0);
+  if (first < 0) return null;
+  // Options must run ক, খ, গ, ঘ (, ঙ) in order with nothing else marked after them.
+  const found = marks.slice(first);
+  if (found.length < 4 || found.length > 5 || found.some((mark, at) => LETTERS[mark[1].toLowerCase()] !== at)) return null;
+  const text = body.slice(0, found[0].index).replace(PASTE_NUMBER, "").replace(/\s+/g, " ").trim();
+  const options = found.map((mark, at) => body.slice((mark.index ?? 0) + mark[0].length, at + 1 < found.length ? found[at + 1].index : body.length).replace(/\s+/g, " ").trim());
+
+  // The answer as a letter, or else as the text of one option ("উত্তর: পরম + ঈশ").
+  const letter = ANSWER_LETTER.exec(given);
+  const answer = letter ? LETTERS[letter[1].toLowerCase()] : options.findIndex((option) => loose(option) === loose(given));
+  const solution = part("solution"), explanation = part("explanation");
+  if (answer < 0 || !text || text.length > 2000 || options.some((option) => !option || option.length > 500) || answer >= options.length) return null;
+  if ((solution?.length ?? 0) > 5000 || (explanation?.length ?? 0) > 5000) return null;
+  return { text, options, correctIndex: answer, solution, explanation };
+}

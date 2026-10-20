@@ -6,7 +6,7 @@ import { AlertTriangle, ArrowLeft, Check, ClipboardPaste, Loader2, Sparkles, X }
 import { toast } from "sonner";
 import { MathText } from "@/components/math-text";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { BANK_IMPORT_BATCH, BANK_OPTION_LETTERS, chunkPastedText, type ChapterMcqRow, type ChapterShortRow } from "@/lib/question-bank";
+import { BANK_IMPORT_BATCH, BANK_OPTION_LETTERS, chunkPastedText, parsePastedMcqs, type ChapterMcqRow, type ChapterShortRow } from "@/lib/question-bank";
 import { cn } from "@/lib/utils";
 import { importChapterRows } from "@/server/actions/question-bank-general";
 import { adminButton } from "./bank-admin";
@@ -26,7 +26,8 @@ async function sortPiece(kind: "mcq" | "short", text: string, batch: string) {
 }
 
 /**
- * Staff on a chapter: paste MCQs or short questions copied from anywhere; AI sorts them into
+ * Staff on a chapter: paste MCQs or short questions copied from anywhere. MCQs in the exact pattern
+ * (`parsePastedMcqs`) are sorted without AI; anything else goes to AI, which sorts it into
  * question / options / answer (word for word), the admin checks them here — picks a missing answer,
  * drops a wrong one — and only then they are saved. Duplicates already in the chapter are skipped.
  */
@@ -48,6 +49,16 @@ export function ChapterPaste({ chapterId, kind }: { chapterId: string; kind: "mc
   }
 
   async function sort() {
+    // Text in the exact pattern is sorted here, no AI needed; otherwise all of it goes to AI.
+    if (kind === "mcq") {
+      const local = parsePastedMcqs(text);
+      if (local.items.length && !local.failed.length) {
+        setSorted({ kind, items: local.items });
+        toast.success(`ঠিক pattern — AI ছাড়াই ${local.items.length}টি সাজানো হলো`);
+        return;
+      }
+      if (local.items.length) toast.info(`${local.failed.map((at) => at.toLocaleString("bn-BD")).join(", ")} নং প্রশ্ন pattern-এ মেলেনি — AI দিয়ে সাজানো হচ্ছে`);
+    }
     const pieces = chunkPastedText(text);
     const batch = crypto.randomUUID();
     const items: Array<Mcq | Short> = [];
@@ -110,15 +121,17 @@ export function ChapterPaste({ chapterId, kind }: { chapterId: string; kind: "mc
 
         {!sorted ? <div className="space-y-3">
           <p className="rounded-xl bg-violet-50 px-3 py-2 text-sm text-violet-950">
-            বই, PDF বা ওয়েবসাইট থেকে যেভাবে কপি হয় সেভাবেই paste করো — AI প্রশ্ন, {kind === "mcq" ? "option, উত্তর, সমাধান" : "উত্তর"} আলাদা করে সাজিয়ে দেবে। সেভের আগে দেখে নিতে পারবে।
+            {kind === "mcq"
+              ? <>নিচের নমুনার মতো লিখলে (প্রশ্ন, ক–ঘ/ঙ option, <b>উত্তর:</b>, চাইলে <b>সমাধান:</b> আর <b>ব্যাখ্যা:</b> — একাধিক লাইনও চলবে) AI ছাড়াই সাজানো হবে। অন্যভাবে কপি করা লেখা AI সাজিয়ে দেবে। সেভের আগে দেখে নিতে পারবে।</>
+              : "বই, PDF বা ওয়েবসাইট থেকে যেভাবে কপি হয় সেভাবেই paste করো — AI প্রশ্ন আর উত্তর আলাদা করে সাজিয়ে দেবে। সেভের আগে দেখে নিতে পারবে।"}
           </p>
           <textarea value={text} onChange={(event) => setText(event.target.value.slice(0, MAX_TEXT))} rows={12} autoFocus aria-label="Paste করা লেখা"
-            placeholder={kind === "mcq" ? "১. ‘পরমেশ’ শব্দের সন্ধি বিচ্ছেদ কোনটি?\nক) পরম + এশ  খ) পরম + ঈশ  গ) পরম + ইশ  ঘ) পরম + ঈশা\nউত্তর: খ\n\n২. …" : "১. বাংলা ভাষার আদি নিদর্শন কী?\nউত্তর: চর্যাপদ\n\n২. …"}
+            placeholder={kind === "mcq" ? "১. ‘পরমেশ’ শব্দের সন্ধি বিচ্ছেদ কোনটি?\nক) পরম + এশ  খ) পরম + ঈশ  গ) পরম + ইশ  ঘ) পরম + ঈশা\nউত্তর: খ\nসমাধান: পরম + ঈশ = পরমেশ (অ + ঈ = এ)\nব্যাখ্যা: এটি স্বরসন্ধির উদাহরণ।\n\n২. …" : "১. বাংলা ভাষার আদি নিদর্শন কী?\nউত্তর: চর্যাপদ\n\n২. …"}
             className={cn(field, "font-mono text-[13px]")} />
           <p className="text-right text-xs text-zinc-400 tabular-nums">{text.length.toLocaleString("bn-BD")} / {MAX_TEXT.toLocaleString("bn-BD")}</p>
           {progress ? <Progress {...progress} /> : null}
           <button type="button" disabled={!text.trim() || Boolean(progress)} onClick={() => void sort()} className="flex h-11 w-full items-center justify-center gap-1.5 rounded-xl bg-violet-700 text-sm font-semibold text-white hover:bg-violet-800 disabled:opacity-50">
-            {progress ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} AI দিয়ে সাজাও
+            {progress ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />} {kind === "mcq" ? "সাজাও" : "AI দিয়ে সাজাও"}
           </button>
         </div> : <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2 text-sm">
