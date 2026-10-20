@@ -17,11 +17,13 @@ alone. Record decisions and their reasons; don't restate code.
 - React 19, TypeScript strict, Tailwind 4, Radix UI (`src/components/ui`), lucide icons, `sonner`
   toasts, `@tanstack/react-query`, zustand (`src/store`).
 - **Prisma 6.19 + Neon Postgres** (`prisma/schema.prisma`, client in `src/lib/prisma.ts`).
-- **Firebase Auth** (client SDK sign-in; firebase-admin on the server). AI via OpenAI or Google Gemini
-  (`src/server/assistant/ai.ts` `callAI`; the super admin picks one on /usage (Gemini default model gemini-3.8-flash; Google closed 2.5 Flash to new keys) — owner, 2026-10-18 — and
-  the other, when it has a key, answers if the chosen one fails. The Gemini key is entered there and
-  stored AES-encrypted in `AiSettings` (`src/server/secret-box.ts`, secret `AI_SETTINGS_SECRET` or the
-  Firebase private key); migration `20261102000000_ai_settings`. Voice and images stay on OpenAI).
+- **Firebase Auth** (client SDK sign-in; firebase-admin on the server). AI via OpenAI
+  (`src/server/assistant/ai.ts` `callAI`). **Gemini was removed** (owner, 2026-10-19; added
+  2026-10-18): its code and the /usage switch are gone, but the `AiSettings` table (migration
+  `20261102000000_ai_settings`, may hold an encrypted Gemini key) is still in the schema and the DB —
+  unused; dropping it needs a migration (ask first). Voice and images are on OpenAI.
+  A local AI (Ollama + Qwen3 8B on the owner's Mac, through an Electron app) was also tried and
+  removed the same day: on a 16 GB M4 it wrote ~19 tokens/s and too many wrong facts.
 - Deployed on **Vercel** (serverless). The production build runs `prisma migrate deploy`.
 
 ## Commands
@@ -124,11 +126,14 @@ alone. Record decisions and their reasons; don't restate code.
   (check names/years/numbers, say when unsure, one-line source). Chat/advice stays on the fast path.
   `callAI`'s `reasoning` option is also used by vocabulary explanations (medium) and note quizzes
   (low, a batch job inside 60 s).
-- **Bank solutions are book pages** (owner, 2026-10-18): `/api/question-bank/solve` asks for Quill
-  HTML — the solution, and an explanation in `<h3>` parts (মূল কথা, সাল ও ইতিহাস as a table,
-  উদাহরণ, আরও জেনে রাখো, অন্য option, মনে রাখার কৌশল; only the parts that apply) — with web
-  search + medium reasoning (`callAI` passes `responseSchema` to search too), falling back to medium
-  without search. About 20 s a question: one per call, three at a time, `maxDuration` 120. Search's
+- **AI solutions, kept cheap** (owner, 2026-10-18, cut down 2026-10-19): `src/server/solution-writer.ts`
+  writes Quill HTML — the solution, and a short explanation in `<h3>` parts (মূল কথা, অন্য option,
+  মনে রাখার কৌশল) — for the Question Bank (`/api/question-bank/solve`, staff) and the user's own
+  Preliminary sets (`/api/preliminary/solve`: own set, not in Testing, `premiumForSet`, each question
+  one `suggestion` a day; "AI দিয়ে সমাধান ও ব্যাখ্যা লেখো" bar with undo, `restoreSolutions`). Low
+  reasoning, 4 questions a call (two calls at a time), web search only when `needsLookup` sees years
+  or history. Why: the earlier book page (6 parts, search + medium reasoning, one per call) cost
+  ~17k tokens a question — 2.8M tokens on 18 Oct, mostly search results read as input. Search's
   inline sources are stripped (`stripCitations`). Solution columns hold plain text (older) or HTML:
   `src/lib/solution-html.ts` shows both (`BookText`), `cleanSolution` sanitizes on save, staff edit
   them in Quill, and the beautify route leaves HTML ones alone. Limit `SOLUTION_MAX` (20 000).

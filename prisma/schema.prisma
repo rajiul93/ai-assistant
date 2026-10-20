@@ -515,8 +515,8 @@ model Entitlement {
 }
 
 /// Prices that apply to every plan. One row (id "default"); the super admin edits it.
-/// Which AI answers (src/server/ai-settings.ts): OpenAI (its key stays in OPENAI_API_KEY) or Gemini,
-/// whose key the super admin enters on /usage. One row, id "default".
+/// Unused since Gemini was removed (2026-10-19); kept so the schema matches the database. It may
+/// hold the old encrypted Gemini key. Dropping it needs a migration (ask the owner first).
 model AiSettings {
   id          String   @id @default("default")
   /// "openai" or "gemini"; the other one (when it has a key) answers if this one fails.

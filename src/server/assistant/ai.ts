@@ -1,13 +1,10 @@
 import { repairLatexInJson } from "@/lib/ai-json";
 import { prisma } from "@/lib/prisma";
-import { getAiSettings } from "@/server/ai-settings";
-import { GEMINI_DEFAULT_MODEL, geminiCall } from "@/server/assistant/gemini";
 
 /**
- * One entry point for every AI call in the app: OpenAI, or Google Gemini when the super admin picks
- * it on /usage (owner, 2026-10-18). The chosen one answers; if it fails and the other has a key, the
- * other does. Within OpenAI, if the main model is busy, fails or times out, the fallback model
- * answers. Every attempt is logged for the AI Usage page.
+ * One entry point for every AI call in the app: OpenAI (ChatGPT) only — Gemini and a local AI
+ * were tried and removed (owner, 2026-10-19). If the main model is busy, fails or times out, the
+ * fallback model answers. Every attempt is logged for the AI Usage page.
  */
 
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-6-luna";
@@ -17,7 +14,7 @@ const TOTAL_BUDGET_MS = 40_000;
 const PER_ATTEMPT_WITH_BACKUP_MS = 25_000;
 
 /** Who is using the AI and for what — every call is logged for the AI usage page. */
-export type AiFeature = "assistant" | "file_assistant" | "answer" | "answer_search" | "note_writer" | "speech" | "transcribe" | "voice_fix" | "image" | "bank_beautify" | "bank_solve" | "bank_paste" | "bank_dupes" | "vocab_explain";
+export type AiFeature = "assistant" | "file_assistant" | "answer" | "answer_search" | "note_writer" | "speech" | "transcribe" | "voice_fix" | "image" | "bank_beautify" | "bank_solve" | "prelim_solve" | "bank_paste" | "bank_dupes" | "vocab_explain";
 /** Images/PDFs sent alongside the prompt (base64). */
 export type InlineFile = { mimeType: string; data: string; name?: string };
 /** `responseSchema` is written in an OpenAPI style (type: "OBJECT", nullable: true) and converted to JSON Schema. */
@@ -40,12 +37,11 @@ export type CallOptions = {
   reasoning?: "low" | "medium" | "high";
 };
 export type Usage = { input: number; output: number; total: number };
-/** `retryAfterMs`: how long the AI asked to wait before trying again (Gemini's "too many requests"). */
-export type Attempt = { status: number | null; text: string | null; usage?: Usage; retryAfterMs?: number };
+export type Attempt = { status: number | null; text: string | null; usage?: Usage };
 
 // After web search hits its quota, skip it for a while instead of wasting a request per question.
 let searchBlockedUntil = 0;
-// OpenAI out of credits: skip it for a while (Gemini answers meanwhile) instead of a failed request each time.
+// OpenAI out of credits: skip it for a while instead of a failed request each time.
 let openaiBlockedUntil = 0;
 const OUT_OF_CREDITS_PAUSE_MS = 10 * 60_000;
 const outOfCredits = (body: string) => /insufficient_quota|credit_balance_exhausted|no credits remaining/i.test(body);
@@ -233,68 +229,13 @@ async function webSearchResponse(model: string, apiKey: string, prompt: string, 
 }
 
 /**
- * Returns the model's text, or null when no AI has a key or every attempt fails. The chosen
- * provider goes first; the other one (when it has a key) gets what is left of the time, unless the
- * user stopped it or part of the answer has already been streamed.
+ * Returns the model's text, or null when OpenAI has no key or every attempt fails (the main model,
+ * then the fallback model when the first was busy).
  */
 export async function callAI(prompt: string, options: CallOptions) {
-  const settings = await getAiSettings();
-  const order = settings.provider === "gemini" ? (["gemini", "openai"] as const) : (["openai", "gemini"] as const);
   const deadline = Date.now() + (options.timeoutMs ?? TOTAL_BUDGET_MS);
-  for (const provider of order) {
-    if (options.signal?.aborted) return null;
-    if (deadline - Date.now() < 3_000) break;
-    const result = provider === "openai" ? await callOpenAI(prompt, options, deadline) : settings.gemini ? await callGemini(prompt, options, deadline, settings.gemini) : { text: null, final: false };
-    if (result.text || result.final) return result.text;
-  }
-  return null;
-}
-
-/** Without a wait from Gemini, how long to pause before trying again after "too many requests". */
-const GEMINI_RETRY_MS = 4_000;
-const GEMINI_TRIES = 3;
-
-/** Waits, but stops early when the user interrupts. */
-const pause = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve) => {
-  const timer = setTimeout(resolve, ms);
-  signal?.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
-});
-
-/**
- * Gemini's attempts: one model (the chosen or the default), logged like OpenAI's. On "too many
- * requests" (the free tier allows a few a minute) it waits as long as Gemini asks and tries again,
- * while the time allows.
- */
-async function callGemini(prompt: string, options: CallOptions, deadline: number, gemini: { key: string; model: string | null }): Promise<{ text: string | null; final: boolean }> {
-  const model = gemini.model || GEMINI_DEFAULT_MODEL;
-  for (let tries = 1; tries <= GEMINI_TRIES; tries++) {
-    const started = Date.now();
-    let streamedChars = 0;
-    const attemptOptions = options.onDelta ? { ...options, onDelta: (piece: string) => { streamedChars += piece.length; options.onDelta!(piece); } } : options;
-    try {
-      const attempt = await geminiCall(model, gemini.key, prompt, attemptOptions, withTimeout(options.signal, deadline - Date.now()));
-      logUsage({ userId: options.userId, feature: options.feature, model, httpStatus: attempt.status, latencyMs: Date.now() - started, usage: attempt.usage });
-      if (attempt.text) return { text: options.responseSchema ? repairLatexInJson(attempt.text) : attempt.text, final: true };
-      if (streamedChars > 0) return { text: null, final: true };
-      const wait = attempt.retryAfterMs ?? GEMINI_RETRY_MS;
-      // Try again only after "too many requests", and only when the wait leaves time to answer.
-      if (attempt.status !== 429 || tries === GEMINI_TRIES || Date.now() + wait > deadline - 8_000) return { text: null, final: false };
-      await pause(wait, options.signal);
-      if (options.signal?.aborted) return { text: null, final: true };
-    } catch (error) {
-      if (options.signal?.aborted) {
-        const input = Math.ceil(prompt.length / 3);
-        const output = Math.ceil(streamedChars / 3);
-        logUsage({ userId: options.userId, feature: options.feature, model, httpStatus: 200, latencyMs: Date.now() - started, usage: { input, output, total: input + output } });
-        return { text: null, final: true };
-      }
-      const timedOut = error instanceof Error && error.name === "TimeoutError";
-      logUsage({ userId: options.userId, feature: options.feature, model, httpStatus: null, timedOut, latencyMs: Date.now() - started });
-      console.warn(`[ai] ${model} failed: ${timedOut ? "timed out" : String(error)}`);
-      return { text: null, final: streamedChars > 0 };
-    }
-  }
-  return { text: null, final: false };
+  if (options.signal?.aborted) return null;
+  return (await callOpenAI(prompt, options, deadline)).text;
 }
 
 /**

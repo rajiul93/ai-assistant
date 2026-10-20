@@ -23,6 +23,7 @@ import { OPTION_LETTERS, statusInfo } from "@/lib/preliminary";
 import { cn } from "@/lib/utils";
 import { startSetStudy } from "@/store/timer-start";
 import { setQuestionSetStatus, submitTest, type AttemptDetail, type getQuestionSet } from "@/server/actions/preliminary";
+import { AiSolveBar, type SolvedNotes } from "./ai-solve-bar";
 
 type SetView = NonNullable<Awaited<ReturnType<typeof getQuestionSet>>>;
 
@@ -88,6 +89,12 @@ export function StudyView({ set }: { set: SetView }) {
   // Study aid: hide the answers and check yourself, one tap per question.
   const [hidden, setHidden] = useState(false);
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
+  // AI-written solutions show at once, before the page refreshes.
+  const [solved, setSolved] = useState<Record<string, SolvedNotes>>({});
+  const questions = set.questions.map((question) => {
+    const notes = solved[question.id];
+    return notes ? { ...question, solution: notes.solution, explanation: notes.explanation, hasSolution: Boolean(notes.solution), hasExplanation: Boolean(notes.explanation) } : question;
+  });
 
   return <div className="space-y-4">
     <Header set={set}>
@@ -98,8 +105,11 @@ export function StudyView({ set }: { set: SetView }) {
       </div>
     </Header>
 
+    {/* Solutions are a paid feature: the button is for those who can read them. */}
+    {set.premium && questions.length ? <AiSolveBar setId={set.id} questions={questions.map(({ id, solution, explanation }) => ({ id, solution, explanation }))} onSolved={(notes) => setSolved((current) => ({ ...current, ...Object.fromEntries(notes.map((item) => [item.id, item])) }))} /> : null}
+
     <ol className="space-y-3">
-      {set.questions.map((question, index) => {
+      {questions.map((question, index) => {
         const show = !hidden || revealed.has(question.id);
         return <li key={question.id} className="rounded-2xl border border-zinc-200 bg-white p-4">
           <p className="font-medium leading-relaxed"><span className="mr-1.5 text-zinc-400 tabular-nums">{index + 1}.</span><MathText text={question.text} book /></p>
