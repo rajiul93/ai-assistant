@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, CheckCircle2, ClipboardCheck, Lock, Pause, Play, RotateCcw, Timer, X, XCircle } from "lucide-react";
+import { ArrowDown, ArrowLeft, BookmarkCheck, Check, CheckCircle2, CircleCheck, ClipboardCheck, Eye, EyeOff, ListChecks, Lock, Pause, Play, RotateCcw, Timer, X, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/user-error";
 // Solutions are shown in the read-only Quill view (BookText).
@@ -22,7 +22,7 @@ import { formatDate } from "@/lib/dayjs";
 import { OPTION_LETTERS, statusInfo } from "@/lib/preliminary";
 import { cn } from "@/lib/utils";
 import { startSetStudy } from "@/store/timer-start";
-import { setQuestionSetStatus, submitTest, type AttemptDetail, type getQuestionSet } from "@/server/actions/preliminary";
+import { setQuestionSetStatus, setQuestionsRead, submitTest, type AttemptDetail, type getQuestionSet } from "@/server/actions/preliminary";
 import { AiSolveBar, type SolvedNotes } from "./ai-solve-bar";
 
 type SetView = NonNullable<Awaited<ReturnType<typeof getQuestionSet>>>;
@@ -95,6 +95,34 @@ export function StudyView({ set }: { set: SetView }) {
     const notes = solved[question.id];
     return notes ? { ...question, solution: notes.solution, explanation: notes.explanation, hasSolution: Boolean(notes.solution), hasExplanation: Boolean(notes.explanation) } : question;
   });
+  // "পড়া শেষ" marks, only while studying (Doing): saved per question, so the next sitting starts
+  // at the unread ones — on any device.
+  const marking = set.status === "DOING" && questions.length > 0;
+  const [read, setRead] = useState<Set<string>>(() => new Set(set.questions.filter((question) => question.read).map((question) => question.id)));
+  const [onlyUnread, setOnlyUnread] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const firstUnread = questions.find((question) => !read.has(question.id));
+  const readCount = questions.filter((question) => read.has(question.id)).length;
+
+  async function mark(ids: string[], value: boolean) {
+    const before = read;
+    setRead((current) => {
+      const next = new Set(current);
+      for (const id of ids) {
+        if (value) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+    try {
+      await setQuestionsRead({ setId: set.id, questionIds: ids, read: value });
+    } catch (error) {
+      setRead(before);
+      toast.error(errorMessage(error, "Mark save হলো না।"));
+    }
+  }
+  const jumpTo = (id: string) => document.getElementById(`q-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const shown = marking && onlyUnread ? questions.filter((question) => !read.has(question.id)) : questions;
 
   return <div className="space-y-4">
     <Header set={set}>
@@ -105,13 +133,34 @@ export function StudyView({ set }: { set: SetView }) {
       </div>
     </Header>
 
+    {marking ? <section className="sticky top-[calc(4.25rem+env(safe-area-inset-top))] z-10 rounded-2xl bg-white/95 p-3 lg:top-2 shadow-[0_6px_24px_-12px_rgba(15,23,42,0.25)] ring-1 ring-zinc-200 backdrop-blur">
+      <div className="flex items-center gap-3">
+        <BookmarkCheck className="size-5 shrink-0 text-emerald-600" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-zinc-900">পড়া শেষ <span className="tabular-nums">{readCount}/{questions.length}</span>{readCount === questions.length ? " — সব পড়া হয়ে গেছে 🎉" : ""}</p>
+          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-zinc-100"><div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${(readCount / questions.length) * 100}%` }} /></div>
+        </div>
+      </div>
+      <div className="mt-2.5 flex flex-wrap gap-1.5">
+        {firstUnread && readCount ? <button type="button" onClick={() => { setOnlyUnread(false); window.setTimeout(() => jumpTo(firstUnread.id), 0); }} className="flex h-8 items-center gap-1 rounded-full bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-700"><ArrowDown className="size-3.5" /> না-পড়া থেকে শুরু ({questions.indexOf(firstUnread) + 1} নং)</button> : null}
+        <button type="button" onClick={() => setOnlyUnread((value) => !value)} aria-pressed={onlyUnread} className={cn("flex h-8 items-center gap-1 rounded-full px-3 text-xs font-semibold ring-1 transition", onlyUnread ? "bg-zinc-900 text-white ring-zinc-900" : "text-zinc-700 ring-zinc-200 hover:bg-zinc-50")}>{onlyUnread ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />} {onlyUnread ? "সব দেখাও" : "শুধু না-পড়াগুলো"}</button>
+        {readCount ? resetting
+          ? <span className="flex items-center gap-1 text-xs"><span className="text-zinc-600">সব mark মুছবে?</span>
+            <button type="button" onClick={() => { setResetting(false); void mark(questions.map((question) => question.id), false); }} className="h-8 rounded-full bg-red-600 px-3 font-semibold text-white">হ্যাঁ</button>
+            <button type="button" onClick={() => setResetting(false)} className="h-8 rounded-full px-3 font-semibold text-zinc-600 ring-1 ring-zinc-200">না</button></span>
+          : <button type="button" onClick={() => setResetting(true)} className="flex h-8 items-center gap-1 rounded-full px-3 text-xs font-semibold text-zinc-500 ring-1 ring-zinc-200 hover:bg-zinc-50"><RotateCcw className="size-3.5" /> আবার শুরু</button> : null}
+      </div>
+    </section> : null}
+
     {/* Solutions are a paid feature: the button is for those who can read them. */}
     {set.premium && questions.length ? <AiSolveBar setId={set.id} questions={questions.map(({ id, solution, explanation }) => ({ id, solution, explanation }))} onSolved={(notes) => setSolved((current) => ({ ...current, ...Object.fromEntries(notes.map((item) => [item.id, item])) }))} /> : null}
 
     <ol className="space-y-3">
-      {questions.map((question, index) => {
+      {shown.map((question) => {
+        const index = questions.indexOf(question);
         const show = !hidden || revealed.has(question.id);
-        return <li key={question.id} className="rounded-2xl border border-zinc-200 bg-white p-4">
+        const done = marking && read.has(question.id);
+        return <li key={question.id} id={`q-${question.id}`} className={cn("scroll-mt-52 rounded-2xl lg:scroll-mt-36 border bg-white p-4 transition", done ? "border-emerald-200 border-l-4 border-l-emerald-500 bg-emerald-50/30" : "border-zinc-200")}>
           <p className="font-medium leading-relaxed"><span className="mr-1.5 text-zinc-400 tabular-nums">{index + 1}.</span><MathText text={question.text} book /></p>
           <ul className="mt-3 grid gap-2 sm:grid-cols-2">
             {question.options.map((option, optionIndex) => {
@@ -124,9 +173,16 @@ export function StudyView({ set }: { set: SetView }) {
           </ul>
           {show ? <SolutionNotes solution={question.solution} explanation={question.explanation} hasSolution={question.hasSolution} hasExplanation={question.hasExplanation} /> : null}
           {!show ? <button type="button" onClick={() => setRevealed((value) => new Set(value).add(question.id))} className="mt-2 text-xs font-medium text-indigo-600 hover:underline">উত্তর দেখো</button> : null}
+          {marking ? <div className="mt-3 flex flex-wrap items-center justify-end gap-1.5 border-t border-zinc-100 pt-2.5">
+            {!done && questions.slice(0, index).some((earlier) => !read.has(earlier.id)) ? <button type="button" onClick={() => void mark(questions.slice(0, index + 1).filter((earlier) => !read.has(earlier.id)).map((earlier) => earlier.id), true)} className="flex h-8 items-center gap-1 rounded-full px-3 text-xs font-medium text-zinc-500 hover:bg-zinc-100"><ListChecks className="size-3.5" /> এ পর্যন্ত সব পড়া শেষ</button> : null}
+            <button type="button" onClick={() => void mark([question.id], !done)} aria-pressed={done} className={cn("flex h-8 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold transition", done ? "bg-emerald-600 text-white hover:bg-emerald-700" : "text-emerald-700 ring-1 ring-emerald-300 hover:bg-emerald-50")}>
+              <CircleCheck className="size-4" /> {done ? "পড়া শেষ" : "পড়া শেষ mark করো"}
+            </button>
+          </div> : null}
         </li>;
       })}
     </ol>
+    {marking && onlyUnread && !shown.length ? <p className="rounded-2xl border border-dashed border-emerald-300 bg-emerald-50 px-4 py-8 text-center text-sm text-emerald-800">সব প্রশ্ন পড়া শেষ! এখন Test-এ নিতে পারো।</p> : null}
     {!set.questions.length ? <p className="rounded-2xl border border-dashed border-zinc-300 bg-white px-4 py-10 text-center text-sm text-zinc-500">এই set-এ কোনো প্রশ্ন নেই। <Link href={`/preliminary/${set.id}/edit`} className="underline">প্রশ্ন যোগ করো</Link></p> : null}
   </div>;
 }
