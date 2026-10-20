@@ -120,6 +120,8 @@ export async function updateQuestionSet(id: string, input: unknown) {
       return { ...question, solution: old?.solution ?? null, explanation: old?.explanation ?? null };
     });
   }
+  // Saving replaces the questions; "পড়া শেষ" marks stay with questions whose wording didn't change.
+  const read = new Map((await prisma.question.findMany({ where: { setId: set.id, readAt: { not: null } }, select: { text: true, options: true, readAt: true } })).map((question) => [questionKey(question), question.readAt]));
   await prisma.$transaction([
     prisma.question.deleteMany({ where: { setId: set.id } }),
     prisma.questionSet.update({
@@ -129,7 +131,7 @@ export async function updateQuestionSet(id: string, input: unknown) {
         topicId,
         topicName: data.topicName,
         date: toDate(data.date),
-        questions: { create: data.questions.map((question, position) => ({ position, ...question })) },
+        questions: { create: data.questions.map((question, position) => ({ position, ...question, readAt: read.get(questionKey(question)) ?? null })) },
       },
     }),
   ]);
@@ -277,6 +279,19 @@ export async function setQuestionSetStatus(id: string, status: QuestionSetStatus
 }
 
 /**
+ * "পড়া শেষ" marks while studying: marks (or clears) these questions of my set. Not during a test.
+ * Returns how many of the set's questions are now read.
+ */
+export async function setQuestionsRead(input: unknown) {
+  const user = await requireUser();
+  const { setId, questionIds, read } = z.object({ setId: z.string().min(1).max(64), questionIds: z.array(z.string().min(1).max(64)).min(1).max(300), read: z.boolean() }).parse(input);
+  const set = await ownedSet(user.id, setId);
+  if (set.status === "TESTING") throw userError("Test চলার সময় পড়ার mark বদলানো যায় না।");
+  await prisma.question.updateMany({ where: { setId: set.id, id: { in: questionIds } }, data: { readAt: read ? new Date() : null } });
+  return prisma.question.count({ where: { setId: set.id, readAt: { not: null } } });
+}
+
+/**
  * One set for its page. The answer key is included only outside Testing; during a test the page
  * gets question text and options alone.
  */
@@ -287,7 +302,7 @@ export async function getQuestionSet(id: string) {
     select: {
       id: true, topicName: true, date: true, status: true, subjectId: true, topicId: true, bankSetId: true,
       subject: { select: { name: true } },
-      questions: { orderBy: { position: "asc" }, select: { id: true, text: true, options: true, correctIndex: true, solution: true, explanation: true } },
+      questions: { orderBy: { position: "asc" }, select: { id: true, text: true, options: true, correctIndex: true, solution: true, explanation: true, readAt: true } },
       attempts: { orderBy: { submittedAt: "desc" }, take: 10, select: { id: true, correct: true, total: true, submittedAt: true } },
     },
   });
@@ -299,8 +314,8 @@ export async function getQuestionSet(id: string) {
     ...set,
     premium,
     questions: set.questions.map((question) => (testing
-      ? { id: question.id, text: question.text, options: question.options, correctIndex: null, solution: null, explanation: null, hasSolution: false, hasExplanation: false }
-      : gateNotes(question, premium))),
+      ? { id: question.id, text: question.text, options: question.options, correctIndex: null, solution: null, explanation: null, hasSolution: false, hasExplanation: false, read: false }
+      : { ...gateNotes(question, premium), read: Boolean(question.readAt) })),
   };
 }
 

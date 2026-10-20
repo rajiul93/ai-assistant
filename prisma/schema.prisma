@@ -646,6 +646,9 @@ model Question {
   /// From the Question Bank (or kept through edits); hidden during a test like the answer.
   solution     String?
   explanation  String?
+  /// Marked "পড়া শেষ" while studying (Doing), so the next sitting starts at the unread ones.
+  /// Kept through edits (matched by wording and options); cleared from the study page.
+  readAt       DateTime?
 
   @@index([setId, position])
 }
