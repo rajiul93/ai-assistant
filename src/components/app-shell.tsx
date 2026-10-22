@@ -17,6 +17,7 @@ import { StudyAssistant } from "@/components/study-assistant";
 import { Calculator } from "@/components/calculator";
 import { CalendarSheet } from "@/components/calendar-sheet";
 import { LcmHcfSheet } from "@/components/lcm-hcf-sheet";
+import { ScratchPadSheet } from "@/components/scratch-pad-sheet";
 import { ToolDock } from "@/components/tool-dock";
 import { SessionBar } from "@/components/timer/session-bar";
 import { SubjectPickerDialog } from "@/components/timer/subject-picker-dialog";
@@ -131,6 +132,7 @@ export function AppShell({
         <Calculator />
         <CalendarSheet />
         <LcmHcfSheet />
+        <ScratchPadSheet />
         <TimerAlarm />
         {/* One timer across the user's devices (see TimerSync). */}
         <TimerSync />
