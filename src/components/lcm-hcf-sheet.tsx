@@ -66,6 +66,7 @@ export function LcmHcfSheet() {
       {solved ? <>
         <LadderCard
           title="লসাগু"
+          label="ল.সা.গু."
           rule="যে মৌলিক সংখ্যা অন্তত দুটো সংখ্যাকে ভাগ করে, তা দিয়ে ভাগ; যেটা ভাগ যায় না সেটা নিচে নামে।"
           ladder={solved.lcm}
           answer={solved.lcm.factors.length
@@ -74,6 +75,7 @@ export function LcmHcfSheet() {
         />
         <LadderCard
           title="গসাগু"
+          label="গ.সা.গু."
           rule="শুধু সেই মৌলিক সংখ্যা দিয়ে ভাগ, যা সবগুলো সংখ্যাকে ভাগ করে।"
           ladder={solved.hcf}
           answer={solved.hcf.factors.length
@@ -89,31 +91,34 @@ export function LcmHcfSheet() {
   </div>;
 }
 
-/** One ladder: divisor | row, a line under each divided row, the leftover row last. */
-function LadderCard({ title, rule, ladder, answer }: { title: string; rule: string; ladder: Ladder; answer: React.ReactNode }) {
+/** How far each row steps right of the one above, like a hand-written ladder. */
+const STEP = 14;
+
+/**
+ * One ladder drawn like the copy book: divisor, then an L-shaped bracket (a line down the left of
+ * the row and under it), each row a little to the right of the one above, the leftover row last
+ * with no bracket, the label beside it and the product underlined below.
+ */
+function LadderCard({ title, label, rule, ladder, answer }: { title: string; label: string; rule: string; ladder: Ladder; answer: React.ReactNode }) {
   return <section className="rounded-3xl bg-white p-4 shadow-[0_6px_24px_-12px_rgba(15,23,42,0.15)]">
     <h3 className="text-[16px] font-bold text-slate-900">{title}</h3>
     <p className="mt-0.5 text-[12px] text-slate-500">{rule}</p>
     {/* Wide rows scroll inside the card, never the page. */}
-    <div className="mt-3 overflow-x-auto pb-1">
-      <table className="border-collapse text-[18px] tabular-nums text-slate-900">
-        <tbody>
-          {ladder.steps.map((step, index) => <tr key={index}>
-            <td className="pr-2 text-right align-bottom font-semibold text-amber-700">{bn(step.divisor)}</td>
-            <td className="whitespace-nowrap border-b-2 border-l-2 border-slate-700 px-2 py-0.5">
-              <Row numbers={step.row} previous={ladder.steps[index - 1]} />
-            </td>
-          </tr>)}
-          <tr>
-            <td />
-            <td className="whitespace-nowrap px-2 py-0.5 pl-[calc(0.5rem+2px)]">
-              <Row numbers={ladder.last} previous={ladder.steps.at(-1)} />
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <div className="mt-4 flex items-start gap-4 overflow-x-auto pb-1">
+      <div className="shrink-0 text-[19px] leading-none tabular-nums text-slate-900">
+        {ladder.steps.map((step, index) => <div key={index} className="flex items-stretch" style={{ marginLeft: index * STEP }}>
+          <span className="flex w-7 items-center justify-end pr-1.5 font-semibold text-slate-900">{bn(step.divisor)}</span>
+          <span className="whitespace-nowrap rounded-bl-[3px] border-b-[2.5px] border-l-[2.5px] border-slate-800 px-2.5 pb-1.5 pt-2">
+            <Row numbers={step.row} previous={ladder.steps[index - 1]} />
+          </span>
+        </div>)}
+        <div className="whitespace-nowrap px-2.5 pt-2" style={{ marginLeft: ladder.steps.length * STEP + 28 + 2.5 }}>
+          <Row numbers={ladder.last} previous={ladder.steps.at(-1)} />
+        </div>
+      </div>
+      <span className="shrink-0 pt-6 text-[17px] font-semibold text-slate-700">{label}</span>
     </div>
-    <p className="mt-3 text-[16px] text-slate-800">{answer}</p>
+    <p className="mt-4 inline-block border-b-[2.5px] border-slate-800 pb-1 text-[17px] tabular-nums text-slate-900">{answer}</p>
   </section>;
 }
 
