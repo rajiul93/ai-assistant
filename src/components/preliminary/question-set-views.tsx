@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { startSetStudy } from "@/store/timer-start";
 import { setQuestionSetStatus, setQuestionsRead, submitTest, type AttemptDetail, type getQuestionSet } from "@/server/actions/preliminary";
 import { AiSolveBar, type SolvedNotes } from "./ai-solve-bar";
+import { QuestionShareActions } from "./question-share";
 
 type SetView = NonNullable<Awaited<ReturnType<typeof getQuestionSet>>>;
 
@@ -173,12 +174,16 @@ export function StudyView({ set }: { set: SetView }) {
           </ul>
           {show ? <SolutionNotes solution={question.solution} explanation={question.explanation} hasSolution={question.hasSolution} hasExplanation={question.hasExplanation} /> : null}
           {!show ? <button type="button" onClick={() => setRevealed((value) => new Set(value).add(question.id))} className="mt-2 text-xs font-medium text-indigo-600 hover:underline">উত্তর দেখো</button> : null}
-          {marking ? <div className="mt-3 flex flex-wrap items-center justify-end gap-1.5 border-t border-zinc-100 pt-2.5">
+          {/* Ask about it: into Confusion, or to friends and groups in chat. Marks only while Doing. */}
+          <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-zinc-100 pt-2.5">
+            <QuestionShareActions questionId={question.id} />
+            {marking ? <span className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
             {!done && questions.slice(0, index).some((earlier) => !read.has(earlier.id)) ? <button type="button" onClick={() => void mark(questions.slice(0, index + 1).filter((earlier) => !read.has(earlier.id)).map((earlier) => earlier.id), true)} className="flex h-8 items-center gap-1 rounded-full px-3 text-xs font-medium text-zinc-500 hover:bg-zinc-100"><ListChecks className="size-3.5" /> এ পর্যন্ত সব পড়া শেষ</button> : null}
             <button type="button" onClick={() => void mark([question.id], !done)} aria-pressed={done} className={cn("flex h-8 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold transition", done ? "bg-emerald-600 text-white hover:bg-emerald-700" : "text-emerald-700 ring-1 ring-emerald-300 hover:bg-emerald-50")}>
               <CircleCheck className="size-4" /> {done ? "পড়া শেষ" : "পড়া শেষ mark করো"}
             </button>
-          </div> : null}
+            </span> : null}
+          </div>
         </li>;
       })}
     </ol>

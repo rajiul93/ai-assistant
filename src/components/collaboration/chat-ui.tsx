@@ -3,7 +3,9 @@
 import type { ReactNode, RefObject, UIEventHandler } from "react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { ArrowLeft, Check, CheckCheck, Clock3, Loader2, MoreVertical, RotateCcw, Send, UsersRound } from "lucide-react";
+import { MathText } from "@/components/math-text";
 import { bubbleTime, chatDayKey, chatDayLabel } from "@/lib/chat-time";
+import { hasMath } from "@/lib/math";
 import { cn } from "@/lib/utils";
 
 /*
@@ -159,7 +161,8 @@ export function Bubble({ mine, first, body, createdAt, pending, failed, seen, se
     )}>
       {sender ? <p className="mb-0.5 text-[12.5px] font-semibold text-emerald-600">{sender}</p> : null}
       <p className="whitespace-pre-wrap break-words">
-        {body}
+        {/* `$…$` (e.g. a Preliminary question sent from its set) is drawn like the book. */}
+        {hasMath(body) ? <MathText text={body} /> : body}
         {/* Room for the time so it never sits on top of the last word. */}
         <span aria-hidden className="inline-block w-16" />
       </p>
