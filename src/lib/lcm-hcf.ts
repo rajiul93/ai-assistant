@@ -25,11 +25,11 @@ export const LCM_MAX_COUNT = 10;
 
 const BANGLA_DIGITS = "০১২৩৪৫৬৭৮৯";
 
-/** "১২, 18 ২৪" → [12, 18, 24]: commas, spaces, Bangla or English digits. Throws a Bangla message. */
+/** "১২, 18 ২৪" → [12, 18, 24] (one number is fine: then its factors are shown): commas, spaces, Bangla or English digits. Throws a Bangla message. */
 export function parseNumbers(input: string): number[] {
   const text = input.replace(/[০-৯]/g, (digit) => String(BANGLA_DIGITS.indexOf(digit)));
   const parts = text.split(/[\s,،;।|]+/).filter(Boolean);
-  if (parts.length < 2) throw new Error("অন্তত দুটো সংখ্যা দাও (যেমন ১২, ১৮)।");
+  if (parts.length === 0) throw new Error("একটা সংখ্যা দাও (উৎপাদক), বা একাধিক (লসাগু/গসাগু)।");
   if (parts.length > LCM_MAX_COUNT) throw new Error(`একবারে ${LCM_MAX_COUNT}টার বেশি সংখ্যা নয়।`);
   return parts.map((part) => {
     if (!/^\d+$/.test(part)) throw new Error(`“${part}” পূর্ণ সংখ্যা নয়। শুধু ধনাত্মক পূর্ণ সংখ্যা দাও।`);
@@ -79,4 +79,39 @@ export function hcfLadder(numbers: number[]): Ladder {
   const { steps, last } = ladder(numbers, numbers.length);
   const factors = steps.map((step) => step.divisor);
   return { steps, last, factors, result: factors.reduce((a, b) => a * b, 1) };
+}
+
+/**
+ * One number broken into prime factors the book's way: divide by the smallest prime while the
+ * quotient is not itself prime; that last prime is the bottom row. 36 → 2, 2, 3 | 3.
+ */
+export function primeFactorLadder(n: number): Ladder {
+  const steps: LadderStep[] = [];
+  let rest = n;
+  while (rest > 1 && primeFactors(rest)[0] !== rest) {
+    const p = primeFactors(rest)[0];
+    steps.push({ divisor: p, row: [rest] });
+    rest /= p;
+  }
+  const factors = rest > 1 ? [...steps.map((step) => step.divisor), rest] : [];
+  return { steps, last: [rest], factors, result: n };
+}
+
+/** The same primes grouped with their powers, in order: [2, 2, 3, 3] → [[2, 2], [3, 2]]. */
+export function powersOf(factors: number[]): Array<[prime: number, power: number]> {
+  const counts = new Map<number, number>();
+  for (const p of factors) counts.set(p, (counts.get(p) ?? 0) + 1);
+  return [...counts].sort((a, b) => a[0] - b[0]);
+}
+
+/** Every factor (গুণনীয়ক) of n, smallest first. */
+export function allFactors(n: number) {
+  const small: number[] = [];
+  const large: number[] = [];
+  for (let d = 1; d * d <= n; d++) {
+    if (n % d !== 0) continue;
+    small.push(d);
+    if (d * d !== n) large.unshift(n / d);
+  }
+  return [...small, ...large];
 }
