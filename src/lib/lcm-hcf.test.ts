@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hcfLadder, lcmLadder, parseNumbers } from "./lcm-hcf";
+import { allFactors, hcfLadder, lcmLadder, parseNumbers, powersOf, primeFactorLadder } from "./lcm-hcf";
 
 describe("lcmLadder", () => {
   it("matches the book example 16, 24, 30, 36, 48", () => {
@@ -43,7 +43,10 @@ describe("hcfLadder", () => {
 
 describe("parseNumbers", () => {
   it("reads Bangla and English digits, commas and spaces", () => expect(parseNumbers("১২, 18 ২৪")).toEqual([12, 18, 24]));
-  it("needs two numbers", () => expect(() => parseNumbers("১২")).toThrow());
+  it("one number is allowed, none is not", () => {
+    expect(parseNumbers("৩৬")).toEqual([36]);
+    expect(() => parseNumbers("  ")).toThrow();
+  });
   it("refuses zero and fractions", () => {
     expect(() => parseNumbers("0, 5")).toThrow();
     expect(() => parseNumbers("1.5, 3")).toThrow();
@@ -57,4 +60,21 @@ describe("large primes", () => {
     expect(hcfLadder([999983, 999979]).result).toBe(1);
     expect(Date.now() - started).toBeLessThan(100);
   });
+});
+
+describe("primeFactorLadder", () => {
+  it("36 → 2 × 2 × 3 × 3, the last prime as the bottom row", () => {
+    const ladder = primeFactorLadder(36);
+    expect(ladder.steps.map((step) => [step.divisor, step.row[0]])).toEqual([[2, 36], [2, 18], [3, 9]]);
+    expect(ladder.last).toEqual([3]);
+    expect(ladder.factors).toEqual([2, 2, 3, 3]);
+    expect(powersOf(ladder.factors)).toEqual([[2, 2], [3, 2]]);
+  });
+  it("a prime has no steps", () => {
+    const ladder = primeFactorLadder(13);
+    expect(ladder.steps).toEqual([]);
+    expect(ladder.factors).toEqual([13]);
+  });
+  it("1 has no prime factors", () => expect(primeFactorLadder(1).factors).toEqual([]));
+  it("lists every factor in order", () => expect(allFactors(36)).toEqual([1, 2, 3, 4, 6, 9, 12, 18, 36]));
 });

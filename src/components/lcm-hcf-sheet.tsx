@@ -3,13 +3,13 @@
 import { useEffect, useState } from "react";
 import { Divide, X } from "lucide-react";
 import { toBanglaDigits } from "@/lib/calendars";
-import { hcfLadder, lcmLadder, parseNumbers, type Ladder } from "@/lib/lcm-hcf";
+import { allFactors, hcfLadder, lcmLadder, parseNumbers, powersOf, primeFactorLadder, type Ladder } from "@/lib/lcm-hcf";
 import { onOpenTool } from "@/components/tool-dock";
 import { cn } from "@/lib/utils";
 
 const bn = (value: number) => toBanglaDigits(value);
 
-type Solved = { numbers: number[]; lcm: Ladder; hcf: Ladder };
+type Solved = { kind: "many"; numbers: number[]; lcm: Ladder; hcf: Ladder } | { kind: "one"; n: number; ladder: Ladder; factors: number[] };
 
 /**
  * লসাগু / গসাগু tool (a dock shortcut, picked on /settings): the student types the numbers and gets
@@ -33,7 +33,10 @@ export function LcmHcfSheet() {
     event.preventDefault();
     try {
       const numbers = parseNumbers(input);
-      setSolved({ numbers, lcm: lcmLadder(numbers), hcf: hcfLadder(numbers) });
+      // One number: its prime factors and every factor; two or more: লসাগু and গসাগু.
+      setSolved(numbers.length === 1
+        ? { kind: "one", n: numbers[0], ladder: primeFactorLadder(numbers[0]), factors: allFactors(numbers[0]) }
+        : { kind: "many", numbers, lcm: lcmLadder(numbers), hcf: hcfLadder(numbers) });
       setError("");
     } catch (failure) {
       setSolved(null);
@@ -53,17 +56,17 @@ export function LcmHcfSheet() {
       <input
         value={input}
         onChange={(event) => setInput(event.target.value)}
-        placeholder="যেমন: ১২, ১৮, ২৪"
+        placeholder="যেমন: ৩৬  বা  ১২, ১৮, ২৪"
         aria-label="সংখ্যাগুলো, কমা বা ফাঁকা দিয়ে আলাদা করে"
         autoFocus
         className="h-12 min-w-0 flex-1 rounded-2xl bg-white px-4 text-[17px] text-slate-900 ring-1 ring-slate-200 outline-none focus:ring-2 focus:ring-amber-400"
       />
       <button type="submit" className="h-12 shrink-0 rounded-2xl bg-slate-900 px-5 text-[15px] font-semibold text-white active:scale-95">সমাধান</button>
     </form>
-    <p className={cn("mx-5 mt-1.5 text-[12px]", error ? "text-red-600" : "text-slate-500")}>{error || "সংখ্যাগুলো কমা বা ফাঁকা দিয়ে লেখো — বাংলা বা ইংরেজি অঙ্কে।"}</p>
+    <p className={cn("mx-5 mt-1.5 text-[12px]", error ? "text-red-600" : "text-slate-500")}>{error || "একটা সংখ্যা দিলে উৎপাদক, একাধিক দিলে (কমা বা ফাঁকা দিয়ে) লসাগু ও গসাগু।"}</p>
 
     <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pb-4 pt-3">
-      {solved ? <>
+      {solved?.kind === "one" ? <FactorCards n={solved.n} ladder={solved.ladder} factors={solved.factors} /> : solved ? <>
         <LadderCard
           title="লসাগু"
           label="ল.সা.গু."
@@ -89,6 +92,32 @@ export function LcmHcfSheet() {
       </> : <p className="px-1 pt-6 text-center text-[14px] text-slate-400">সংখ্যা লিখে “সমাধান” চাপো — ভাগের ধাপগুলো বইয়ের মতো দেখাবে।</p>}
     </div>
   </div>;
+}
+
+/** One number: its prime-factor ladder, the power form, and every factor (গুণনীয়ক). */
+function FactorCards({ n, ladder, factors }: { n: number; ladder: Ladder; factors: number[] }) {
+  const powers = powersOf(ladder.factors);
+  const answer = ladder.factors.length === 0
+    ? <>১-এর কোনো মৌলিক উৎপাদক নেই</>
+    : ladder.factors.length === 1
+      ? <>{bn(n)} একটি মৌলিক সংখ্যা</>
+      : <>{bn(n)} = {ladder.factors.map(bn).join(" × ")}{powers.some(([, power]) => power > 1)
+        ? <> = {powers.map(([prime, power], index) => <span key={prime}>{index ? " × " : ""}{bn(prime)}{power > 1 ? <sup>{bn(power)}</sup> : null}</span>)}</>
+        : null}</>;
+  return <>
+    <LadderCard
+      title="মৌলিক উৎপাদকে বিশ্লেষণ"
+      label="উৎপাদক"
+      rule="সবচেয়ে ছোট মৌলিক সংখ্যা দিয়ে ভাগ, যতক্ষণ ভাগফল নিজে মৌলিক না হয়।"
+      ladder={ladder}
+      answer={answer}
+    />
+    <section className="rounded-3xl bg-white p-4 shadow-[0_6px_24px_-12px_rgba(15,23,42,0.15)]">
+      <h3 className="text-[16px] font-bold text-slate-900">{bn(n)}-এর সব গুণনীয়ক</h3>
+      <p className="mt-0.5 text-[12px] text-slate-500">যে সংখ্যাগুলো দিয়ে {bn(n)} নিঃশেষে ভাগ যায় — মোট {bn(factors.length)}টি।</p>
+      <p className="mt-3 text-[17px] leading-relaxed tabular-nums text-slate-900">{factors.map(bn).join(", ")}</p>
+    </section>
+  </>;
 }
 
 /** How far each row steps right of the one above, like a hand-written ladder. */
