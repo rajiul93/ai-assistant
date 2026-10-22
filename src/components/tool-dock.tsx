@@ -8,7 +8,7 @@ import { quickItemsFrom, type QuickItem } from "@/lib/quick-items";
 import { cn } from "@/lib/utils";
 import { useAssistantStore } from "@/store/assistant";
 
-type Tool = "calculator" | "calendar" | "lcm";
+type Tool = "calculator" | "calendar" | "lcm" | "scratch";
 const OPEN_TOOL = "prep:open-tool";
 
 /** Lets a tool's sheet open when its button in the dock is tapped; returns the cleanup. */

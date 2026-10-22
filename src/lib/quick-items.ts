@@ -1,4 +1,4 @@
-import { Calculator, CalendarDays, Divide, type LucideIcon } from "lucide-react";
+import { Calculator, CalendarDays, Divide, PencilLine, type LucideIcon } from "lucide-react";
 import { links, toneOf } from "@/components/nav-links";
 
 /**
@@ -18,6 +18,7 @@ export const QUICK_CATALOG: QuickItem[] = [
   { id: "calendar", label: "ক্যালেন্ডার", icon: CalendarDays, tone: "from-emerald-400 to-teal-600" },
   { id: "calculator", label: "ক্যালকুলেটর", icon: Calculator, tone: "from-[#3f6ef3] to-[#7f9cfa]" },
   { id: "lcm", label: "লসাগু / গসাগু", icon: Divide, tone: "from-amber-400 to-orange-500" },
+  { id: "scratch", label: "রাফ খাতা", icon: PencilLine, tone: "from-rose-400 to-pink-600" },
   ...links.map((link) => ({ id: link.href, label: link.label, icon: link.icon, tone: toneOf(link.href), href: link.href })),
 ];
 
