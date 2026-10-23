@@ -40,3 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 !.env.example
+
+# local only: Claude Code launch config, promo video (large, not part of the app)
+/.claude/
+/promo/
