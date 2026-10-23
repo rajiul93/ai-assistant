@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { toBanglaDigits } from "@/lib/calendars";
-import { awayText, clearAway, ownsStretch, readAway, saveAway } from "@/lib/timer-away";
+import { adoptIfUnmarked, awayText, clearAway, ownsStretch, readAway, saveAway } from "@/lib/timer-away";
 import { useTimerHydrated } from "@/lib/use-timer";
 import { useTimerStore } from "@/store/timer";
 
@@ -45,6 +45,8 @@ export function TimerAwayPause() {
 
     // A page reloaded (or thrown away by the phone) while away resumes on opening.
     back();
+    const running = useTimerStore.getState();
+    if (running.running && !running.paused) adoptIfUnmarked(running.startedAt);
     document.addEventListener("visibilitychange", leave);
     document.addEventListener("visibilitychange", back);
     // Two Prep windows side by side: the one still on screen gets no "visible" event, so any use of it counts.

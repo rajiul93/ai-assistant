@@ -22,6 +22,17 @@ export function markOwner(startedAt: number | null) {
   } catch { /* storage blocked: this browser just won't auto-pause */ }
 }
 
+/**
+ * A timer started before this rule existed has no owner mark anywhere, so nothing would pause it.
+ * A browser that has never had a mark takes the running stretch as its own (once; afterwards
+ * start/resume keep the mark current).
+ */
+export function adoptIfUnmarked(startedAt: number | null) {
+  try {
+    if (startedAt && localStorage.getItem(OWNER_KEY) === null) localStorage.setItem(OWNER_KEY, String(startedAt));
+  } catch { /* storage blocked */ }
+}
+
 export function ownsStretch(startedAt: number | null) {
   try {
     return Boolean(startedAt) && localStorage.getItem(OWNER_KEY) === String(startedAt);
