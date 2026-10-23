@@ -22,6 +22,7 @@ import { ToolDock } from "@/components/tool-dock";
 import { SessionBar } from "@/components/timer/session-bar";
 import { SubjectPickerDialog } from "@/components/timer/subject-picker-dialog";
 import { TimerAlarm } from "@/components/timer/timer-alarm";
+import { TimerAwayPause } from "@/components/timer/timer-away-pause";
 import { TimerSync } from "@/components/timer/timer-sync";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { MoreSheet } from "@/components/more-sheet";
@@ -136,6 +137,8 @@ export function AppShell({
         <TimerAlarm />
         {/* One timer across the user's devices (see TimerSync). */}
         <TimerSync />
+        {/* Pauses the timer while Prep is out of sight (another tab or app, phone locked). */}
+        <TimerAwayPause />
         <SubjectPickerDialog />
         {/* Once a day: check the job applications' links. */}
         <JobsReminder />
