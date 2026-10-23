@@ -108,6 +108,11 @@ alone. Record decisions and their reasons; don't restate code.
   bring a stopped timer back); the server decides on open, so a timer stopped elsewhere while this
   device was closed stops here too (only a start that never reached the server, or a timer from before
   sharing — `prep:timer-synced` — is sent again). The local zustand store still ticks.
+- **Paused while away from Prep** (owner, 2026-10-23; same rule on phone, tablet and computer): the
+  moment Prep is hidden (another tab or app, phone locked, tab closed) the timer pauses, and it runs
+  again when Prep is seen again, without the time away (`TimerAwayPause`, `src/lib/timer-away.ts`).
+  Only the browser that started or last resumed the running stretch pauses it (`markOwner` in the
+  store's `start`/`resume`), so glancing at Prep on a phone never stops the laptop's timer.
 - Roles: `USER`, `ADMIN` (= staff), and one **super admin** fixed by email in `src/server/roles.ts`
   (`roleOf`, `isAdminUser`, read fresh from the DB). Any staff: no AI limits, every exam open, voice.
 - **Staff permissions** (2026-10-15, `User.staffPermissions`, list in `src/lib/staff.ts`): `billing`,

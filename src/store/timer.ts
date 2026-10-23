@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
+import { markOwner } from "@/lib/timer-away";
 
 type TimerStore = {
   running: boolean;
@@ -44,14 +45,18 @@ export const useTimerStore = create<TimerStore>()(persist((set, get) => ({
   setLabel: (label, taskId = "") => set({ label, taskId }),
   setTarget: (targetMinutes) => set({ targetMinutes, targetReached: false }),
   markTargetReached: () => set({ targetReached: true }),
-  start: () =>
+  // start and resume are only called from this device's own buttons (other devices' changes are
+  // applied with setState), so they mark this browser as the one running the timer (timer-away).
+  start: () => {
     set({
       running: true,
       paused: false,
       startedAt: Date.now(),
       accumulatedMs: 0,
       targetReached: false,
-    }),
+    });
+    markOwner(get().startedAt);
+  },
   pause: () => {
     const { startedAt, accumulatedMs, running, paused } = get();
     if (!running || paused || !startedAt) return;
@@ -65,6 +70,7 @@ export const useTimerStore = create<TimerStore>()(persist((set, get) => ({
     const { running, paused } = get();
     if (!running || !paused) return;
     set({ paused: false, startedAt: Date.now() });
+    markOwner(get().startedAt);
   },
   reset: () =>
     set({
