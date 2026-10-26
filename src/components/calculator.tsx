@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Calculator as CalculatorIcon, Delete, X } from "lucide-react";
-import { evaluate, formatResult, toFraction, toLatex, type AngleMode } from "@/lib/calculator";
+import { divisionRemainder, evaluate, formatResult, toFraction, toLatex, type AngleMode } from "@/lib/calculator";
 import { renderLatex } from "@/lib/math";
 import { onOpenTool } from "@/components/tool-dock";
 import { cn } from "@/lib/utils";
@@ -51,6 +51,10 @@ const keyClass: Record<NonNullable<Key["tone"]> | "num", string> = {
 };
 
 type AnswerFormat = "decimal" | "fraction";
+type Division = ReturnType<typeof divisionRemainder>;
+
+/** "ভাগফল 3 · ভাগশেষ 2" for a whole-number division. */
+const divisionText = (division: NonNullable<Division>) => `ভাগফল ${division.quotient} · ভাগশেষ ${division.remainder}`;
 
 /** A result in the chosen form, as keypad text (3÷4 for a fraction, so it can be reused) and as LaTeX. */
 function answer(value: number, format: AnswerFormat) {
@@ -87,17 +91,22 @@ export function Calculator() {
   const [ans, setAns] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [format, setFormat] = useState<AnswerFormat>("decimal");
-  const [history, setHistory] = useState<Array<{ expression: string; result: ReturnType<typeof answer> }>>([]);
+  const [history, setHistory] = useState<Array<{ expression: string; result: ReturnType<typeof answer>; division: Division }>>([]);
+  // The ভাগশেষ of the division just worked out, kept while its answer is on the display.
+  const [lastDivision, setLastDivision] = useState<Division>(null);
 
   let preview: ReturnType<typeof answer> | null = null;
   try { preview = expression ? answer(evaluate(expression, mode), format) : null; } catch { preview = null; }
+  const division = (expression ? divisionRemainder(expression, mode) : null) ?? (expression && expression === ans ? lastDivision : null);
 
   const insert = (text: string) => { setError(null); setExpression((current) => current + text); };
   const equals = () => {
     if (!expression) return;
     try {
       const result = answer(evaluate(expression, mode), format);
-      setHistory((list) => [{ expression, result }, ...list].slice(0, 3));
+      const split = divisionRemainder(expression, mode);
+      setHistory((list) => [{ expression, result, division: split }, ...list].slice(0, 3));
+      setLastDivision(split);
       setAns(result.text);
       setExpression(result.text);
       setError(null);
@@ -152,6 +161,7 @@ export function Calculator() {
           {history.slice().reverse().map((entry, index) => <li key={`${index}-${entry.expression}`}>
             <button type="button" onClick={() => insert(entry.result.text)} className="max-w-full overflow-hidden text-[14px] text-slate-400 hover:text-blue-700">
               <Formula latex={toLatex(entry.expression)} text={entry.expression} /> = <Formula latex={entry.result.latex} text={entry.result.text} className="font-semibold text-slate-500" />
+              {entry.division ? <span className="ml-1 text-[12px] text-slate-400">({divisionText(entry.division)})</span> : null}
             </button>
           </li>)}
         </ul>
@@ -170,6 +180,11 @@ export function Calculator() {
             ? <p className="text-right text-[13px] text-red-600">{error}</p>
             : preview && preview.text !== expression ? <p className="min-w-0 overflow-x-auto overflow-y-hidden whitespace-nowrap py-1 text-[18px] text-slate-500 [scrollbar-width:none]">= <Formula latex={preview.latex} text={preview.text} /></p> : null}
         </div>
+        {/* Whole-number division: the school answer too (17÷5 → ভাগফল 3, ভাগশেষ 2). */}
+        {division && !error ? <p className="-mt-1 flex justify-end gap-1.5 text-[13px] font-semibold">
+          <span className="rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">ভাগফল {division.quotient}</span>
+          <span className="rounded-full bg-amber-50 px-2.5 py-1 text-amber-800">ভাগশেষ {division.remainder}</span>
+        </p> : null}
       </section>
 
       <div className="grid shrink-0 grid-cols-5 gap-2 p-4">
