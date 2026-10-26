@@ -19,6 +19,7 @@ import { CalendarSheet } from "@/components/calendar-sheet";
 import { LcmHcfSheet } from "@/components/lcm-hcf-sheet";
 import { ScratchPadSheet } from "@/components/scratch-pad-sheet";
 import { ToolDock } from "@/components/tool-dock";
+import { ScrollTopButton } from "@/components/scroll-top-button";
 import { SessionBar } from "@/components/timer/session-bar";
 import { SubjectPickerDialog } from "@/components/timer/subject-picker-dialog";
 import { TimerAlarm } from "@/components/timer/timer-alarm";
@@ -130,6 +131,7 @@ export function AppShell({
         <StudyAssistant aiLock={aiLock} />
         {/* One tools button (calendar, calculator) above the assistant's; the sheets open from it. */}
         <ToolDock quickItems={quickItems} />
+        <ScrollTopButton />
         <Calculator />
         <CalendarSheet />
         <LcmHcfSheet />
