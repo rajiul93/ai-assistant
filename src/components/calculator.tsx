@@ -166,10 +166,12 @@ export function Calculator() {
           </li>)}
         </ul>
         {/* The expression drawn like a book (stacked fractions, raised powers, √ over its contents). */}
-        <div className="-mx-1 mt-1 flex justify-end overflow-x-auto px-1 py-1 text-[clamp(24px,7.4vw,32px)] text-slate-900 [scrollbar-width:none]" aria-live="polite" aria-label={expression || "0"}>
+        {/* shrink-0 here and below: when space is short only the history above gives way, never the
+            expression (a stacked 1056÷23 was being cut in half on a desktop). */}
+        <div className="-mx-1 mt-1 flex shrink-0 justify-end overflow-x-auto px-1 py-1 text-[clamp(24px,7.4vw,32px)] text-slate-900 [scrollbar-width:none]" aria-live="polite" aria-label={expression || "0"}>
           {expression ? <Formula latex={toLatex(expression)} text={expression} className="whitespace-nowrap" /> : <span className="text-slate-300">0</span>}
         </div>
-        <div className="flex min-h-12 items-center justify-end gap-2">
+        <div className="flex min-h-12 shrink-0 items-center justify-end gap-2">
           {/* Answer as দশমিক (0.75) or as a fraction, লব/হর (3/4). */}
           <div role="radiogroup" aria-label="উত্তরের ধরন" className="mr-auto flex shrink-0 rounded-full bg-slate-100 p-0.5 text-[12px] font-semibold">
             {([["decimal", "দশমিক"], ["fraction", "লব/হর"]] as const).map(([id, label]) => (
@@ -181,7 +183,7 @@ export function Calculator() {
             : preview && preview.text !== expression ? <p className="min-w-0 overflow-x-auto overflow-y-hidden whitespace-nowrap py-1 text-[18px] text-slate-500 [scrollbar-width:none]">= <Formula latex={preview.latex} text={preview.text} /></p> : null}
         </div>
         {/* Whole-number division: the school answer too (17÷5 → ভাগফল 3, ভাগশেষ 2). */}
-        {division && !error ? <p className="-mt-1 flex justify-end gap-1.5 text-[13px] font-semibold">
+        {division && !error ? <p className="-mt-1 flex shrink-0 justify-end gap-1.5 text-[13px] font-semibold">
           <span className="rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">ভাগফল {division.quotient}</span>
           <span className="rounded-full bg-amber-50 px-2.5 py-1 text-amber-800">ভাগশেষ {division.remainder}</span>
         </p> : null}
