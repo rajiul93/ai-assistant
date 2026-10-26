@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluate, formatResult, toFraction, toLatex } from "./calculator";
+import { divisionRemainder, evaluate, formatResult, toFraction, toLatex } from "./calculator";
 
 const calc = (input: string, mode: "deg" | "rad" = "deg") => formatResult(evaluate(input, mode));
 
@@ -55,6 +55,17 @@ describe("calculator", () => {
     expect(() => evaluate("√(−4)")).toThrow();
     expect(() => evaluate("2+")).toThrow();
     expect(() => evaluate("")).toThrow();
+  });
+
+  it("gives the quotient and remainder of a whole-number division", () => {
+    expect(divisionRemainder("17÷5")).toEqual({ quotient: 3, remainder: 2 });
+    expect(divisionRemainder("(100+5)÷7")).toEqual({ quotient: 15, remainder: 0 });
+    expect(divisionRemainder("1056÷23")).toEqual({ quotient: 45, remainder: 21 });
+    expect(divisionRemainder("2+10÷3")).toBeNull();
+    expect(divisionRemainder("10÷4÷2")).toBeNull();
+    expect(divisionRemainder("7.5÷2")).toBeNull();
+    expect(divisionRemainder("5÷0")).toBeNull();
+    expect(divisionRemainder("−17÷5")).toEqual({ quotient: -3, remainder: -2 });
   });
 
   it("finds fractions for the লব/হর answer", () => {

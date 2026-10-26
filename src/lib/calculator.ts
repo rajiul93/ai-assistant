@@ -185,6 +185,34 @@ export function evaluate(input: string, mode: AngleMode = "deg"): number {
   return result;
 }
 
+/**
+ * When the whole expression is one division of two whole numbers (17÷5, (100+5)÷7), the quotient
+ * and remainder as in school (ভাগফল 3, ভাগশেষ 2); null otherwise. Only a ÷ at the top level
+ * counts — 2+10÷3 is an addition — and both sides must work out to integers, the divisor not 0.
+ */
+export function divisionRemainder(input: string, mode: AngleMode = "deg"): { quotient: number; remainder: number } | null {
+  let depth = 0;
+  let at = -1;
+  for (let index = 0; index < input.length; index++) {
+    const char = input[index];
+    if ("([{".includes(char)) depth++;
+    else if (")]}".includes(char)) depth--;
+    else if (depth === 0 && "÷/".includes(char)) {
+      if (at >= 0) return null;
+      at = index;
+    } else if (depth === 0 && index > 0 && "+−-×*^%!".includes(char)) return null;
+  }
+  if (at <= 0) return null;
+  try {
+    const dividend = evaluate(input.slice(0, at), mode);
+    const divisor = evaluate(input.slice(at + 1), mode);
+    if (!Number.isSafeInteger(dividend) || !Number.isSafeInteger(divisor) || divisor === 0) return null;
+    return { quotient: Math.trunc(dividend / divisor), remainder: dividend % divisor };
+  } catch {
+    return null;
+  }
+}
+
 /** A result for the display: up to 10 significant digits, no float dust (0.1+0.2 → 0.3). */
 export function formatResult(value: number): string {
   if (!Number.isFinite(value)) return value > 0 ? "∞" : "−∞";
