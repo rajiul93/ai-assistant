@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRightLeft, Check, ChevronDown, FileText, ListChecks, Loader2, Lock, MessageSquareText, Pencil, Plus, Send, Trash2 } from "lucide-react";
+import { ArrowRightLeft, Check, CheckSquare, ChevronDown, FileText, ListChecks, Loader2, Lock, MessageSquareText, Pencil, Plus, Send, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { MathText, RichHtml } from "@/components/math-text";
 import { QuillEditor, type QuillHandle } from "@/components/notes/quill-editor";
@@ -69,6 +69,55 @@ function SendChapter({ chapterId, kind, count, planned }: { chapterId: string; k
   return <button type="button" onClick={() => void send()} disabled={busy} className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-zinc-950 px-3.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50">
     {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} {count}টি {target}-এ পাঠাও
   </button>;
+}
+
+/**
+ * "বেছে পাঠাও": my picked MCQs as one Preliminary set, so a long chapter can go in parts (a big set
+ * is hard to sit as an exam). Quick picks skip what I've already taken.
+ */
+function PickBar({ chapterId, questions, picked, setPicked, onClose }: {
+  chapterId: string; questions: Chapter["questions"]; picked: Set<string>; setPicked: (next: Set<string>) => void; onClose: () => void;
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const fresh = questions.filter((question) => !question.taken);
+  const pickFirst = (list: typeof questions, count: number) => setPicked(new Set(list.slice(0, count).map((question) => question.id)));
+  async function send() {
+    setBusy(true);
+    try {
+      const ids = questions.filter((question) => picked.has(question.id)).map((question) => question.id);
+      const result = await sendChapterToPreliminary(chapterId, ids);
+      const href = `/preliminary/${result.id}`;
+      toast.success(`${result.count}টি প্রশ্ন Preliminary-এর Todo-তে গেল${result.partial ? " (Paid-গুলো বাদে)" : ""}`, { action: { label: "দেখো", onClick: () => router.push(href) } });
+      onClose();
+      router.refresh();
+    } catch (error) {
+      toast.error(errorMessage(error, "পাঠানো গেল না।"));
+    } finally {
+      setBusy(false);
+    }
+  }
+  const chip = "h-8 rounded-full px-3 text-xs font-semibold ring-1 ring-blue-200 text-blue-800 hover:bg-white disabled:opacity-40";
+  return <>
+    <div className="space-y-2 rounded-2xl border border-blue-200 bg-blue-50/80 p-3">
+      <p className="text-[12.5px] text-blue-900">যে প্রশ্নগুলো নিতে চাও সেগুলোতে টিক দাও। একসাথে বেশি নিলে exam দেওয়া কঠিন — অল্প অল্প করে নাও।</p>
+      <div className="flex flex-wrap gap-1.5">
+        <button type="button" disabled={!fresh.length} onClick={() => setPicked(new Set(fresh.map((question) => question.id)))} className={chip}>নেওয়া হয়নি এমন সব ({fresh.length})</button>
+        {fresh.length > 20 ? <button type="button" onClick={() => pickFirst(fresh, 20)} className={chip}>নেওয়া হয়নি এমন প্রথম ২০টি</button> : null}
+        {fresh.length > 50 ? <button type="button" onClick={() => pickFirst(fresh, 50)} className={chip}>প্রথম ৫০টি</button> : null}
+        <button type="button" onClick={() => setPicked(new Set(questions.map((question) => question.id)))} className={chip}>সব ({questions.length})</button>
+        {picked.size ? <button type="button" onClick={() => setPicked(new Set())} className={chip}>বাছাই মুছো</button> : null}
+      </div>
+    </div>
+    <div data-dock-avoid className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-20 border-t border-zinc-200 bg-white/90 px-4 py-3 backdrop-blur-xl lg:bottom-0 lg:pl-64">
+      <div className="container mx-auto flex items-center justify-between gap-2">
+        <button type="button" onClick={onClose} disabled={busy} className="flex h-11 items-center gap-1 rounded-full px-3 text-sm font-medium text-zinc-600 ring-1 ring-zinc-200 hover:bg-zinc-50"><X className="size-4" /> বাতিল</button>
+        <button type="button" onClick={() => void send()} disabled={busy || !picked.size} className="flex h-11 items-center gap-1.5 rounded-full bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+          {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />} {picked.size ? `${picked.size}টি Preliminary-এ পাঠাও` : "প্রশ্ন বাছো"}
+        </button>
+      </div>
+    </div>
+  </>;
 }
 
 /** The rule for taking sets from the bank (bank-access `assertCanTakeFromBank`). */
@@ -184,6 +233,10 @@ export function ChapterView({ chapter, initialTab }: { chapter: Chapter; initial
   const [targets, setTargets] = useState<Array<{ id: string; label: string }> | null>(null);
   const { busy, run } = useBankRun();
   const { canEdit } = chapter;
+  // My own picking for "বেছে পাঠাও" (MCQ tab).
+  const [picking, setPicking] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const stopPicking = () => { setPicking(false); setPicked(new Set()); };
 
   const openQuestions = chapter.questions.filter((question) => !question.locked);
   const openShorts = chapter.shorts.filter((short) => !short.locked);
@@ -220,7 +273,7 @@ export function ChapterView({ chapter, initialTab }: { chapter: Chapter; initial
 
   const empty = (text: string) => <p className="rounded-2xl border border-dashed border-zinc-300 bg-white px-4 py-10 text-center text-sm text-zinc-500">{text}</p>;
 
-  return <div className="space-y-4">
+  return <div className={cn("space-y-4", picking && tab === "mcq" && "pb-20")}>
     <div role="tablist" aria-label="Chapter-এর ভেতরে" className="grid grid-cols-3 gap-1 rounded-2xl bg-zinc-100 p-1">
       {TABS.map(({ id, label, short, icon: Icon }) => <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => pickTab(id)}
         className={cn("flex h-11 min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 text-sm font-medium transition", tab === id ? "bg-white text-zinc-950 shadow-sm" : "text-zinc-600 hover:text-zinc-900")}>
@@ -254,10 +307,16 @@ export function ChapterView({ chapter, initialTab }: { chapter: Chapter; initial
 
     {tab === "mcq" ? <section className="space-y-3">
       {adminBar("mcq", () => setMcqDialog(true), "mcq")}
-      <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1"><SlotNote /><SendChapter chapterId={chapter.id} kind="mcq" count={openQuestions.length} planned={chapter.premium} /></div>
+      {picking ? null : <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1"><SlotNote />
+        {chapter.premium && openQuestions.length > 1 ? <button type="button" onClick={() => setPicking(true)} className="flex h-10 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3.5 text-sm font-semibold text-white hover:bg-blue-700"><CheckSquare className="size-4" /> বেছে পাঠাও</button> : null}
+        <SendChapter chapterId={chapter.id} kind="mcq" count={openQuestions.length} planned={chapter.premium} />
+      </div>}
+      {picking ? <PickBar chapterId={chapter.id} questions={openQuestions} picked={picked} setPicked={setPicked} onClose={stopPicking} /> : null}
       <LockedNote count={chapter.questions.length - openQuestions.length} noun="MCQ" />
       {openQuestions.length
-        ? <BankQuestionList key={openQuestions.map((question) => `${question.id}${question.free}`).join()} questions={openQuestions} canEdit={canEdit} chapterItems={canEdit} moveToChapter={canEdit} />
+        ? <BankQuestionList key={openQuestions.map((question) => `${question.id}${question.free}`).join()} questions={openQuestions} canEdit={canEdit} chapterItems={canEdit} moveToChapter={canEdit}
+          taken={Object.fromEntries(openQuestions.map((question) => [question.id, question.taken]))}
+          userPick={picking ? { picked, onToggle: (id) => setPicked((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; }) } : undefined} />
         : chapter.questions.length ? null : empty("এই chapter-এ এখনো কোনো MCQ নেই।")}
     </section> : null}
 

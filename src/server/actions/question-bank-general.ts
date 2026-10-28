@@ -87,14 +87,19 @@ export async function getBankChapter(id: string) {
     },
   });
   if (!chapter) return null;
-  const [canEdit, premium] = await Promise.all([can(me, "question_bank"), hasPremium(me)]);
+  const [canEdit, premium, takes] = await Promise.all([
+    can(me, "question_bank"), hasPremium(me),
+    prisma.bankQuestionTake.findMany({ where: { userId: me.id, bankQuestion: { chapterId: chapter.id } }, select: { bankQuestionId: true, count: true } }),
+  ]);
+  const taken = new Map(takes.map((take) => [take.bankQuestionId, take.count]));
   const open = (item: { free: boolean }) => premium || item.free;
   return {
     id: chapter.id, name: chapter.name, description: chapter.description, subject: chapter.subject, canEdit, premium,
     articles: chapter.articles.map((article) => (open(article) ? { ...article, locked: false } : { ...article, content: "", locked: true })),
+    // `taken`: how many times I've sent this MCQ to my Preliminary.
     questions: chapter.questions.map((question) => (open(question)
-      ? { ...gateNotes(question, true), locked: false }
-      : { ...gateNotes({ ...question, text: "", options: [], correctIndex: -1 }, false), locked: true })),
+      ? { ...gateNotes(question, true), locked: false, taken: taken.get(question.id) ?? 0 }
+      : { ...gateNotes({ ...question, text: "", options: [], correctIndex: -1 }, false), locked: true, taken: taken.get(question.id) ?? 0 })),
     shorts: chapter.shortQuestions.map((short) => (open(short) ? { ...short, locked: false } : { ...short, question: "", answer: "", locked: true })),
   };
 }
@@ -109,29 +114,34 @@ export async function listChapterTargets() {
 /* ---------- Sending to my own sets ---------- */
 
 /**
- * The chapter's MCQs as a new set in my Preliminary (Todo, today), filed under the subject (created
- * if missing) and the chapter as topic when I have one by that name. Needs a plan and a free slot
- * (two sets from the bank at a time until 60%, bank-access `assertCanTakeFromBank`).
+ * The chapter's MCQs — all of them, or only `questionIds` when picked — as a new set in my
+ * Preliminary (Todo, today), filed under the subject (created if missing) and the chapter as topic
+ * when I have one by that name. Needs a plan and a free slot (two sets from the bank at a time until
+ * 60%, bank-access `assertCanTakeFromBank`). Each question sent adds one to my `BankQuestionTake`.
  */
-export async function sendChapterToPreliminary(chapterId: string) {
+export async function sendChapterToPreliminary(chapterId: string, questionIds?: string[]) {
   const me = await requireUser();
+  const picked = questionIds === undefined ? null : new Set(z.array(idSchema).min(1, "অন্তত একটা প্রশ্ন বাছো").max(SET_MAX, `একবারে সর্বোচ্চ ${SET_MAX}টি প্রশ্ন`).parse(questionIds));
   const chapter = await prisma.bankChapter.findUnique({
     where: { id: idSchema.parse(chapterId) },
-    select: { name: true, subject: { select: { name: true } }, questions: { orderBy: [{ serial: "asc" }, { id: "asc" }], select: { text: true, options: true, correctIndex: true, solution: true, explanation: true, free: true } } },
+    select: { name: true, subject: { select: { name: true } }, questions: { orderBy: [{ serial: "asc" }, { id: "asc" }], select: { id: true, text: true, options: true, correctIndex: true, solution: true, explanation: true, free: true } } },
   });
   if (!chapter) throw userError("Chapter পাওয়া যায়নি।");
-  if (!chapter.questions.length) throw userError("এই chapter-এ কোনো MCQ নেই।");
+  const inScope = picked ? chapter.questions.filter((question) => picked.has(question.id)) : chapter.questions;
+  if (!inScope.length) throw userError(picked ? "বাছাই করা প্রশ্নগুলো আর এই chapter-এ নেই।" : "এই chapter-এ কোনো MCQ নেই।");
   // A plan, and fewer than two sets from the bank still short of 60%.
   await assertCanTakeFromBank(me, "mcq");
   const premium = await hasPremium(me);
-  const questions = chapter.questions.filter((question) => premium || question.free);
-  if (!questions.length) throw userError(chapter.questions.length ? "এই chapter-এর MCQ পেতে একটা চালু plan লাগবে।" : "এই chapter-এ কোনো MCQ নেই।");
+  const questions = inScope.filter((question) => premium || question.free);
+  if (!questions.length) throw userError("এই chapter-এর MCQ পেতে একটা চালু plan লাগবে।");
   if (questions.length > SET_MAX) throw userError(`একটা Preliminary set-এ সর্বোচ্চ ${SET_MAX}টি প্রশ্ন রাখা যায় — এখানে ${questions.length}টি।`);
+  const name = picked ? `${chapter.name} — MCQ (${questions.length}টি বাছাই)` : `${chapter.name} — MCQ`;
   const copy = await prisma.$transaction(async (tx) => {
     const { subjectId, topicId } = await placeFor(tx, me.id, chapter.subject.name, chapter.name);
+    await recordTakes(tx, me.id, questions.map((question) => question.id));
     return tx.questionSet.create({
       data: {
-        userId: me.id, subjectId, topicId, fromBank: true, topicName: `${chapter.name} — MCQ`.slice(0, 160), date: startOfDay(now()).toDate(),
+        userId: me.id, subjectId, topicId, fromBank: true, topicName: name.slice(0, 160), date: startOfDay(now()).toDate(),
         // Solutions travel only with a plan, as in the bank itself.
         questions: { create: questions.map((question, position) => ({ position, text: question.text, options: question.options, correctIndex: question.correctIndex, solution: premium ? question.solution : null, explanation: premium ? question.explanation : null })) },
       },
@@ -139,7 +149,17 @@ export async function sendChapterToPreliminary(chapterId: string) {
     });
   });
   revalidatePath("/preliminary");
-  return { id: copy.id, count: questions.length, partial: questions.length < chapter.questions.length };
+  revalidateBank();
+  return { id: copy.id, count: questions.length, partial: questions.length < inScope.length };
+}
+
+/** +1 on "sent to Preliminary" for each of these bank MCQs, in one statement. */
+async function recordTakes(tx: Prisma.TransactionClient, userId: string, bankQuestionIds: string[]) {
+  if (!bankQuestionIds.length) return;
+  await tx.$executeRaw`
+    INSERT INTO "BankQuestionTake" ("userId", "bankQuestionId", "count", "lastAt")
+    SELECT ${userId}, id, 1, NOW() FROM unnest(${bankQuestionIds}::text[]) AS id
+    ON CONFLICT ("userId", "bankQuestionId") DO UPDATE SET "count" = "BankQuestionTake"."count" + 1, "lastAt" = NOW()`;
 }
 
 /** The chapter's short questions I may open, as a new set in my Short Question (Todo, today). */

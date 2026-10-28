@@ -93,6 +93,7 @@ model User {
   commissionsBrought     AffiliateCommission[] @relation("CommissionCustomer")
   affiliatePayouts       AffiliatePayout[]
   activeTimer            ActiveTimer?
+  bankQuestionTakes      BankQuestionTake[]
 }
 
 model StudyPlan {
@@ -1139,11 +1140,11 @@ model BankSet {
 
 /// An MCQ in a past-year set or in a General chapter (exactly one of the two; a CHECK in SQL).
 model BankQuestion {
-  id           String       @id @default(cuid())
+  id           String             @id @default(cuid())
   setId        String?
-  set          BankSet?     @relation(fields: [setId], references: [id], onDelete: Cascade)
+  set          BankSet?           @relation(fields: [setId], references: [id], onDelete: Cascade)
   chapterId    String?
-  chapter      BankChapter? @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  chapter      BankChapter?       @relation(fields: [chapterId], references: [id], onDelete: Cascade)
   /// The sheet's "ক্রম"; questions are shown in this order.
   serial       Int
   text         String
@@ -1158,13 +1159,14 @@ model BankQuestion {
   /// the same question (and updates it) instead of adding it twice.
   fingerprint  String
   /// A chapter MCQ open without a plan (a past-year set is free or paid as a whole).
-  free         Boolean      @default(false)
+  free         Boolean            @default(false)
   /// Set when an admin edits the question or has AI clean it. A later upload of the sheet then leaves
   /// it alone (the sheet still holds the old text). The fingerprint stays the sheet's, so the same
   /// row is still recognised and never added twice.
   editedAt     DateTime?
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  takes        BankQuestionTake[]
 
   @@unique([setId, fingerprint])
   @@unique([chapterId, fingerprint])
@@ -1313,4 +1315,19 @@ model AffiliatePayout {
   createdAt   DateTime @default(now())
 
   @@index([affiliateId, createdAt])
+}
+
+/// How many times a user has sent a bank MCQ to their Preliminary (a chapter, whole or picked), so
+/// the chapter page can show "Preliminary-তে ২ বার" and they don't pile the same questions into
+/// several sets. Kept when those sets are deleted: it counts sends, not copies still there.
+model BankQuestionTake {
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bankQuestionId String
+  bankQuestion   BankQuestion @relation(fields: [bankQuestionId], references: [id], onDelete: Cascade)
+  count          Int          @default(1)
+  lastAt         DateTime     @default(now())
+
+  @@id([userId, bankQuestionId])
+  @@index([bankQuestionId])
 }
