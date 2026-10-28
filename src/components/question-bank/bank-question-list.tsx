@@ -109,7 +109,14 @@ export function QuestionEditor({ initial, aiFilled, onSave, onCancel }: { initia
  * `chapterItems` (a General chapter's MCQs) adds Free/Paid and delete per question; `moveToChapter`
  * moves a question to a chapter (from a set or another chapter).
  */
-export function BankQuestionList({ questions: initial, canEdit, chapterItems = false, moveToChapter = false }: { questions: BankQuestion[]; canEdit: boolean; chapterItems?: boolean; moveToChapter?: boolean }) {
+/**
+ * `taken`: how many times I've sent each question to my Preliminary (shown as a badge).
+ * `userPick`: my own picking for "বেছে পাঠাও" — a checkbox per question, separate from staff selecting.
+ */
+export function BankQuestionList({ questions: initial, canEdit, chapterItems = false, moveToChapter = false, taken, userPick }: {
+  questions: BankQuestion[]; canEdit: boolean; chapterItems?: boolean; moveToChapter?: boolean;
+  taken?: Record<string, number>; userPick?: { picked: Set<string>; onToggle: (id: string) => void };
+}) {
   const router = useRouter();
   const [questions, setQuestions] = useState(initial);
   const [moving, setMoving] = useState<string | null>(null);
@@ -247,9 +254,13 @@ export function BankQuestionList({ questions: initial, canEdit, chapterItems = f
     <ol className="space-y-3">
       {questions.map((question, index) => {
         const isEditing = editing?.id === question.id;
-        return <li key={question.id} className={cn("rounded-2xl border bg-white p-4", selecting && picked.has(question.id) ? "border-violet-400 ring-2 ring-violet-100" : "border-zinc-200")}>
+        const mine = !selecting && userPick ? userPick.picked.has(question.id) : false;
+        const times = taken?.[question.id] ?? 0;
+        return <li key={question.id} className={cn("rounded-2xl border bg-white p-4", selecting && picked.has(question.id) ? "border-violet-400 ring-2 ring-violet-100" : mine ? "border-blue-400 ring-2 ring-blue-100" : "border-zinc-200")}>
+          {times ? <p className="mb-2 flex justify-end"><span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", times > 1 ? "bg-amber-50 text-amber-800 ring-1 ring-amber-200" : "bg-sky-50 text-sky-700 ring-1 ring-sky-200")}>Preliminary-তে {times} বার নেওয়া</span></p> : null}
           <div className={cn("flex items-start gap-2", canEdit && "flex-wrap sm:flex-nowrap")}>
             {selecting ? <input type="checkbox" checked={picked.has(question.id)} onChange={() => toggle(question.id)} aria-label={`প্রশ্ন ${index + 1} বাছো`} className="mt-1.5 size-4 shrink-0 accent-violet-700" /> : null}
+            {!selecting && userPick ? <input type="checkbox" checked={mine} onChange={() => userPick.onToggle(question.id)} aria-label={`প্রশ্ন ${index + 1} Preliminary-র জন্য বাছো`} className="mt-1.5 size-4.5 shrink-0 accent-blue-600" /> : null}
             {/* Staff tools take their own row on phones, so the question keeps the full width. */}
             <p className={cn("min-w-0 flex-1 font-medium leading-relaxed", canEdit && !selecting && "basis-full sm:basis-0")}><span className="mr-1.5 text-zinc-400 tabular-nums">{index + 1}.</span>{isEditing ? <span className="text-sm text-violet-700">Edit হচ্ছে</span> : <MathText text={question.text} book />}</p>
             {canEdit && !isEditing && !selecting ? <span className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-0.5">
